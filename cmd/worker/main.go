@@ -21,9 +21,7 @@ import (
 	"github.com/depguard/depguard/internal/feeds"
 	"github.com/depguard/depguard/internal/ghapp"
 	"github.com/depguard/depguard/internal/license"
-	"github.com/depguard/depguard/internal/scan"
 	"github.com/depguard/depguard/internal/suspicious"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
@@ -47,22 +45,6 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
-}
-
-// checkers returns the per-scan risk checkers configured by the tenant policy.
-func checkers(pool *pgxpool.Pool, e *enrich.Enricher) func(scan.PolicyConfig, scan.Project) []scan.Checker {
-	return func(p scan.PolicyConfig, _ scan.Project) []scan.Checker {
-		out := []scan.Checker{suspicious.New(pool, e, suspicious.ConfigFromPolicy(p))}
-		lic := scan.LicensePreset{Enabled: true, BlockingSeverity: scan.SeverityHigh}
-		if p.Presets != nil {
-			lic = p.Presets.License
-		}
-		if lic.Enabled {
-			// Deny is enforced by the CEL denied-license rule; passing it here too would report twice.
-			out = append(out, license.New(license.Config{BlockingSeverity: lic.BlockingSeverity}))
-		}
-		return out
-	}
 }
 
 func run(log *slog.Logger) error {
@@ -108,7 +90,7 @@ func run(log *slog.Logger) error {
 		GuarddogBin:            envOr("GUARDDOG_BIN", "guarddog"),
 		GuarddogAllowNoSandbox: envBool("GUARDDOG_ALLOW_NO_SANDBOX"),
 		DisableXBOM:            envBool("XBOM_DISABLED"),
-		Checkers:               checkers(pool, enricher),
+		Checkers:               engine.StandardCheckers(pool, enricher),
 		DetectLicense: func(files map[string][]byte, githubSPDX string) (string, string) {
 			d := license.DetectProject(files, githubSPDX)
 			return d.Expr, d.Source

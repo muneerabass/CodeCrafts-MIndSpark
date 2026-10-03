@@ -50,6 +50,7 @@ func TestMain(m *testing.M) {
 		GitHubInstallURL: func() string { return "https://github.com/apps/depguard/installations/new" },
 		Redeliver:        func(context.Context, string) error { return nil },
 		FeedsStatus:      func(context.Context) (any, error) { return []map[string]string{{"source": "osv:npm"}}, nil },
+		CheckPackages:    checkDeps().CheckPackages,
 	}))
 	code := m.Run()
 	srv.Close()

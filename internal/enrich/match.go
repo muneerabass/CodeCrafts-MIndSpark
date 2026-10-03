@@ -39,6 +39,19 @@ func parse(ver, eco, rangeType string) (semantic.Version, error) {
 	return semantic.Parse(ver, "npm")
 }
 
+// CompareVersions compares two versions of a package in its OSV ecosystem's
+// version scheme (npm semver, PEP 440, Go, crates.io, ...): -1, 0 or 1.
+func CompareVersions(osvEco, a, b string) (int, error) {
+	v, err := parse(a, osvEco, "ECOSYSTEM")
+	if err != nil {
+		return 0, err
+	}
+	return v.CompareStr(b)
+}
+
+// OSVEcosystemName maps a vet ecosystem name to its OSV name, "" if unsupported.
+func OSVEcosystemName(vetEco string) string { return osvEcosystems[vetEco] }
+
 // affects reports whether version is affected per an OSV affected[] entry:
 // explicit versions[] or any SEMVER/ECOSYSTEM range (GIT ranges ignored).
 // Port of osv-scalibr's osvlocal matcher.

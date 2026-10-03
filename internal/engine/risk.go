@@ -277,6 +277,9 @@ func (d Deps) runCheckers(ctx context.Context, fs []*finding, st settings, rc *r
 			if f == nil || len(scan.ApplyExclusions([]scan.Violation{{Package: x.Package}}, st.Exclusions, now)) == 0 {
 				continue
 			}
+			if (x.Category == scan.CategorySuspicious || x.Category == scan.CategoryLicense) && trusted(st.Policy, x.Package) {
+				continue // an allow rule marks this package as trusted
+			}
 			f.checks = append(f.checks, x)
 		}
 	}

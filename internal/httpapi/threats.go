@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/depguard/depguard/internal/pkgrules"
 	"github.com/depguard/depguard/internal/scan"
 	"github.com/jackc/pgx/v5"
 	"github.com/safedep/vet/gen/checks"
@@ -203,6 +204,7 @@ type PolicyDoc struct {
 			Enabled      bool    `json:"enabled"`
 			MinScorecard float64 `json:"min_scorecard"`
 		} `json:"maintenance"`
+		Packages []scan.PackageRule `json:"packages"`
 	} `json:"presets"`
 	Custom []CustomRule `json:"custom"`
 }
@@ -286,6 +288,9 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) error {
 		if !suspiciousRules[b] {
 			return badRequest("presets.suspicious.blocking: unknown rule %q", b)
 		}
+	}
+	if err := pkgrules.Validate(p.Presets.Packages); err != nil {
+		return badRequest("presets.packages: %v", err)
 	}
 	if len(p.Custom) > 100 {
 		return badRequest("at most 100 custom rules")

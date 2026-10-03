@@ -17,12 +17,14 @@ import (
 	"time"
 
 	"github.com/depguard/depguard/internal/db"
+	"github.com/depguard/depguard/internal/engine"
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/feeds"
 	"github.com/depguard/depguard/internal/ghapp"
 	"github.com/depguard/depguard/internal/httpapi"
 	"github.com/depguard/depguard/internal/httpapi/riverdb"
 	"github.com/depguard/depguard/internal/ids"
+	"github.com/depguard/depguard/internal/malysis"
 	"github.com/depguard/depguard/internal/mcpserver"
 	"github.com/depguard/depguard/internal/query"
 	"github.com/prometheus/client_golang/prometheus"
@@ -118,8 +120,17 @@ func run(ctx context.Context, log *slog.Logger, migrate bool) error {
 		DisableDepsDev: envBool("DEPSDEV_DISABLED", false), DisableScorecard: envBool("SCORECARD_DISABLED", false), Logger: log,
 	})
 
+	var mal *malysis.Client
+	if !envBool("MALYSIS_DISABLED", false) {
+		if mal, err = malysis.New(pool); err != nil {
+			log.Warn("malysis client disabled", "err", err)
+		}
+	}
+	checker := engine.Deps{Pool: pool, Enricher: enr, Checkers: engine.StandardCheckers(pool, enr), Malysis: mal, Logger: log}
+
 	api := httpapi.New(httpapi.Deps{
-		Pool: pool, Jobs: jobs, JobOpts: ghapp.JobOpts, Query: &query.Executor{Pool: qpool}, JWTSecret: []byte(secret),
+		CheckPackages: checker.CheckPackages,
+		Pool:          pool, Jobs: jobs, JobOpts: ghapp.JobOpts, Query: &query.Executor{Pool: qpool}, JWTSecret: []byte(secret),
 		PublicURL: env("PUBLIC_URL", "http://localhost:3000"), PublicAPIURL: os.Getenv("PUBLIC_API_URL"), Logger: log,
 		GitHubInstallURL: func() string { return ghapp.InstallURL(ghCfg) },
 		Redeliver:        func(ctx context.Context, id string) error { return ghapp.Redeliver(ctx, ghCfg, id) },

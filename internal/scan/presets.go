@@ -33,6 +33,21 @@ type Presets struct {
 		Enabled      bool    `json:"enabled"`
 		MinScorecard float64 `json:"min_scorecard"`
 	} `json:"maintenance"`
+	// Packages are package and version rules: banned packages, allowed
+	// version ranges (minimum/maximum) and trusted packages.
+	Packages []PackageRule `json:"packages,omitempty"`
+}
+
+// PackageRule constrains one package (or a glob of packages). A package
+// matching several rules must satisfy all of them.
+type PackageRule struct {
+	Ecosystem string `json:"ecosystem,omitempty"` // npm, PyPI, Go, crates.io, Maven, ... ("" = any)
+	Name      string `json:"name"`                // exact name or glob with * (e.g. @types/*), case-insensitive
+	Versions  string `json:"versions,omitempty"`  // allowed range, e.g. ">=4.17.21 <5" or ">=1.2 || =0.9.3"; "" = any
+	Deny      bool   `json:"deny,omitempty"`      // banned in every version
+	Allow     bool   `json:"allow,omitempty"`     // trusted: no suspicious/license findings (vulnerabilities and malware still apply)
+	Reason    string `json:"reason,omitempty"`
+	Severity  string `json:"severity,omitempty"` // severity of a violation; default high (blocking)
 }
 
 // LicensePreset configures license compliance. Fields absent from the JSON

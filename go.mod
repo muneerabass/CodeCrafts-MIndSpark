@@ -34,6 +34,7 @@ require (
 	ariga.io/atlas v1.1.0 // indirect
 	bitbucket.org/creachadair/stringset v0.0.14 // indirect
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1 // indirect
+	buf.build/gen/go/safedep/api/grpc/go v1.6.1-20260507085543-c19cfafa654b.1 // indirect
 	buf.build/gen/go/safedep/api/protocolbuffers/go v1.36.11-20260721112344-78a866a85e69.1 // indirect
 	buf.build/go/protovalidate v1.1.3 // indirect
 	cel.dev/expr v0.25.2 // indirect

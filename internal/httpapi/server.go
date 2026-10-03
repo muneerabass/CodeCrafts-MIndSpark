@@ -5,6 +5,7 @@ package httpapi
 
 import (
 	"context"
+	"github.com/depguard/depguard/internal/engine"
 	"log/slog"
 	"net/http"
 
@@ -37,7 +38,9 @@ type Deps struct {
 	FeedsStatus      func(ctx context.Context) (any, error)             // feeds.Status
 	Webhook          http.Handler                                       // POST /github/webhook
 	MCP              http.Handler                                       // /mcp (API-key auth applied here)
-	RiverUI          http.Handler                                       // /admin/river/ (sa JWT applied here)
+	// CheckPackages is the pre-install verdict (engine.Deps.CheckPackages); nil answers 503.
+	CheckPackages func(ctx context.Context, tenant string, req engine.CheckRequest) (*engine.CheckResult, error)
+	RiverUI       http.Handler // /admin/river/ (sa JWT applied here)
 }
 
 // Server holds dependencies for handlers.
@@ -146,6 +149,8 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /v1/scans", key(s.serve(s.uploadScan)))
 	mux.Handle("GET /v1/scans/{id}", key(s.serve(s.machineGetScan)))
 	mux.Handle("GET /v1/scans/{id}/report", key(s.serve(s.scanReport)))
+	mux.Handle("POST /v1/packages/check", key(s.serve(s.checkPackages)))
+	mux.Handle("GET /v1/me", key(s.serve(s.me)))
 	mux.Handle("POST /v1/endpoints/checkin", key(s.serve(s.checkin)))
 	mux.Handle("POST /v1/endpoints/{id}/inventory", key(s.serve(s.ingestInventory)))
 	mux.Handle("POST /v1/endpoints/{id}/pmg-events", key(s.serve(s.ingestPMG)))
