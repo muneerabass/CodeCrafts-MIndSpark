@@ -91,7 +91,7 @@ test('reports and detail pages', async ({ page }) => {
   await page.goto('/endpoints/ep-1');
   await columns(page, ['Kind', 'Name', 'Version', 'Scope', 'Config Path']);
   await page.getByRole('link', { name: 'Agent Activity' }).click();
-  await columns(page, ['Agent', 'Action', 'Target', 'Result']);
+  await columns(page, ['Agent', 'Action', 'Tool', 'Result']);
 });
 
 test('query page runs SQL', async ({ page }) => {
