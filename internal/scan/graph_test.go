@@ -195,12 +195,14 @@ func TestBuildGraphRealLock(t *testing.T) {
 	deps := ReadDirectDeps(models.EcosystemNpm, map[string][]byte{"package.json": pj})
 	g := BuildGraph(ms[0], deps)
 	direct := 0
+	seen := map[string]bool{}
 	for _, p := range ms[0].GetPackages() {
 		in, ok := g.Info(p)
 		if !ok || len(in.Paths) == 0 || in.Depth != len(in.Paths[0]) || in.Paths[0][len(in.Paths[0])-1] != p {
 			t.Fatalf("%s@%s: ok=%v %+v", p.GetName(), p.GetVersion(), ok, in)
 		}
-		if in.Direct {
+		if in.Direct && !seen[p.Id()] { // a lockfile may list the same package twice
+			seen[p.Id()] = true
 			direct++
 		}
 	}
