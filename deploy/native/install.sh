@@ -36,7 +36,7 @@ id caddy &>/dev/null || useradd --system --home /var/lib/caddy --shell /sbin/nol
 install -d -o depguard -g depguard -m 750 /var/lib/depguard
 install -d -o caddy -g caddy -m 750 /var/lib/caddy
 install -d -o postgres -g postgres -m 750 /var/backups/depguard
-install -d -m 755 /opt/depguard /opt/depguard/bin /etc/caddy
+install -d -m 755 /opt/depguard /opt/depguard/bin /etc/caddy /var/cache/depguard
 
 log "Secrets"
 SECRETS=/etc/depguard/secrets.env
@@ -126,14 +126,14 @@ chmod 750 /etc/depguard; chown root:depguard /etc/depguard
 setfacl -m u:caddy:x /etc/depguard 2>/dev/null || chmod 751 /etc/depguard
 
 log "Build Go binaries (cgo)"
-export GOTOOLCHAIN=auto GOFLAGS=-mod=mod GOPATH=/var/cache/depguard-go GOCACHE=/var/cache/depguard-go/build
+export GOTOOLCHAIN=auto GOFLAGS=-mod=mod GOPATH=/var/cache/depguard/go GOCACHE=/var/cache/depguard/go/build
 mkdir -p "$GOPATH"
 (cd "$SRC" && CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /opt/depguard/bin/ \
    ./cmd/api ./cmd/worker ./cmd/depguard ./cmd/depguard-feeds)
 
 log "Build web app"
 WEB_BUILD="$SRC/web"
-(cd "$WEB_BUILD" && pnpm install --frozen-lockfile --silent \
+(cd "$WEB_BUILD" && pnpm install --frozen-lockfile --silent --store-dir /var/cache/depguard/pnpm \
   && set -a && . /etc/depguard/web.env && set +a \
   && NEXT_TELEMETRY_DISABLED=1 pnpm build >/dev/null \
   && pnpm exec drizzle-kit migrate)
