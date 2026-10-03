@@ -1,0 +1,147 @@
+/* Landing page only. Everything is scoped under .lp so the app UI is unaffected. */
+.lp {
+  --lp-bg: #000;
+  --lp-fg: rgb(229 236 246);
+  --lp-white: #fff;
+  --lp-muted: #9ca3af;
+  --lp-dim: #6b7280;
+  --lp-line: rgb(255 255 255 / 8%);
+  --lp-line-2: rgb(255 255 255 / 12%);
+  --lp-panel: rgb(255 255 255 / 2.5%);
+  --lp-teal: #2dd4bf;
+  --lp-teal-btn: #0d9488;
+  --lp-red: #f87171;
+  --logo-a: #5eead4;
+  --logo-b: #0f766e;
+  background: var(--lp-bg);
+  color: var(--lp-fg);
+  font-family: var(--lp-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.4px;
+  -webkit-font-smoothing: antialiased;
+}
+.lp ::selection { background: rgb(45 212 191 / 30%); }
+
+.lp .lp-display { font-family: var(--lp-display), var(--lp-sans), sans-serif; font-weight: 400; letter-spacing: -0.025em; color: var(--lp-white); }
+.lp .lp-mono { font-family: var(--lp-mono), ui-monospace, monospace; letter-spacing: 0; }
+.lp .lp-eyebrow { font-family: var(--lp-mono), ui-monospace, monospace; font-size: 0.8rem; letter-spacing: 0.32em; text-transform: uppercase; }
+
+/* Framed centre column with hairline side rails. */
+.lp .lp-frame { max-width: 1200px; margin-inline: auto; border-inline: 1px solid var(--lp-line); }
+.lp .lp-pad { padding-inline: 1.25rem; }
+@media (min-width: 768px) { .lp .lp-pad { padding-inline: 3rem; } }
+
+/* Buttons. */
+.lp .lp-btn {
+  display: inline-flex; align-items: center; gap: 0.5rem; border-radius: 2px; font-weight: 500; white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.lp .lp-btn-primary {
+  background: var(--lp-teal-btn); color: #fff;
+  box-shadow: inset 0 -1px 0.4px rgb(0 0 0 / 20%), 0 1px 0.4px rgb(39 219 199);
+}
+.lp .lp-btn-primary:hover { background: #0f766e; }
+.lp .lp-btn-ghost { border: 1px solid var(--lp-dim); color: #fff; }
+.lp .lp-btn-ghost:hover { border-color: var(--lp-muted); background: rgb(255 255 255 / 4%); }
+
+/* Hero: soft teal haze plus static light streaks outside the frame. */
+.lp .lp-hero-bg {
+  background:
+    radial-gradient(55% 45% at 30% 55%, rgb(45 212 191 / 9%), transparent 70%),
+    radial-gradient(40% 35% at 80% 40%, rgb(16 185 129 / 6%), transparent 70%);
+}
+.lp .lp-streaks {
+  background:
+    repeating-linear-gradient(176deg, transparent 0 22px, rgb(45 212 191 / 7%) 22px 23px, transparent 23px 61px),
+    repeating-linear-gradient(184deg, transparent 0 37px, rgb(255 255 255 / 4%) 37px 38px, transparent 38px 90px);
+  mask-image: linear-gradient(90deg, black, transparent 18%, transparent 82%, black);
+  -webkit-mask-image: linear-gradient(90deg, black, transparent 18%, transparent 82%, black);
+}
+
+/* Rows. */
+.lp .lp-row { border-top: 1px solid var(--lp-line); transition: background-color 0.15s ease; }
+.lp .lp-row:hover { background: rgb(255 255 255 / 2%); }
+
+/* "Answer" glow line. */
+.lp .lp-beam { width: 1px; height: 140px; margin-inline: auto; background: linear-gradient(to bottom, transparent, var(--lp-teal)); box-shadow: 0 0 18px 1px rgb(45 212 191 / 35%); }
+.lp .lp-answer-card { border: 1px solid rgb(45 212 191 / 30%); background: linear-gradient(180deg, rgb(45 212 191 / 6%), transparent); }
+
+
+/* ---------- Pipeline: a risk pulse sweeps left→right through the five stages ---------- */
+.lp { --lp-loop: 5s; }
+.lp .lp-rail { position: absolute; left: 10%; right: 10%; top: 71px; height: 2px; background: rgb(255 255 255 / 9%); overflow: hidden; }
+.lp .lp-sweep {
+  position: absolute; top: 0; height: 100%; width: 22%;
+  background: linear-gradient(90deg, transparent, rgb(248 113 113 / 85%));
+  animation: lp-sweep var(--lp-loop) linear infinite;
+}
+.lp .lp-sweep-head {
+  position: absolute; left: 10%; right: 10%; top: 65px; height: 14px; pointer-events: none;
+}
+.lp .lp-sweep-head > span {
+  position: absolute; top: 0; width: 14px; height: 14px; margin-left: -7px;
+  color: var(--lp-red); filter: drop-shadow(0 0 6px rgb(248 113 113 / 70%));
+  animation: lp-head var(--lp-loop) linear infinite;
+}
+@keyframes lp-sweep {
+  0%   { left: -22%; opacity: 1; }
+  70%  { left: 100%; opacity: 1; }
+  71%, 100% { left: 100%; opacity: 0; }
+}
+@keyframes lp-head {
+  0%   { left: 0%; opacity: 0; }
+  4%   { opacity: 1; }
+  70%  { left: 100%; opacity: 1; }
+  74%, 100% { left: 100%; opacity: 0; }
+}
+/* Static chevrons between tiles; they flash as the pulse passes. */
+.lp .lp-chev { position: absolute; top: 63px; width: 18px; height: 18px; margin-left: -9px; color: rgb(255 255 255 / 22%); background: #000; animation: lp-chev var(--lp-loop) linear infinite; }
+@keyframes lp-chev { 0%, 12% { color: var(--lp-red); } 22%, 100% { color: rgb(255 255 255 / 22%); } }
+/* Each tile (and its card) lights up when the pulse reaches it; delay set inline. */
+.lp .lp-tile { transition: border-color .2s ease; }
+.lp .lp-hit { animation: lp-hit var(--lp-loop) ease-out infinite; }
+@keyframes lp-hit {
+  0%   { border-color: rgb(248 113 113 / 80%); box-shadow: 0 0 24px -4px rgb(248 113 113 / 45%); }
+  18%, 100% { border-color: var(--lp-line-2); box-shadow: none; }
+}
+.lp .lp-hit-card { animation: lp-hit-card var(--lp-loop) ease-out infinite; }
+@keyframes lp-hit-card {
+  0%   { border-color: rgb(248 113 113 / 45%); }
+  22%, 100% { border-color: var(--lp-line-2); }
+}
+
+/* ---------- Answer: a teal pulse travels down the beam, then along the guard rail ---------- */
+.lp .lp-beam { position: relative; overflow: hidden; }
+.lp .lp-beam::after {
+  content: ""; position: absolute; left: 0; width: 100%; height: 40px; top: -40px;
+  background: linear-gradient(to bottom, transparent, #fff);
+  animation: lp-drop 2.6s ease-in infinite;
+}
+@keyframes lp-drop { 0% { top: -40px; } 70%, 100% { top: 100%; } }
+.lp .lp-guard-rail { position: relative; height: 1px; overflow: hidden; background: linear-gradient(90deg, transparent, rgb(45 212 191 / 50%), transparent); }
+.lp .lp-guard-rail::after {
+  content: ""; position: absolute; top: 0; height: 100%; width: 18%; left: -18%;
+  background: linear-gradient(90deg, transparent, #5eead4, transparent);
+  animation: lp-glide 3.2s ease-in-out infinite;
+}
+@keyframes lp-glide { 0% { left: -18%; } 100% { left: 100%; } }
+
+/* Buttons: tiny lift on hover, arrow nudges. */
+.lp .lp-btn-primary:hover { transform: translateY(-1px); }
+.lp .lp-btn { transition: background-color .15s ease, border-color .15s ease, color .15s ease, transform .15s ease; }
+.lp .lp-nudge svg { transition: transform .15s ease; }
+.lp .lp-nudge:hover svg { transform: translateX(2px); }
+
+/* Form controls on marketing surfaces. */
+.lp .lp-input {
+  width: 100%; height: 44px; padding: 0 14px; border-radius: 2px;
+  background: rgb(255 255 255 / 3%); border: 1px solid var(--lp-line-2); color: #fff;
+  outline: none; transition: border-color .15s ease, box-shadow .15s ease;
+}
+.lp .lp-input::placeholder { color: var(--lp-dim); }
+.lp .lp-input:focus { border-color: rgb(45 212 191 / 60%); box-shadow: 0 0 0 3px rgb(45 212 191 / 15%); }
+.lp .lp-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+.lp :focus-visible { outline: 2px solid var(--lp-teal); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp *, .lp *::before, .lp *::after { transition: none !important; animation: none !important; }
+}

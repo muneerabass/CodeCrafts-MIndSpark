@@ -42,6 +42,8 @@
   --sidebar-accent-foreground: oklch(0.9 0.1 170);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.82 0.16 165);
+  --logo-a: oklch(0.88 0.15 170);
+  --logo-b: oklch(0.6 0.12 195);
 }
 
 /* Typography + surface polish, scoped to cyber so "classic" is untouched. */

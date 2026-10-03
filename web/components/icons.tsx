@@ -1,19 +1,21 @@
-import type { SVGProps } from 'react';
+import { useId, type SVGProps } from 'react';
 import { cn } from '@/lib/utils';
 
 type P = SVGProps<SVGSVGElement>;
 
 /** depguard mark: a shield holding a small dependency graph. */
 export function Logo({ className, ...p }: P) {
+  // Unique per instance: a shared id breaks the fill when the first copy is display:none.
+  const gid = `dg-g-${useId().replace(/:/g, '')}`;
   return (
     <svg viewBox="0 0 32 32" fill="none" aria-hidden className={cn('size-6', className)} {...p}>
       <defs>
-        <linearGradient id="dg-g" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#818cf8" />
-          <stop offset="1" stopColor="#6d28d9" />
+        <linearGradient id={gid} x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse">
+          <stop style={{ stopColor: 'var(--logo-a, #818cf8)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--logo-b, #6d28d9)' }} />
         </linearGradient>
       </defs>
-      <path d="M16 2.5 27 6.6v8.2c0 6.9-4.6 12.2-11 14.7C9.6 27 5 21.7 5 14.8V6.6L16 2.5Z" fill="url(#dg-g)" />
+      <path d="M16 2.5 27 6.6v8.2c0 6.9-4.6 12.2-11 14.7C9.6 27 5 21.7 5 14.8V6.6L16 2.5Z" fill={`url(#${gid})`} />
       <path d="M11 11.5 16 19l5-7.5M16 19v-7.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
       <circle cx="11" cy="11.5" r="2" fill="#fff" />
       <circle cx="21" cy="11.5" r="2" fill="#fff" />

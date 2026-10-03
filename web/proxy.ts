@@ -6,7 +6,7 @@ const bypass = process.env.NODE_ENV !== 'production' && process.env.E2E_AUTH_BYP
 
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  if (bypass || PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
+  if (bypass || pathname === '/' || PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
 
   // Refresh Supabase auth tokens on every request.
   let response = NextResponse.next({ request: req });

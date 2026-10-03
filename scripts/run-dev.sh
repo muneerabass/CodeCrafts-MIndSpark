@@ -46,6 +46,11 @@ WEB_DATABASE_OWNER_URL="$(env_value_file DATABASE_OWNER_URL)"
 WEB_DATABASE_QUERY_URL="$(env_value_file DATABASE_QUERY_URL)"
 WEB_DATABASE_URL_WEB="$(env_value_file DATABASE_URL_WEB)"
 WEB_SUPERADMIN_EMAILS="$(env_value_file SUPERADMIN_EMAILS)"
+WEB_SMTP_HOST="$(env_value_file SMTP_HOST)"
+WEB_SMTP_PORT="$(env_value_file SMTP_PORT)"
+WEB_SMTP_USER="$(env_value_file SMTP_USER)"
+WEB_SMTP_PASS="$(env_value_file SMTP_PASS)"
+WEB_SMTP_FROM="$(env_value_file SMTP_FROM)"
 
 export DATABASE_URL="${DATABASE_URL:-${WEB_DATABASE_URL:-postgres://depguard_app:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}}"
 export DATABASE_OWNER_URL="${DATABASE_OWNER_URL:-${WEB_DATABASE_OWNER_URL:-postgres://depguard:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}}"
@@ -60,17 +65,13 @@ export BETTER_AUTH_URL="${BETTER_AUTH_URL:-http://localhost:3000}"
 export TENANT_DOMAIN_SUFFIX="${TENANT_DOMAIN_SUFFIX:-localhost}"
 export SUPERADMIN_EMAILS="${SUPERADMIN_EMAILS:-${WEB_SUPERADMIN_EMAILS:-admin@example.com}}"
 
-# Next.js loads web/.env.local itself. Do not override SMTP settings from
-# that file; use Mailpit defaults only when no SMTP settings were supplied.
-if [[ -z "${SMTP_HOST:-}" ]] && ! grep -q '^SMTP_HOST=' "$ROOT_DIR/web/.env.local" 2>/dev/null; then
-  export SMTP_HOST="127.0.0.1"
-fi
-if [[ -z "${SMTP_PORT:-}" ]] && ! grep -q '^SMTP_PORT=' "$ROOT_DIR/web/.env.local" 2>/dev/null; then
-  export SMTP_PORT="1025"
-fi
-if [[ -z "${SMTP_FROM:-}" ]] && ! grep -q '^SMTP_FROM=' "$ROOT_DIR/web/.env.local" 2>/dev/null; then
-  export SMTP_FROM="depguard <no-reply@depguard.local>"
-fi
+# Prefer explicit shell values, then load SMTP settings from web/.env.local.
+# This also handles env files whose entries are indented for readability.
+export SMTP_HOST="${SMTP_HOST:-${WEB_SMTP_HOST:-127.0.0.1}}"
+export SMTP_PORT="${SMTP_PORT:-${WEB_SMTP_PORT:-1025}}"
+export SMTP_USER="${SMTP_USER:-${WEB_SMTP_USER:-}}"
+export SMTP_PASS="${SMTP_PASS:-${WEB_SMTP_PASS:-}}"
+export SMTP_FROM="${SMTP_FROM:-${WEB_SMTP_FROM:-depguard <no-reply@depguard.local>}}"
 
 env_value() {
   awk -F= -v key="$1" '$1 == key { print substr($0, index($0, "=") + 1) }' "$ROOT_DIR/deploy/.env"
