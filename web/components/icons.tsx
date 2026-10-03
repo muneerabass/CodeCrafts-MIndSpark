@@ -69,6 +69,28 @@ export function Ecosystem({ name }: { name: string }) {
   );
 }
 
+const ecoTile: Record<string, [string, string]> = {
+  npm: ['npm', 'bg-red-500/15 text-red-600 dark:text-red-400'],
+  PyPI: ['py', 'bg-sky-500/15 text-sky-600 dark:text-sky-400'],
+  Go: ['go', 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400'],
+  Maven: ['mvn', 'bg-orange-500/15 text-orange-600 dark:text-orange-400'],
+  'crates.io': ['rs', 'bg-amber-500/15 text-amber-700 dark:text-amber-400'],
+  RubyGems: ['rb', 'bg-rose-500/15 text-rose-600 dark:text-rose-400'],
+  Packagist: ['php', 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400'],
+  NuGet: ['nu', 'bg-violet-500/15 text-violet-600 dark:text-violet-400'],
+  GitHubActions: ['gha', 'bg-slate-500/15 text-slate-600 dark:text-slate-300'],
+};
+
+/** Small coloured square naming a package ecosystem. */
+export function EcosystemTile({ name, className }: { name: string; className?: string }) {
+  const [abbr, cls] = ecoTile[name] ?? [name.slice(0, 3).toLowerCase(), 'bg-muted text-muted-foreground'];
+  return (
+    <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-lg font-mono text-[11px] font-semibold', cls, className)} title={name} aria-hidden>
+      {abbr}
+    </span>
+  );
+}
+
 export function SourceIcon({ source, className }: { source: string; className?: string }) {
   const c = cn('size-4', className);
   if (source === 'github') return <GitHubIcon className={c} aria-label="GitHub" />;

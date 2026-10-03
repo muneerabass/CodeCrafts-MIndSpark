@@ -226,9 +226,9 @@ export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; 
             </span>
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block text-sm font-semibold">Free plan</span>
-              <span className="block text-xs text-muted-foreground">Your current plan</span>
+              <span className="block truncate text-xs text-muted-foreground">Current plan</span>
             </span>
-            <span className="text-xs font-medium text-primary">
+            <span className="shrink-0 text-xs font-medium whitespace-nowrap text-primary">
               Upgrade <span className="inline-block transition-transform group-hover/plan:translate-x-0.5">→</span>
             </span>
           </Link>

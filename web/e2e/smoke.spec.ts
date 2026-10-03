@@ -95,7 +95,7 @@ test('project detail tabs', async ({ page }) => {
 });
 
 const lists: [string, string[]][] = [
-  ['/components', ['Name', 'Projects', 'Version', 'Ecosystem', 'Type', 'Dependency', 'Policy Violations', 'Vulnerabilities', 'Last Updated']],
+  ['/components', ['Component', 'Status', 'Dependency', 'Projects', 'Policy Violations', 'Vulnerabilities', 'Last Updated']],
   ['/scans', ['Scanned Project', 'Project Version', 'Trigger', 'Policy Violations', 'Vulnerabilities', 'Scan Date', 'Status']],
   ['/package-analysis', ['Component', 'Project Name', 'Project Version', 'Status', 'Component Version', 'Verification', 'Scan Date']],
   ['/vulnerabilities', ['ID', 'Summary', 'Risk', 'Affected Components', 'Affected Projects', 'Published', 'Modified']],
@@ -289,8 +289,10 @@ test('pull requests: inbox, detail, actions, settings', async ({ page }) => {
   await page.goto('/pull-requests');
   await page.getByRole('link', { name: 'Add Stripe webhooks and the payments SDK' }).click();
   await expect(page.getByRole('heading', { name: /Add Stripe webhooks/ })).toBeVisible();
-  await expect(page.getByText('Fix before merging — critical risk')).toBeVisible();
+  await expect(page.getByLabel('Urgency').getByText('Critical · Fix before merging')).toBeVisible();
+  await expect(page.getByLabel('Checks').getByText('Failed').first()).toBeVisible();
   await expect(page.getByText('npm uninstall event-stream-lite')).toBeVisible();
+  await page.getByRole('tab', { name: /Code review/ }).click();
   await expect(page.getByText('SQL injection in /refunds', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'api/refunds.ts:42' })).toHaveAttribute('href', /github\.com\/acme\/payments-api\/blob\/a1b2c3d4e5f60718\/api\/refunds\.ts#L42/);
   await expect(page.getByRole('link', { name: 'Open on GitHub' })).toHaveAttribute('href', 'https://github.com/acme/payments-api/pull/482');
