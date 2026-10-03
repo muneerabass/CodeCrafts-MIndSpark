@@ -99,6 +99,7 @@ const tileTone = {
   red: 'text-red-600 dark:text-red-400 bg-red-500/10 ring-red-500/25',
   amber: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 ring-amber-500/25',
   sky: 'text-sky-600 dark:text-sky-400 bg-sky-500/10 ring-sky-500/25',
+  orange: 'text-orange-600 dark:text-orange-400 bg-orange-500/10 ring-orange-500/25',
 };
 export type StatTile = { label: string; value: number; icon: React.ComponentType<{ className?: string }>; href: string; active?: boolean; tone: keyof typeof tileTone; share?: number };
 

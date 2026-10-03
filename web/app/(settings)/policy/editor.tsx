@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Bug, FlaskConical, Info, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
+import { Bug, Code2, FlaskConical, Info, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAction } from '@/components/client';
 import { savePolicy, testPolicy } from '@/lib/actions';
 import type { CustomRule, PackageRule, Policy, Severity, SuspiciousPreset } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const Monaco = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
@@ -19,7 +20,16 @@ const Monaco = dynamic(() => import('@monaco-editor/react'), {
 });
 
 const DEFAULT_DENY: string[] = [];
-const DEFAULT_SUSPICIOUS: SuspiciousPreset = { typosquat: true, unmaintained: true, unmaintained_months: 24, deprecated: true, new_package: true, no_source_repo: false, unusual_behaviour: true, blocking: ['typosquat', 'unusual-behaviour'] };
+const DEFAULT_SUSPICIOUS: SuspiciousPreset = {
+  typosquat: true,
+  unmaintained: true,
+  unmaintained_months: 24,
+  deprecated: true,
+  new_package: true,
+  no_source_repo: false,
+  unusual_behaviour: true,
+  blocking: ['typosquat', 'unusual-behaviour'],
+};
 // Toggle key in the preset -> rule name used in findings and in `blocking`.
 const SUSPICIOUS_RULES: { key: keyof SuspiciousPreset; rule: string; label: string; hint: string }[] = [
   { key: 'typosquat', rule: 'typosquat', label: 'Typosquats', hint: 'Names one edit away from a popular package (lodahs vs lodash).' },
@@ -52,21 +62,33 @@ const RISKS = [
 ] as const;
 
 function Preset({
+  id,
+  on,
   icon: Icon,
   title,
   description,
   children,
 }: {
+  id: string;
+  on?: boolean;
   icon: React.ComponentType<{ className?: string }>;
   title: string;
   description: string;
   children: React.ReactNode;
 }) {
   return (
-    <Card className="gap-4">
+    <Card id={id} className="scroll-mt-20 gap-4">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Icon className="size-4 text-primary" /> {title}
+        <CardTitle className="flex items-center gap-3 text-base">
+          <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/25">
+            <Icon className="size-4 text-primary" />
+          </span>
+          <span>{title}</span>
+          {on !== undefined && (
+            <span className={cn('ml-auto rounded-full px-2 py-0.5 text-xs font-medium', on ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-muted text-muted-foreground')}>
+              {on ? 'On' : 'Off'}
+            </span>
+          )}
         </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
@@ -81,8 +103,7 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
   const [license, setLicense] = useState('');
   const { pending, run } = useAction();
   const ro = !canEdit;
-  const set = <K extends keyof Policy['presets']>(k: K, v: Partial<Policy['presets'][K]>) =>
-    setP({ ...p, presets: { ...p.presets, [k]: { ...p.presets[k], ...v } } });
+  const set = <K extends keyof Policy['presets']>(k: K, v: Partial<Policy['presets'][K]>) => setP({ ...p, presets: { ...p.presets, [k]: { ...p.presets[k], ...v } } });
   const setRule = (i: number, v: Partial<CustomRule>) => setP({ ...p, custom: p.custom.map((r, j) => (j === i ? { ...r, ...v } : r)) });
   const deny = p.presets.license.deny;
   const addLicense = () => {
@@ -91,16 +112,51 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
     setLicense('');
   };
   const dirty = JSON.stringify(p) !== JSON.stringify(initial);
+  const sus = p.presets.suspicious ?? DEFAULT_SUSPICIOUS;
+  const susOn = SUSPICIOUS_RULES.filter((r) => sus[r.key]).length;
+  const pkgRules = p.presets.packages?.length ?? 0;
+  const glance: { id: string; icon: React.ComponentType<{ className?: string }>; label: string; value: string; on: boolean }[] = [
+    { id: 'vulnerability', icon: Bug, label: 'Vulnerabilities', value: RISKS.find((r) => r.v === p.presets.vulnerability.min_risk)?.l ?? '', on: p.presets.vulnerability.min_risk !== 'OFF' },
+    { id: 'malware', icon: Skull, label: 'Malware', value: p.presets.malware.enabled ? 'Blocking' : 'Off', on: p.presets.malware.enabled },
+    { id: 'packages', icon: PackageCheck, label: 'Package rules', value: pkgRules ? `${pkgRules} rule${pkgRules === 1 ? '' : 's'}` : 'None', on: pkgRules > 0 },
+    {
+      id: 'license',
+      icon: Scale,
+      label: 'Licenses',
+      value: (p.presets.license.enabled ?? true) ? `Blocks ${p.presets.license.blocking_severity ?? 'high'}+` : 'Off',
+      on: p.presets.license.enabled ?? true,
+    },
+    { id: 'suspicious', icon: ScanSearch, label: 'Suspicious', value: `${susOn} of ${SUSPICIOUS_RULES.length} checks · ${sus.blocking.length} block`, on: susOn > 0 },
+    { id: 'popularity', icon: Star, label: 'Popularity', value: p.presets.popularity.enabled ? `≥ ${p.presets.popularity.min_stars} stars` : 'Off', on: p.presets.popularity.enabled },
+    { id: 'maintenance', icon: Wrench, label: 'Maintenance', value: p.presets.maintenance.enabled ? `Scorecard ≥ ${p.presets.maintenance.min_scorecard}` : 'Off', on: p.presets.maintenance.enabled },
+    { id: 'custom', icon: Code2, label: 'Custom rules', value: p.custom.length ? `${p.custom.length} rule${p.custom.length === 1 ? '' : 's'}` : 'None', on: p.custom.length > 0 },
+  ];
 
   return (
     <div className="grid gap-4">
+      <nav aria-label="Policy at a glance" className="rounded-xl border bg-card p-4">
+        <h2 className="mb-3 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">Policy at a glance</h2>
+        <ul className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {glance.map((g) => (
+            <li key={g.id}>
+              <a href={`#${g.id}`} className="flex h-full items-start gap-2.5 rounded-lg border p-2.5 transition-colors hover:border-primary/40 hover:bg-muted/40">
+                <g.icon className={cn('mt-0.5 size-4 shrink-0', g.on ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
+                <span className="min-w-0">
+                  <span className="block text-xs text-muted-foreground">{g.label}</span>
+                  <span className={cn('block text-sm font-medium', !g.on && 'text-muted-foreground')}>{g.value}</span>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
       {ro && (
         <p className="flex items-center gap-2 rounded-md border bg-muted/50 p-3 text-sm text-muted-foreground">
           <Info className="size-4" /> You have read-only access. Ask an owner or admin to change the policy.
         </p>
       )}
 
-      <Preset icon={Bug} title="Vulnerability" description="Flag packages with known vulnerabilities at or above this severity.">
+      <Preset id="vulnerability" on={p.presets.vulnerability.min_risk !== 'OFF'} icon={Bug} title="Vulnerability" description="Flag packages with known vulnerabilities at or above this severity.">
         <Label htmlFor="p-risk">Minimum severity</Label>
         <Select value={p.presets.vulnerability.min_risk} onValueChange={(v) => set('vulnerability', { min_risk: v as Policy['presets']['vulnerability']['min_risk'] })} disabled={ro}>
           <SelectTrigger id="p-risk" className="w-60">
@@ -116,7 +172,7 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
         </Select>
       </Preset>
 
-      <Preset icon={Skull} title="Malware" description="Flag packages listed as malicious in OSV, or verified malicious by your team.">
+      <Preset id="malware" on={p.presets.malware.enabled} icon={Skull} title="Malware" description="Flag packages listed as malicious in OSV, or verified malicious by your team.">
         <div className="flex items-center gap-2">
           <Switch id="p-mal" checked={p.presets.malware.enabled} onCheckedChange={(v) => set('malware', { enabled: v })} disabled={ro} />
           <Label htmlFor="p-mal">Block malicious packages</Label>
@@ -125,7 +181,13 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
 
       <PackageRulesCard rules={p.presets.packages ?? []} ro={ro} onChange={(packages) => setP({ ...p, presets: { ...p.presets, packages } })} />
 
-      <Preset icon={Scale} title="License" description="Check dependency licenses against your project license and usage model, plus a deny list of SPDX identifiers.">
+      <Preset
+        id="license"
+        on={p.presets.license.enabled ?? true}
+        icon={Scale}
+        title="License"
+        description="Check dependency licenses against your project license and usage model, plus a deny list of SPDX identifiers."
+      >
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Switch id="p-lic-on" checked={p.presets.license.enabled ?? true} onCheckedChange={(v) => set('license', { enabled: v })} disabled={ro} />
@@ -133,7 +195,11 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="p-lic-sev">Block at severity</Label>
-            <Select value={p.presets.license.blocking_severity ?? 'high'} onValueChange={(v) => set('license', { blocking_severity: v as Severity })} disabled={ro || p.presets.license.enabled === false}>
+            <Select
+              value={p.presets.license.blocking_severity ?? 'high'}
+              onValueChange={(v) => set('license', { blocking_severity: v as Severity })}
+              disabled={ro || p.presets.license.enabled === false}
+            >
               <SelectTrigger id="p-lic-sev" className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -191,7 +257,7 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
 
       <SuspiciousCard s={p.presets.suspicious ?? DEFAULT_SUSPICIOUS} ro={ro} onChange={(v) => set('suspicious', v)} />
 
-      <Preset icon={Star} title="Popularity" description="Flag packages whose source repository has very few stars — a common trait of typosquats.">
+      <Preset id="popularity" on={p.presets.popularity.enabled} icon={Star} title="Popularity" description="Flag packages whose source repository has very few stars — a common trait of typosquats.">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Switch id="p-pop" checked={p.presets.popularity.enabled} onCheckedChange={(v) => set('popularity', { enabled: v })} disabled={ro} />
@@ -199,12 +265,20 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="p-stars">Minimum stars</Label>
-            <Input id="p-stars" type="number" min={0} className="w-28" value={p.presets.popularity.min_stars} onChange={(e) => set('popularity', { min_stars: Number(e.target.value) })} disabled={ro || !p.presets.popularity.enabled} />
+            <Input
+              id="p-stars"
+              type="number"
+              min={0}
+              className="w-28"
+              value={p.presets.popularity.min_stars}
+              onChange={(e) => set('popularity', { min_stars: Number(e.target.value) })}
+              disabled={ro || !p.presets.popularity.enabled}
+            />
           </div>
         </div>
       </Preset>
 
-      <Preset icon={Wrench} title="Maintenance" description="Flag packages whose OpenSSF Scorecard score (0–10) is below a threshold.">
+      <Preset id="maintenance" on={p.presets.maintenance.enabled} icon={Wrench} title="Maintenance" description="Flag packages whose OpenSSF Scorecard score (0–10) is below a threshold.">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <Switch id="p-maint" checked={p.presets.maintenance.enabled} onCheckedChange={(v) => set('maintenance', { enabled: v })} disabled={ro} />
@@ -212,14 +286,29 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="p-score">Minimum score</Label>
-            <Input id="p-score" type="number" min={0} max={10} step={0.1} className="w-28" value={p.presets.maintenance.min_scorecard} onChange={(e) => set('maintenance', { min_scorecard: Number(e.target.value) })} disabled={ro || !p.presets.maintenance.enabled} />
+            <Input
+              id="p-score"
+              type="number"
+              min={0}
+              max={10}
+              step={0.1}
+              className="w-28"
+              value={p.presets.maintenance.min_scorecard}
+              onChange={(e) => set('maintenance', { min_scorecard: Number(e.target.value) })}
+              disabled={ro || !p.presets.maintenance.enabled}
+            />
           </div>
         </div>
       </Preset>
 
-      <Card className="gap-4">
+      <Card id="custom" className="scroll-mt-20 gap-4">
         <CardHeader>
-          <CardTitle className="text-base">Advanced: custom CEL rules</CardTitle>
+          <CardTitle className="flex items-center gap-3 text-base">
+            <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/25">
+              <Code2 className="size-4 text-primary" />
+            </span>
+            Advanced: custom CEL rules
+          </CardTitle>
           <CardDescription>Write your own rules in the Common Expression Language. A package that makes an expression true is a violation.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -239,7 +328,12 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
             <RuleEditor key={i} i={i} rule={r} ro={ro} onChange={(v) => setRule(i, v)} onRemove={() => setP({ ...p, custom: p.custom.filter((_, j) => j !== i) })} />
           ))}
           {!ro && (
-            <Button type="button" variant="outline" className="w-fit" onClick={() => setP({ ...p, custom: [...p.custom, { name: `custom-rule-${p.custom.length + 1}`, category: 'vulnerability', summary: '', expr: '' }] })}>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-fit"
+              onClick={() => setP({ ...p, custom: [...p.custom, { name: `custom-rule-${p.custom.length + 1}`, category: 'vulnerability', summary: '', expr: '' }] })}
+            >
               <Plus /> Add rule
             </Button>
           )}
@@ -262,7 +356,12 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
 
 function SuspiciousCard({ s, ro, onChange }: { s: SuspiciousPreset; ro: boolean; onChange: (v: Partial<SuspiciousPreset>) => void }) {
   return (
-    <Preset icon={ScanSearch} title="Suspicious" description="Flag lookalike, abandoned, deprecated, brand-new and oddly-behaving packages. Blocking rules fail the check; the rest are reported only.">
+    <Preset
+      id="suspicious"
+      icon={ScanSearch}
+      title="Suspicious"
+      description="Flag lookalike, abandoned, deprecated, brand-new and oddly-behaving packages. Blocking rules fail the check; the rest are reported only."
+    >
       <div className="grid gap-2" role="group" aria-label="Suspicious package rules">
         {SUSPICIOUS_RULES.map((r) => {
           const on = s[r.key] as boolean;
@@ -279,7 +378,16 @@ function SuspiciousCard({ s, ro, onChange }: { s: SuspiciousPreset; ro: boolean;
                   <Label htmlFor="p-s-months" className="text-xs">
                     Months without release
                   </Label>
-                  <Input id="p-s-months" type="number" min={1} max={120} className="h-8 w-20" value={s.unmaintained_months} onChange={(e) => onChange({ unmaintained_months: Number(e.target.value) })} disabled={ro || !on} />
+                  <Input
+                    id="p-s-months"
+                    type="number"
+                    min={1}
+                    max={120}
+                    className="h-8 w-20"
+                    value={s.unmaintained_months}
+                    onChange={(e) => onChange({ unmaintained_months: Number(e.target.value) })}
+                    disabled={ro || !on}
+                  />
                 </div>
               )}
               <div className="flex items-center gap-2">
@@ -420,7 +528,12 @@ function PackageRulesCard({ rules, ro, onChange }: { rules: PackageRule[]; ro: b
   const update = (i: number, v: Partial<PackageRule>) => onChange(rules.map((r, j) => (j === i ? { ...r, ...v } : r)));
   const setMode = (i: number, m: RuleMode) => update(i, { deny: m === 'deny' || undefined, allow: m === 'allow' || undefined, versions: m === 'versions' ? rules[i].versions : undefined });
   return (
-    <Preset icon={PackageCheck} title="Package & version rules" description="Ban packages, set minimum/maximum allowed versions, or mark packages as trusted. Enforced on PR and repository scans and before installs with the depguard CLI.">
+    <Preset
+      id="packages"
+      icon={PackageCheck}
+      title="Package & version rules"
+      description="Ban packages, set minimum/maximum allowed versions, or mark packages as trusted. Enforced on PR and repository scans and before installs with the depguard CLI."
+    >
       {rules.length === 0 ? (
         <p className="text-sm text-muted-foreground">No package rules yet. Example: lodash, allowed versions &gt;=4.17.21.</p>
       ) : (
@@ -458,7 +571,14 @@ function PackageRulesCard({ rules, ro, onChange }: { rules: PackageRule[]; ro: b
                       </Select>
                     </td>
                     <td className="py-1 pr-2">
-                      <Input aria-label={`Rule ${i + 1} package`} className="w-44 font-mono" placeholder="lodash or @types/*" value={r.name} onChange={(e) => update(i, { name: e.target.value })} disabled={ro} />
+                      <Input
+                        aria-label={`Rule ${i + 1} package`}
+                        className="w-44 font-mono"
+                        placeholder="lodash or @types/*"
+                        value={r.name}
+                        onChange={(e) => update(i, { name: e.target.value })}
+                        disabled={ro}
+                      />
                     </td>
                     <td className="py-1 pr-2">
                       <Select value={mode} onValueChange={(v) => setMode(i, v as RuleMode)} disabled={ro}>
@@ -475,7 +595,15 @@ function PackageRulesCard({ rules, ro, onChange }: { rules: PackageRule[]; ro: b
                     <td className="py-1 pr-2">
                       {mode === 'versions' ? (
                         <>
-                          <Input aria-label={`Rule ${i + 1} versions`} aria-invalid={bad} className="w-40 font-mono" placeholder=">=4.17.21 <5" value={r.versions ?? ''} onChange={(e) => update(i, { versions: e.target.value })} disabled={ro} />
+                          <Input
+                            aria-label={`Rule ${i + 1} versions`}
+                            aria-invalid={bad}
+                            className="w-40 font-mono"
+                            placeholder=">=4.17.21 <5"
+                            value={r.versions ?? ''}
+                            onChange={(e) => update(i, { versions: e.target.value })}
+                            disabled={ro}
+                          />
                           {bad && <p className="mt-1 text-xs text-destructive">Use e.g. &gt;=1.2.0 &lt;2 or &lt;2 || &gt;=3</p>}
                         </>
                       ) : (
@@ -498,7 +626,14 @@ function PackageRulesCard({ rules, ro, onChange }: { rules: PackageRule[]; ro: b
                       </Select>
                     </td>
                     <td className="py-1 pr-2">
-                      <Input aria-label={`Rule ${i + 1} reason`} className="w-48" placeholder="Why this rule exists" value={r.reason ?? ''} onChange={(e) => update(i, { reason: e.target.value })} disabled={ro} />
+                      <Input
+                        aria-label={`Rule ${i + 1} reason`}
+                        className="w-48"
+                        placeholder="Why this rule exists"
+                        value={r.reason ?? ''}
+                        onChange={(e) => update(i, { reason: e.target.value })}
+                        disabled={ro}
+                      />
                     </td>
                     <td className="py-1">
                       {!ro && (

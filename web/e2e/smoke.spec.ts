@@ -98,8 +98,8 @@ const lists: [string, string[]][] = [
   ['/components', ['Component', 'Status', 'Dependency', 'Projects', 'Policy Violations', 'Vulnerabilities', 'Last Updated']],
   ['/scans', ['Scanned Project', 'Trigger', 'Status', 'Policy Violations', 'Vulnerabilities', 'Scan Date']],
   ['/package-analysis', ['Component', 'Project Name', 'Project Version', 'Status', 'Component Version', 'Verification', 'Scan Date']],
-  ['/vulnerabilities', ['ID', 'Summary', 'Risk', 'Affected Components', 'Affected Projects', 'Published', 'Modified']],
-  ['/policy/violations', ['Rule', 'Category', 'Severity', 'Component', 'Summary', 'Project']],
+  ['/vulnerabilities', ['Vulnerability', 'Risk', 'Affected', 'Published']],
+  ['/policy/violations', ['Violation', 'Severity', 'Component', 'Project', 'Detected']],
   ['/package-analysis?view=suspicious', ['Package', 'Rule', 'Severity', 'Reason', 'Similar To', 'Project', 'Detected']],
   ['/endpoints', ['Endpoint', 'Type', 'Hostname', 'OS', 'Last Sync']],
   ['/settings/package-exclusions', ['Ecosystem', 'Package Name', 'Version', 'Reason', 'Status', 'Expires At', 'Actions']],
@@ -193,6 +193,7 @@ test('suspicious findings and violation filters', async ({ page }) => {
   await expect(page).toHaveURL(/severity=low/);
   await expect(page.getByText('new-package')).toBeVisible();
   await page.goto('/policy/violations?category=license');
+  await page.getByText('Details', { exact: true }).last().click();
   await expect(page.getByText('Conflicts With')).toBeVisible();
 });
 
