@@ -49,8 +49,11 @@ func (d Deps) fullScan(ctx context.Context, tenant, projectID, versionID, scanID
 		d.Logger.Info("scan notes", "scan", scanID, "notes", notes)
 	}
 	err = withTenant(ctx, d, tenant, func(tx pgx.Tx) error {
-		return persist(ctx, tx, persistIn{tenant: tenant, projectID: projectID, versionID: versionID, scanID: scanID,
-			findings: findings, replaceComponents: true, conclusion: conclusion(findings, st), reportMD: body, risk: rc})
+		if err := persist(ctx, tx, persistIn{tenant: tenant, projectID: projectID, versionID: versionID, scanID: scanID,
+			findings: findings, replaceComponents: true, conclusion: conclusion(findings, st), reportMD: body, risk: rc}); err != nil {
+			return err
+		}
+		return trackResolved(ctx, tx)
 	})
 	if err == nil {
 		d.enqueueGuarddog(ctx, tenant, scanID, findings)
@@ -238,4 +241,21 @@ func (w *uploadWorker) Work(ctx context.Context, job *river.Job[jobs.ScanUpload]
 		return err
 	}
 	return nil
+}
+
+// trackResolved marks the tenant's vulnerabilities whose component left the
+// current inventory as resolved (fix deadlines), and reopens ones that came back.
+func trackResolved(ctx context.Context, tx pgx.Tx) error {
+	_, err := tx.Exec(ctx, `
+UPDATE component_vulnerabilities cv SET seen_current = true, resolved_at = NULL
+  WHERE (NOT cv.seen_current OR cv.resolved_at IS NOT NULL)
+    AND EXISTS (SELECT 1 FROM project_version_components pvc WHERE pvc.component_id = cv.component_id)`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+UPDATE component_vulnerabilities cv SET resolved_at = now()
+  WHERE cv.seen_current AND cv.resolved_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM project_version_components pvc WHERE pvc.component_id = cv.component_id)`)
+	return err
 }

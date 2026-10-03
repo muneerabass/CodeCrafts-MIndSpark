@@ -10,7 +10,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -199,6 +199,12 @@ export const saveFixSettings = async (settings: FixSettings) =>
   run(async () => {
     await requireRole('admin');
     return api<FixSettings>('/settings/fixes', { method: 'PUT', body: settings });
+  });
+
+export const saveSLA = async (sla: SLA) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<SLA>('/settings/sla', { method: 'PUT', body: sla });
   });
 
 export const savePolicy = async (policy: Policy) =>

@@ -5,7 +5,7 @@ import { ArrowRight, Bug, ExternalLink, FolderGit2, Hexagon, Skull } from 'lucid
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { Chip, RiskBadge } from '@/components/badges';
+import { Chip, DueBadge, RiskBadge } from '@/components/badges';
 import { Ecosystem } from '@/components/icons';
 import { fmtDate } from '@/lib/format';
 import type { AffectedComponent, VulnerabilityRow } from '@/lib/types';
@@ -56,6 +56,7 @@ const cols: ColumnDef<VulnerabilityRow, unknown>[] = [
       </span>
     ),
   },
+  { header: 'Fix by', cell: ({ row }) => <DueBadge due={row.original.due_at} overdue={row.original.overdue} open={row.original.open} /> },
   {
     header: 'Published',
     cell: ({ row }) => (

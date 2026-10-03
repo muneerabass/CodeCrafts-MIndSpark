@@ -360,3 +360,32 @@ test('auto-fix: create fix PR from a scan report, settings', async ({ page }) =>
   await expect(page.getByLabel('Open fix PRs automatically')).toBeChecked();
   await expect(page.getByRole('button', { name: 'high' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('fix first queue, deadlines on vulnerabilities and dashboard, deadline settings', async ({ page }) => {
+  await page.goto('/fix-queue');
+  await expect(page.getByRole('heading', { name: 'Fix first' })).toBeVisible();
+  await expect(page.getByText(/(Fix the top \d+ packages to remove [\d.]+%|removes all) of your known vulnerability risk/)).toBeVisible();
+  const first = page.getByRole('listitem').filter({ hasText: 'minimist' }).first();
+  await expect(first.getByText('Actively exploited')).toBeVisible();
+  await expect(first.getByText(/Overdue \d+d/)).toBeVisible();
+  await expect(first.getByRole('link', { name: 'Fix PR #512 open' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Projects using minimist' }).getByRole('link', { name: 'acme/payments-api' })).toBeVisible();
+
+  await page.goto('/vulnerabilities');
+  await expect(page.getByRole('columnheader', { name: 'Fix by' })).toBeVisible();
+  await page.getByRole('link', { name: /Past fix deadline/ }).click();
+  await expect(page).toHaveURL(/overdue=1/);
+  await expect(page.getByRole('link', { name: 'GHSA-3xgq-45jj-v275' }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: 'GHSA-wf5p-g6vw-rhxx' })).toHaveCount(0);
+
+  await page.goto('/dashboard');
+  await expect(page.getByRole('link', { name: 'What to fix first' })).toBeVisible();
+  await expect(page.getByText('78%')).toBeVisible(); // 7 of 9 fixed on time
+
+  await page.goto('/settings/preferences');
+  await page.getByLabel('Critical').fill('14');
+  await page.getByRole('button', { name: 'Save deadlines' }).click();
+  await expect(page.getByText('Fix deadlines saved')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Critical')).toHaveValue('14');
+});

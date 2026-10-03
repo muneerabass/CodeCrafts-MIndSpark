@@ -5,7 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/depguard/depguard/internal/db"
+	"github.com/depguard/depguard/internal/engine/testpg"
 	"github.com/depguard/depguard/internal/jobs"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestFixPR(t *testing.T) {
@@ -50,5 +53,36 @@ func TestFixPR(t *testing.T) {
 	}
 	if err := h.pg.Owner.QueryRow(ctx, `SELECT status, error FROM fix_prs WHERE id='f2'`).Scan(&status, &msg); err != nil || status != "unsupported" || !strings.Contains(msg, "cargo update -p serde") {
 		t.Fatalf("f2: %v %s %s", err, status, msg)
+	}
+}
+
+func TestTrackResolved(t *testing.T) {
+	ctx := context.Background()
+	pg := testpg.Start(t)
+	_, err := pg.Owner.Exec(ctx, `
+		INSERT INTO tenant_settings (tenant_id, domain) VALUES ('t1','t1.example');
+		INSERT INTO projects (id, tenant_id, source, name, url) VALUES ('p1','t1','cli','app','');
+		INSERT INTO project_versions (id, tenant_id, project_id, name) VALUES ('v1','t1','p1','main');
+		INSERT INTO components (id, tenant_id, ecosystem, name, version, purl) VALUES
+		  ('old','t1','npm','a','1','pkg:npm/a@1'), ('new','t1','npm','a','2','pkg:npm/a@2'), ('pr','t1','npm','b','1','pkg:npm/b@1');
+		INSERT INTO project_version_components (tenant_id, project_version_id, component_id, manifest_path) VALUES ('t1','v1','new','package-lock.json');
+		INSERT INTO component_vulnerabilities (tenant_id, component_id, advisory_id, risk, seen_current) VALUES
+		  ('t1','old','GHSA-1','HIGH',true), ('t1','new','GHSA-2','HIGH',false), ('t1','pr','GHSA-3','HIGH',false);`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.WithTenantTx(ctx, pg.App, "t1", func(tx pgx.Tx) error { return trackResolved(ctx, tx) }); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	rows, _ := pg.Owner.Query(ctx, `SELECT component_id, seen_current::text || '/' || (resolved_at IS NOT NULL)::text FROM component_vulnerabilities`)
+	for rows.Next() {
+		var k, v string
+		rows.Scan(&k, &v)
+		got[k] = v
+	}
+	// old left the inventory → resolved; new is current; a PR-only package never counts as fixed.
+	if got["old"] != "true/true" || got["new"] != "true/false" || got["pr"] != "false/false" {
+		t.Fatalf("%v", got)
 	}
 }

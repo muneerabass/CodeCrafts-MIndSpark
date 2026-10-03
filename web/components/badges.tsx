@@ -1,6 +1,6 @@
 import { Bug, Check, CircleAlert, FileChartLine, Flame, Info, ShieldAlert, Skull, TriangleAlert, BadgeCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { titleCase } from '@/lib/format';
+import { daysUntil, titleCase } from '@/lib/format';
 import type { Risk } from '@/lib/types';
 
 const pill = 'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap [&>svg]:size-3.5';
@@ -105,6 +105,24 @@ export function DependencyBadge({ direct, depth, dev }: { direct: boolean | null
     <span className={cn(pill, direct === null ? 'text-muted-foreground ring-1 ring-border' : direct ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground/80')}>
       {label}
       {dev && <span className="text-muted-foreground">· dev</span>}
+    </span>
+  );
+}
+
+/** Fix deadline: overdue (red), due within 7 days (amber), later, or none. */
+export function DueBadge({ due, overdue, open = true }: { due: string | null; overdue: boolean; open?: boolean }) {
+  if (!open) return <span className="text-xs text-muted-foreground">Fixed</span>;
+  if (!due) return <span className="text-xs text-muted-foreground">No deadline</span>;
+  const days = daysUntil(due);
+  const tone = overdue
+    ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+    : days <= 7
+      ? 'bg-amber-500/15 text-amber-800 dark:text-amber-300'
+      : 'bg-muted text-muted-foreground';
+  const label = overdue ? `Overdue ${Math.max(1, -days)}d` : days <= 0 ? 'Due today' : `Due in ${days}d`;
+  return (
+    <span title={`Fix by ${new Date(due).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`} className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap ${tone}`}>
+      {label}
     </span>
   );
 }

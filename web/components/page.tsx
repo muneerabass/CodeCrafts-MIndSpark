@@ -106,7 +106,7 @@ export type StatTile = { label: string; value: number; icon: React.ComponentType
 /** Clickable summary numbers that double as filters. */
 export function StatTiles({ label, tiles }: { label: string; tiles: StatTile[] }) {
   return (
-    <nav aria-label={label} className={cn('grid grid-cols-2 gap-2 border-b px-4 pt-2 pb-4 sm:gap-3 md:px-6', tiles.length === 4 ? 'lg:grid-cols-4' : 'sm:grid-cols-3')}>
+    <nav aria-label={label} className={cn('grid grid-cols-2 gap-2 border-b px-4 pt-2 pb-4 sm:gap-3 md:px-6', tiles.length === 4 ? 'lg:grid-cols-4' : tiles.length === 5 ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-3')}>
       {tiles.map((t) => (
         <Link
           key={t.label}

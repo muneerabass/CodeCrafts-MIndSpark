@@ -59,6 +59,13 @@ SELECT jsonb_build_object(
   'vulns_over_time', (SELECT jsonb_agg(jsonb_build_object('date', days.d, 'critical', COALESCE(vd.critical, 0),
       'high', COALESCE(vd.high, 0), 'medium', COALESCE(vd.medium, 0), 'low', COALESCE(vd.low, 0)) ORDER BY days.d)
       FROM days LEFT JOIN vd USING (d)),
+  'overdue', (SELECT count(DISTINCT (x.component_id, x.advisory_id)) FROM component_vulnerabilities x JOIN inv USING (component_id)
+      WHERE x.`+notMal+` AND `+slaDays("x.risk")+` > 0 AND x.first_seen + `+slaDays("x.risk")+` * interval '1 day' < now()),
+  'due_soon', (SELECT count(DISTINCT (x.component_id, x.advisory_id)) FROM component_vulnerabilities x JOIN inv USING (component_id)
+      WHERE x.`+notMal+` AND `+slaDays("x.risk")+` > 0 AND x.first_seen + `+slaDays("x.risk")+` * interval '1 day' BETWEEN now() AND now() + interval '7 days'),
+  'fixed', (SELECT jsonb_build_object('resolved', count(*),
+        'on_time', count(*) FILTER (WHERE `+slaDays("x.risk")+` = 0 OR x.resolved_at <= x.first_seen + `+slaDays("x.risk")+` * interval '1 day'))
+      FROM component_vulnerabilities x WHERE x.`+notMal+` AND x.seen_current AND x.resolved_at >= current_date - ($1::int - 1)),
   'top_projects', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', p.id, 'name', p.name, 'vulns', pvul.vulns) ORDER BY pvul.vulns DESC, p.name)
       FROM (SELECT * FROM pvul ORDER BY vulns DESC LIMIT 5) pvul JOIN projects p ON p.id = pvul.project_id), '[]'::jsonb))`, days)
 		return err
@@ -137,16 +144,26 @@ func (s *Server) verifyAnalysis(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) listVulns(w http.ResponseWriter, r *http.Request) error {
 	return s.listHandler("", `
-SELECT x.advisory_id AS id, a.summary, COALESCE(a.risk, (array_agg(x.risk))[1]) AS risk,
+SELECT z.*, CASE WHEN z.days > 0 THEN z.first_seen + z.days * interval '1 day' END AS due_at,
+  z.open AND z.days > 0 AND z.first_seen + z.days * interval '1 day' < now() AS overdue
+FROM (SELECT x.advisory_id AS id, a.summary, COALESCE(a.risk, (array_agg(x.risk))[1]) AS risk,
   count(DISTINCT x.component_id) AS affected_components, count(DISTINCT v.project_id) AS affected_projects,
-  a.published, a.modified
+  a.published, a.modified,
+  COALESCE(min(x.first_seen) FILTER (WHERE pvc.component_id IS NOT NULL), min(x.first_seen)) AS first_seen,
+  bool_or(pvc.component_id IS NOT NULL) AS open,
+  `+slaDays("COALESCE(a.risk, (array_agg(x.risk))[1])")+` AS days
 FROM component_vulnerabilities x LEFT JOIN advisory a ON a.id = x.advisory_id
 LEFT JOIN project_version_components pvc ON pvc.component_id = x.component_id
 LEFT JOIN project_versions v ON v.id = pvc.project_version_id
 WHERE x.`+notMal+`
-GROUP BY x.advisory_id, a.summary, a.risk, a.published, a.modified`,
+GROUP BY x.advisory_id, a.summary, a.risk, a.published, a.modified) z`,
 		filterSpec{eq: map[string]string{"risk": "t.risk"}, ilike: map[string]string{"id": "t.id"}, dateCol: "t.published"},
-		riskOrder+", t.published DESC NULLS LAST, t.id", nil)(w, r)
+		riskOrder+", t.published DESC NULLS LAST, t.id", func(r *http.Request, w *where) error {
+			if r.URL.Query().Get("overdue") == "1" {
+				w.add("t.overdue")
+			}
+			return nil
+		}, "days")(w, r)
 }
 
 func (s *Server) getVuln(w http.ResponseWriter, r *http.Request) error {

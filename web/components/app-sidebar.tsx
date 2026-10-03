@@ -36,6 +36,7 @@ import {
   UserPlus,
   Users,
   Video,
+  ListOrdered,
   Wand2,
   Webhook,
 } from 'lucide-react';
@@ -80,6 +81,7 @@ const APP: Group[] = [
     label: 'Threat & Compliance',
     items: [
       { href: '/package-analysis', label: 'Package Analysis', icon: FileSearch },
+      { href: '/fix-queue', label: 'Fix First', icon: ListOrdered },
       { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
       { href: '/policy/violations', label: 'Policy Violations', icon: FileChartLine },
       { href: '/endpoints', label: 'Endpoints', icon: Monitor },

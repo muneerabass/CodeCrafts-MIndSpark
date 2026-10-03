@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {
+  AlarmClock,
   ArrowRight,
   Bug,
   ChartColumnStacked,
@@ -66,7 +67,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
       icon: Bug,
       href: '/vulnerabilities',
       tone: risk(d.vulnerabilities, 'red'),
-      note: `${n(d.transitive_vulnerabilities ?? 0)} in transitive dependencies`,
+      note: d.overdue ? `${plural(d.overdue, 'vulnerability', 'vulnerabilities')} past fix deadline` : `${n(d.transitive_vulnerabilities ?? 0)} in transitive dependencies`,
     },
     { label: 'Policy Violations', value: d.violations, icon: FileChartLine, href: '/policy/violations', tone: risk(d.violations, 'amber'), note: 'Packages that break your policy' },
     {
@@ -203,6 +204,32 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
               );
             })}
           </ul>
+        </Card>
+
+        {/* Fix deadlines */}
+        <Card className="py-0" aria-label="Fix deadlines">
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 p-4">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <AlarmClock className="size-4 text-primary" aria-hidden /> Fix deadlines
+            </span>
+            <Link href="/vulnerabilities?overdue=1" className="text-sm hover:underline">
+              <span className={cn('text-xl font-semibold tabular-nums', d.overdue ? 'text-red-600 dark:text-red-400' : '')}>{n(d.overdue ?? 0)}</span>{' '}
+              <span className="text-muted-foreground">overdue</span>
+            </Link>
+            <span className="text-sm">
+              <span className={cn('text-xl font-semibold tabular-nums', d.due_soon ? 'text-amber-600 dark:text-amber-400' : '')}>{n(d.due_soon ?? 0)}</span>{' '}
+              <span className="text-muted-foreground">due this week</span>
+            </span>
+            <span className="text-sm" title={`${d.fixed?.on_time ?? 0} of ${d.fixed?.resolved ?? 0} vulnerabilities fixed in the selected range met their deadline`}>
+              <span className="text-xl font-semibold tabular-nums">{d.fixed?.resolved ? `${Math.round((d.fixed.on_time / d.fixed.resolved) * 100)}%` : '–'}</span>{' '}
+              <span className="text-muted-foreground">fixed on time ({n(d.fixed?.resolved ?? 0)} fixed)</span>
+            </span>
+            <Button asChild variant="outline" size="sm" className="ml-auto">
+              <Link href="/fix-queue">
+                What to fix first <ArrowRight className="size-3.5" aria-hidden />
+              </Link>
+            </Button>
+          </div>
         </Card>
 
         <div className="grid gap-4 lg:grid-cols-5">

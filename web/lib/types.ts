@@ -19,6 +19,9 @@ export type Dashboard = {
   attack_paths: number;
   suspicious_findings: number;
   license_issues: number;
+  overdue: number;
+  due_soon: number;
+  fixed: { resolved: number; on_time: number };
 };
 
 export type Project = {
@@ -236,6 +239,10 @@ export type VulnerabilityRow = {
   affected_projects: number;
   published: string;
   modified: string;
+  first_seen: string;
+  open: boolean;
+  due_at: string | null;
+  overdue: boolean;
 };
 export type VulnerabilityDetail = {
   id: string;
@@ -490,3 +497,23 @@ export type FixPR = {
 };
 export type CreateFixResult = { id?: string; status: 'queued' | 'exists' | 'unsupported'; to_version: string; command: string; error?: string };
 export type FixSettings = { auto: boolean; levels: string[]; kev: boolean; max_open: number };
+
+export type SLA = { critical: number; high: number; medium: number; low: number };
+export type FixQueueItem = {
+  ecosystem: string;
+  name: string;
+  version: string;
+  fixed_in: string;
+  command: string;
+  risk: Risk;
+  kev: boolean;
+  epss: number | null;
+  advisories: { id: string; risk: Risk; fixed_in: string; kev: boolean }[];
+  projects: { id: string; name: string; manifest_path: string; direct: boolean }[];
+  first_seen: string;
+  due_at: string | null;
+  overdue: boolean;
+  weight: number;
+  share: number;
+};
+export type FixQueue = { items: FixQueueItem[]; total: number; total_weight: number; summary: { overdue: number; due_soon: number; fixable: number }; sla: SLA };

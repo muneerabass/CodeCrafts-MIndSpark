@@ -64,3 +64,8 @@ export function suspiciousReason(rule: string, d: Record<string, unknown> = {}, 
 }
 
 export const ECOSYSTEMS = ['npm', 'PyPI', 'Go', 'Maven', 'crates.io', 'RubyGems', 'Packagist', 'NuGet', 'GitHubActions'].map((v) => ({ value: v, label: v }));
+
+/** Whole days from now until an ISO date (negative when past). */
+export function daysUntil(v: string) {
+  return Math.round((Date.parse(v) - Date.now()) / 86_400_000);
+}

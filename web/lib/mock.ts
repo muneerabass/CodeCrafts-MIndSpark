@@ -58,17 +58,17 @@ const ref = (name: string): T.ComponentRef => {
 };
 
 const vulns: T.VulnerabilityRow[] = [
-  { id: 'GHSA-3xgq-45jj-v275', summary: 'Prototype pollution in minimist allows attackers to modify object properties', risk: 'CRITICAL', affected_components: 1, affected_projects: 2, published: iso(300), modified: iso(30) },
-  { id: 'GHSA-wf5p-g6vw-rhxx', summary: 'axios is vulnerable to cross-site request forgery when credentials are sent', risk: 'MEDIUM', affected_components: 1, affected_projects: 1, published: iso(200), modified: iso(25) },
-  { id: 'GHSA-9wv6-86v2-598j', summary: 'path-to-regexp produces regular expressions prone to catastrophic backtracking', risk: 'HIGH', affected_components: 1, affected_projects: 2, published: iso(120), modified: iso(12) },
-  { id: 'GHSA-952p-6rrq-rcjv', summary: 'micromatch vulnerable to regular expression denial of service', risk: 'MEDIUM', affected_components: 1, affected_projects: 1, published: iso(150), modified: iso(40) },
-  { id: 'GHSA-grv7-fg5c-xmjg', summary: 'Uncontrolled resource consumption in braces', risk: 'HIGH', affected_components: 1, affected_projects: 1, published: iso(160), modified: iso(20) },
-  { id: 'GHSA-jfh8-c2jp-5v3q', summary: 'Denial of service in follow-redirects when handling crafted headers', risk: 'LOW', affected_components: 1, affected_projects: 1, published: iso(90), modified: iso(14) },
-  { id: 'GHSA-9cwx-2883-4wfx', summary: 'urllib3 does not strip the Proxy-Authorization header on cross-origin redirects', risk: 'MEDIUM', affected_components: 1, affected_projects: 1, published: iso(80), modified: iso(10) },
-  { id: 'GHSA-4v7x-pqxf-cx7m', summary: 'golang.org/x/net HTTP/2 rapid reset can cause excessive work', risk: 'HIGH', affected_components: 1, affected_projects: 1, published: iso(400), modified: iso(60) },
-  { id: 'MAL-2026-1337', summary: 'Malicious code in event-stream-lite (npm)', risk: 'CRITICAL', affected_components: 1, affected_projects: 1, published: iso(5), modified: iso(5) },
-  { id: 'GHSA-hrpp-h998-j3pp', summary: 'qs vulnerable to prototype pollution via crafted query strings', risk: 'HIGH', affected_components: 1, affected_projects: 1, published: iso(500), modified: iso(45) },
-  { id: 'GHSA-8hc4-vh64-cxmj', summary: 'Server-side request forgery in undici when following redirects', risk: 'LOW', affected_components: 1, affected_projects: 1, published: iso(70), modified: iso(7) },
+  { id: 'GHSA-3xgq-45jj-v275', summary: 'Prototype pollution in minimist allows attackers to modify object properties', risk: 'CRITICAL', affected_components: 1, affected_projects: 2, published: iso(300), modified: iso(30), first_seen: iso(12), open: true, due_at: iso(5), overdue: true },
+  { id: 'GHSA-wf5p-g6vw-rhxx', summary: 'axios is vulnerable to cross-site request forgery when credentials are sent', risk: 'MEDIUM', affected_components: 1, affected_projects: 1, published: iso(200), modified: iso(25), first_seen: iso(20), open: true, due_at: iso(-70), overdue: false },
+  { id: 'GHSA-9wv6-86v2-598j', summary: 'path-to-regexp produces regular expressions prone to catastrophic backtracking', risk: 'HIGH', affected_components: 1, affected_projects: 2, published: iso(120), modified: iso(12), first_seen: iso(10), open: true, due_at: iso(-20), overdue: false },
+  { id: 'GHSA-952p-6rrq-rcjv', summary: 'micromatch vulnerable to regular expression denial of service', risk: 'MEDIUM', affected_components: 1, affected_projects: 1, published: iso(150), modified: iso(40), first_seen: iso(20), open: true, due_at: iso(-70), overdue: false },
+  { id: 'GHSA-grv7-fg5c-xmjg', summary: 'Uncontrolled resource consumption in braces', risk: 'HIGH', affected_components: 1, affected_projects: 1, published: iso(160), modified: iso(20), first_seen: iso(10), open: true, due_at: iso(-20), overdue: false },
+  { id: 'GHSA-jfh8-c2jp-5v3q', summary: 'Denial of service in follow-redirects when handling crafted headers', risk: 'LOW', affected_components: 1, affected_projects: 1, published: iso(90), modified: iso(14), first_seen: iso(5), open: true, due_at: null, overdue: false },
+  { id: 'GHSA-9cwx-2883-4wfx', summary: 'urllib3 does not strip the Proxy-Authorization header on cross-origin redirects', risk: 'MEDIUM', affected_components: 1, affected_projects: 1, published: iso(80), modified: iso(10), first_seen: iso(20), open: true, due_at: iso(-70), overdue: false },
+  { id: 'GHSA-4v7x-pqxf-cx7m', summary: 'golang.org/x/net HTTP/2 rapid reset can cause excessive work', risk: 'HIGH', affected_components: 1, affected_projects: 1, published: iso(400), modified: iso(60), first_seen: iso(10), open: true, due_at: iso(-20), overdue: false },
+  { id: 'MAL-2026-1337', summary: 'Malicious code in event-stream-lite (npm)', risk: 'CRITICAL', affected_components: 1, affected_projects: 1, published: iso(5), modified: iso(5), first_seen: iso(5), open: true, due_at: iso(-2), overdue: false },
+  { id: 'GHSA-hrpp-h998-j3pp', summary: 'qs vulnerable to prototype pollution via crafted query strings', risk: 'HIGH', affected_components: 1, affected_projects: 1, published: iso(500), modified: iso(45), first_seen: iso(10), open: true, due_at: iso(-20), overdue: false },
+  { id: 'GHSA-8hc4-vh64-cxmj', summary: 'Server-side request forgery in undici when following redirects', risk: 'LOW', affected_components: 1, affected_projects: 1, published: iso(70), modified: iso(7), first_seen: iso(5), open: true, due_at: null, overdue: false },
 ];
 
 const scans: T.ScanRow[] = [
@@ -247,6 +247,7 @@ function filterPRs(q: URLSearchParams, project?: string) {
     .map(prRow);
 }
 
+let sla: T.SLA = { critical: 7, high: 30, medium: 90, low: 0 };
 let fixSettings: T.FixSettings = { auto: false, levels: ['critical'], kev: true, max_open: 5 };
 const fixes: T.FixPR[] = [
   { id: 'fx-1', project_id: P1.id, project: P1.name, ecosystem: 'npm', name: 'minimist', from_version: '1.2.5', to_version: '1.2.6', manifest_path: 'package-lock.json', direct: false, advisories: ['GHSA-3xgq-45jj-v275'], branch: 'depguard/fix-minimist-1.2.6', pr_number: 512, pr_url: 'https://github.com/acme/shop/pull/512', status: 'open', error: '', trigger: 'auto', created_by: 'depguard', created_at: iso(1), updated_at: iso(1) },
@@ -311,6 +312,9 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
         ],
         vulns_over_time: series(days).map(({ d, i }) => ({ date: d, critical: i % 9 === 0 ? 1 : 0, high: 2 + (i % 3), medium: 3 + (i % 4), low: 1 + (i % 2) })),
         top_projects: projects.filter((p) => p.vulns).map((p) => ({ id: p.id, name: p.name, vulns: p.vulns })),
+        overdue: vulns.filter((v) => v.overdue).length,
+        due_soon: 1,
+        fixed: { resolved: 9, on_time: 7 },
         transitive_vulnerabilities: pathItems.filter((p) => p.depth > 1 && !p.target.name.startsWith('event-stream')).length,
         attack_paths: pathItems.length,
         suspicious_findings: violations.filter((v) => v.category === 'suspicious').length,
@@ -472,7 +476,28 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       return a;
     }
     case 'GET /vulnerabilities':
-      return paginate(vulns.filter((v) => (!q.get('risk') || v.risk === q.get('risk')) && has(v.id, q.get('id')) && inRange(v.published, q)), q);
+      return paginate(vulns.filter((v) => (!q.get('risk') || v.risk === q.get('risk')) && (q.get('overdue') !== '1' || v.overdue) && has(v.id, q.get('id')) && inRange(v.published, q)), q);
+    case 'GET /fix-queue': {
+      const all: T.FixQueueItem[] = pathItems
+        .filter((p) => p.advisories.some((a) => a.fixed_in))
+        .map((p, i) => {
+          const a = p.advisories[0];
+          const w = ({ CRITICAL: 10, HIGH: 5, MEDIUM: 2, LOW: 1 } as Record<string, number>)[p.risk] * (i === 0 ? 2 : 1) * (a.kev ? 2 : 1);
+          const days = ({ CRITICAL: 7, HIGH: 30, MEDIUM: 90 } as Record<string, number>)[p.risk] ?? 0;
+          return { ecosystem: 'npm', name: p.target.name, version: p.target.version, fixed_in: a.fixed_in!, command: `npm install ${p.target.name}@${a.fixed_in}`, risk: p.risk, kev: a.kev, epss: a.epss, advisories: p.advisories.map((x) => ({ id: x.id, risk: x.risk, fixed_in: x.fixed_in ?? '', kev: x.kev })), projects: i === 0 ? [{ id: P1.id, name: P1.name, manifest_path: 'package-lock.json', direct: false }, { id: P2.id, name: P2.name, manifest_path: 'package-lock.json', direct: false }] : [{ id: P1.id, name: P1.name, manifest_path: 'package-lock.json', direct: p.depth === 1 }], first_seen: iso(12), due_at: days ? iso(12 - days) : null, overdue: days > 0 && days < 12, weight: w, share: 0 };
+        })
+        .filter((x) => !q.get('project_id') || x.projects.some((p) => p.id === q.get('project_id')))
+        .sort((a, b) => b.weight - a.weight);
+      const total = all.reduce((n, x) => n + x.weight, 0);
+      let cum = 0;
+      for (const x of all) x.share = Math.round(((cum += x.weight) / total) * 1000) / 10;
+      return { items: all, total: all.length, total_weight: total, summary: { overdue: all.filter((x) => x.overdue).length, due_soon: 0, fixable: all.length }, sla } satisfies T.FixQueue;
+    }
+    case 'GET /settings/sla':
+      return sla;
+    case 'PUT /settings/sla':
+      sla = { ...sla, ...(body as T.SLA) };
+      return sla;
     case 'GET /vulnerabilities/:': {
       const v = vulns.find((x) => x.id === id);
       if (!v) throw new MockNotFound();
