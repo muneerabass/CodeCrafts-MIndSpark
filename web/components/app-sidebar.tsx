@@ -64,6 +64,7 @@ import { createClient } from '@/lib/supabase/client';
 import { switchOrg } from '@/lib/actions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ThemeSwitcher } from '@/components/theme-switcher';
 
 type Item = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type Group = { label?: string; items: Item[] };
@@ -188,6 +189,11 @@ export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; 
             {ctx.links.video && <FooterLink href={ctx.links.video} label="Video walkthroughs" icon={Video} />}
             <FooterLink href={ctx.links.support} label="Support" icon={LifeBuoy} />
           </div>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <ThemeSwitcher />
+            </SidebarMenuItem>
+          </SidebarMenu>
           <UserCard ctx={ctx} />
           <Link href="/settings/billing" className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm font-medium text-primary">
             <Gem className="size-4" /> Free plan

@@ -1,0 +1,94 @@
+/*
+ * depguard themes.
+ *
+ * The original indigo palette lives in globals.css `:root` and is the "classic" theme.
+ * Any other theme is a `[data-theme="<name>"]` block that only overrides tokens.
+ *
+ * To switch: use the theme switcher in the sidebar footer, or change DEFAULT_THEME
+ * in lib/theme.ts ('classic' restores the original look).
+ */
+
+[data-theme="cyber"] {
+  color-scheme: dark;
+  --radius: 0.45rem;
+  --background: oklch(0.155 0.012 215);
+  --foreground: oklch(0.93 0.01 200);
+  --card: oklch(0.195 0.014 215);
+  --card-foreground: oklch(0.93 0.01 200);
+  --popover: oklch(0.21 0.015 215);
+  --popover-foreground: oklch(0.93 0.01 200);
+  --primary: oklch(0.82 0.16 165);
+  --primary-foreground: oklch(0.17 0.03 190);
+  --secondary: oklch(0.255 0.016 215);
+  --secondary-foreground: oklch(0.93 0.01 200);
+  --muted: oklch(0.235 0.014 215);
+  --muted-foreground: oklch(0.72 0.02 205);
+  --accent: oklch(0.27 0.03 190);
+  --accent-foreground: oklch(0.9 0.1 170);
+  --destructive: oklch(0.68 0.21 22);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.82 0.16 165);
+  --chart-1: oklch(0.82 0.16 165);
+  --chart-2: oklch(0.78 0.13 220);
+  --chart-3: oklch(0.82 0.15 85);
+  --chart-4: oklch(0.7 0.2 25);
+  --chart-5: oklch(0.72 0.16 305);
+  --sidebar: oklch(0.135 0.012 215);
+  --sidebar-foreground: oklch(0.85 0.012 205);
+  --sidebar-primary: oklch(0.82 0.16 165);
+  --sidebar-primary-foreground: oklch(0.17 0.03 190);
+  --sidebar-accent: oklch(0.235 0.02 200);
+  --sidebar-accent-foreground: oklch(0.9 0.1 170);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.82 0.16 165);
+}
+
+/* Typography + surface polish, scoped to cyber so "classic" is untouched. */
+[data-theme="cyber"] body {
+  font-feature-settings: "ss01", "cv11", "tnum";
+  letter-spacing: -0.003em;
+}
+[data-theme="cyber"] h1,
+[data-theme="cyber"] h2,
+[data-theme="cyber"] h3,
+[data-theme="cyber"] [data-slot="card-title"] {
+  font-family: var(--font-heading), var(--font-body), sans-serif;
+  letter-spacing: -0.02em;
+}
+[data-theme="cyber"] [data-slot="card"] {
+  box-shadow: none;
+  background-image: linear-gradient(180deg, oklch(1 0 0 / 2.5%), transparent 40%);
+}
+/* Table headers read as terminal-style labels. */
+[data-theme="cyber"] th,
+[data-theme="cyber"] [data-slot="table-head"] {
+  font-family: var(--font-code), ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+[data-theme="cyber"] code,
+[data-theme="cyber"] kbd,
+[data-theme="cyber"] pre {
+  font-family: var(--font-code), ui-monospace, monospace;
+}
+[data-theme="cyber"] ::selection {
+  background: oklch(0.82 0.16 165 / 30%);
+}
+[data-theme="cyber"] * {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(1 0 0 / 18%) transparent;
+}
+
+/* Seamless: gentle colour transitions only, no movement. Respect reduced motion. */
+html { scroll-behavior: smooth; }
+a, button, [role="tab"], [data-slot="card"], tr {
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
