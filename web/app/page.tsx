@@ -7,6 +7,8 @@ import { ArrowRight, ArrowUpRight, Bot, Check, ChevronRight, Database, GitPullRe
 import { Logo, GitHubIcon } from '@/components/icons';
 import { Layers } from '@/components/landing/layers';
 import { HeroFlow, HeroPRCard, HeroTerminal } from '@/components/landing/hero-flow';
+import { TryIt } from '@/components/landing/try-it';
+import { Incidents } from '@/components/landing/incidents';
 import { getCtx } from '@/lib/session';
 
 // Pulse timing: the sweep crosses the rail in 70% of the 5s loop, so each of the 4 gaps takes 0.875s.
@@ -142,11 +144,14 @@ export default async function Home() {
             <span className="lp-display text-xl">depguard</span>
           </Link>
           <nav className="hidden items-center gap-8 text-[15px] text-[var(--lp-fg)] lg:flex">
+            <a href="#try" className="hover:text-white">
+              Try it
+            </a>
+            <a href="#incidents" className="hover:text-white">
+              Real attacks
+            </a>
             <a href="#signals" className="hover:text-white">
               What it catches
-            </a>
-            <a href="#problem" className="hover:text-white">
-              The problem
             </a>
             <a href="#layers" className="hover:text-white">
               Product
@@ -170,6 +175,8 @@ export default async function Home() {
             </a>
             <MobileNav
               links={[
+                ['Try it', '#try'],
+                ['Real attacks', '#incidents'],
                 ['What it catches', '#signals'],
                 ['The problem', '#problem'],
                 ['Product', '#layers'],
@@ -269,6 +276,31 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Try it */}
+      <section id="try" className="border-b border-[var(--lp-line)]">
+        <div className="lp-frame lp-pad grid gap-12 py-24 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+          <div>
+            <Eyebrow>Try it now</Eyebrow>
+            <h2 className="lp-display mt-5 text-[34px] leading-[1.15] md:text-[40px]">
+              Type a package.
+              <br />
+              <span className="text-[var(--lp-teal)]">See what depguard sees.</span>
+            </h2>
+            <p className="mt-5 max-w-md text-[17px] leading-relaxed text-[var(--lp-muted)]">
+              An instant preview of the checks that run on every install and pull request: known malware, vulnerable versions and lookalike names. No sign-up.
+            </p>
+            <ul className="mt-6 space-y-2 text-[15px] text-[var(--lp-muted)]">
+              {['Malware: blocked before any script runs', 'Vulnerabilities: with the exact fix command', 'Typosquats: one keystroke from a popular name'].map((l) => (
+                <li key={l} className="flex items-center gap-2">
+                  <Check className="size-4 text-[var(--lp-teal)]" /> {l}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <TryIt />
+        </div>
+      </section>
+
       {/* Signals */}
       <section id="signals" className="border-b border-[var(--lp-line)]">
         <div className="lp-frame lp-pad py-24">
@@ -310,6 +342,20 @@ export default async function Home() {
               </a>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Incidents */}
+      <section id="incidents" className="border-b border-[var(--lp-line)]">
+        <div className="lp-frame lp-pad py-24">
+          <SectionHead
+            eyebrow="Real attacks"
+            tone="red"
+            a="Would depguard catch it?"
+            b="Six attacks everyone remembers."
+            body="Supply-chain attacks are not hypothetical. Here is what happened in the best-known ones, and which depguard check answers each, including the one no scanner could see coming."
+          />
+          <Incidents />
         </div>
       </section>
 

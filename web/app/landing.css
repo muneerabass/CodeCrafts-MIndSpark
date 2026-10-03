@@ -203,3 +203,11 @@
   .lp .lp-node, .lp .lp-line { opacity: 1; animation: none; }
   .lp .lp-dot { display: none; }
 }
+
+/* Try-it verdict and incident timeline. */
+.lp .lp-verdict { animation: lp-verdict-in 0.35s ease-out both; }
+@keyframes lp-verdict-in { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+.lp .lp-incident { animation: lp-verdict-in 0.6s ease-out both; animation-timeline: view(); animation-range: entry 0% entry 60%; }
+@media (prefers-reduced-motion: reduce) {
+  .lp .lp-verdict, .lp .lp-incident { animation: none; }
+}
