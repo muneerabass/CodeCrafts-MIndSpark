@@ -210,11 +210,12 @@ export type InventoryItem = {
   version: string;
   scope: string;
   config_path: string;
-  updated_at: string;
+  first_seen: string;
+  last_seen: string;
 };
 export type PackageEvent = {
-  id: string;
-  timestamp: string;
+  id: number;
+  ts: string;
   event_type: string;
   package_name: string;
   version: string;
@@ -222,11 +223,13 @@ export type PackageEvent = {
 };
 export type AgentEvent = {
   id: string;
-  timestamp: string;
-  agent: string;
-  action: string;
-  target: string;
-  result: string;
+  session_id: string;
+  ts: string;
+  agent_name: string;
+  action_type: string;
+  result_status: string;
+  tool_name: string | null;
+  is_sensitive: boolean;
 };
 
 export type QueryResult = { columns: string[]; rows: unknown[][]; truncated: boolean; elapsed_ms: number };
@@ -310,6 +313,6 @@ export type FailedJob = {
   kind: string;
   state: string;
   attempt: number;
-  errors: string[] | null;
+  errors: { error: string; at: string; attempt: number }[] | null;
   finalized_at: string | null;
 };

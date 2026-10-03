@@ -41,14 +41,14 @@ const inventoryCols: ColumnDef<InventoryItem, unknown>[] = [
   { header: 'Version', cell: ({ row }) => (row.original.version ? <Chip>{row.original.version}</Chip> : '—') },
   { header: 'Scope', cell: ({ row }) => titleCase(row.original.scope || '—') },
   { header: 'Config Path', cell: ({ row }) => <span className="font-mono text-xs">{row.original.config_path}</span> },
-  { header: 'Updated At', cell: ({ row }) => fmtDateTime(row.original.updated_at) },
+  { header: 'Updated At', cell: ({ row }) => fmtDateTime(row.original.last_seen) },
 ];
 export function InventoryTable({ data, total }: { data: InventoryItem[]; total: number }) {
   return <DataTable columns={inventoryCols} data={data} total={total} empty="No AI tools, MCP servers, skills or extensions reported yet." />;
 }
 
 const pkgEventCols: ColumnDef<PackageEvent, unknown>[] = [
-  { header: 'Time', cell: ({ row }) => fmtDateTime(row.original.timestamp) },
+  { header: 'Time', cell: ({ row }) => fmtDateTime(row.original.ts) },
   { header: 'Event', cell: ({ row }) => <span className={cn('text-sm font-medium', row.original.event_type.includes('block') && 'text-red-600')}>{titleCase(row.original.event_type)}</span> },
   { header: 'Package', cell: ({ row }) => <span className="font-medium">{row.original.package_name}</span> },
   { header: 'Version', cell: ({ row }) => <Chip>{row.original.version}</Chip> },
@@ -59,11 +59,11 @@ export function PackageEventsTable({ data, total }: { data: PackageEvent[]; tota
 }
 
 const agentEventCols: ColumnDef<AgentEvent, unknown>[] = [
-  { header: 'Time', cell: ({ row }) => fmtDateTime(row.original.timestamp) },
-  { header: 'Agent', cell: ({ row }) => <span className="font-medium">{row.original.agent}</span> },
-  { header: 'Action', cell: ({ row }) => titleCase(row.original.action) },
-  { header: 'Target', cell: ({ row }) => <span className="block max-w-md truncate font-mono text-xs" title={row.original.target}>{row.original.target}</span> },
-  { header: 'Result', cell: ({ row }) => titleCase(row.original.result) },
+  { header: 'Time', cell: ({ row }) => fmtDateTime(row.original.ts) },
+  { header: 'Agent', cell: ({ row }) => <span className="font-medium">{row.original.agent_name}</span> },
+  { header: 'Action', cell: ({ row }) => titleCase(row.original.action_type) },
+  { header: 'Tool', cell: ({ row }) => <span className="block max-w-md truncate font-mono text-xs">{row.original.tool_name ?? '—'}</span> },
+  { header: 'Result', cell: ({ row }) => titleCase(row.original.result_status) },
 ];
 export function AgentEventsTable({ data, total }: { data: AgentEvent[]; total: number }) {
   return <DataTable columns={agentEventCols} data={data} total={total} empty="No coding-agent activity recorded for this endpoint." />;

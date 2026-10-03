@@ -249,20 +249,20 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
     }
     case 'GET /endpoints/:/inventory':
       return paginate<T.InventoryItem>([
-        { id: 'i1', kind: 'coding_agent', name: 'Claude Code', version: '2.1.0', scope: 'user', config_path: '~/.claude/settings.json', updated_at: iso(0) },
-        { id: 'i2', kind: 'mcp_server', name: 'github', version: '0.9.1', scope: 'project', config_path: '~/code/app/.mcp.json', updated_at: iso(0) },
-        { id: 'i3', kind: 'agent_skill', name: 'pdf', version: '1.0.0', scope: 'user', config_path: '~/.claude/skills/pdf', updated_at: iso(1) },
-        { id: 'i4', kind: 'ide_extension', name: 'ms-python.python', version: '2026.8.0', scope: 'user', config_path: '~/.vscode/extensions', updated_at: iso(2) },
+        { id: 'i1', kind: 'coding_agent', name: 'Claude Code', version: '2.1.0', scope: 'user', config_path: '~/.claude/settings.json', first_seen: iso(3), last_seen: iso(0) },
+        { id: 'i2', kind: 'mcp_server', name: 'github', version: '0.9.1', scope: 'project', config_path: '~/code/app/.mcp.json', first_seen: iso(3), last_seen: iso(0) },
+        { id: 'i3', kind: 'agent_skill', name: 'pdf', version: '1.0.0', scope: 'user', config_path: '~/.claude/skills/pdf', first_seen: iso(3), last_seen: iso(1) },
+        { id: 'i4', kind: 'ide_extension', name: 'ms-python.python', version: '2026.8.0', scope: 'user', config_path: '~/.vscode/extensions', first_seen: iso(3), last_seen: iso(2) },
       ], q);
     case 'GET /endpoints/:/package-events':
       return paginate<T.PackageEvent>([
-        { id: 'pe1', timestamp: iso(0), event_type: 'install_allowed', package_name: 'express', version: '5.1.0', ecosystem: 'npm' },
-        { id: 'pe2', timestamp: iso(0), event_type: 'malware_blocked', package_name: 'event-stream-lite', version: '1.0.2', ecosystem: 'npm' },
+        { id: 1, ts: iso(0), event_type: 'install_allowed', package_name: 'express', version: '5.1.0', ecosystem: 'npm' },
+        { id: 2, ts: iso(0), event_type: 'malware_blocked', package_name: 'event-stream-lite', version: '1.0.2', ecosystem: 'npm' },
       ], q);
     case 'GET /endpoints/:/agent-events':
       return paginate<T.AgentEvent>([
-        { id: 'ae1', timestamp: iso(0), agent: 'claude-code', action: 'command_exec', target: 'npm install express', result: 'success' },
-        { id: 'ae2', timestamp: iso(0), agent: 'cursor', action: 'file_write', target: 'src/server.ts', result: 'success' },
+        { id: 'ae1', session_id: 's1', ts: iso(0), agent_name: 'claude-code', action_type: 'command_exec', result_status: 'success', tool_name: 'Bash', is_sensitive: false },
+        { id: 'ae2', session_id: 's1', ts: iso(0), agent_name: 'cursor', action_type: 'file_write', result_status: 'success', tool_name: 'edit_file', is_sensitive: false },
       ], q);
     case 'POST /query': {
       const sql = String(b.sql ?? '').replace(/^\s*(--[^\n]*\n\s*)*/, '').trim();
@@ -350,7 +350,7 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
     case 'POST /admin/webhooks/:/redeliver':
       return {};
     case 'GET /admin/jobs/failed':
-      return { items: [{ id: 4412, kind: 'scan_pull_request', state: 'discarded', attempt: 5, errors: ['github: 404 Not Found'], finalized_at: iso(0) }] satisfies T.FailedJob[], total: 1 };
+      return { items: [{ id: 4412, kind: 'scan_pull_request', state: 'discarded', attempt: 5, errors: [{ error: 'github: 404 Not Found', at: iso(0), attempt: 5 }], finalized_at: iso(0) }] satisfies T.FailedJob[], total: 1 };
   }
   throw new MockNotFound(`mock: no route for ${route}`);
 }

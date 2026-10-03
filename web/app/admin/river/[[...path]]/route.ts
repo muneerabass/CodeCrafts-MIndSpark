@@ -1,7 +1,7 @@
 import { apiUrl, mockMode, serviceToken } from '@/lib/api';
 import { getCtx } from '@/lib/session';
 
-// Reverse proxy for the River UI served by the Go API at /api/v1/admin/river/*, super-admin only.
+// Reverse proxy for the River UI served by the Go API at /admin/river/*, super-admin only.
 const HOP = ['connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding', 'upgrade', 'host', 'cookie', 'authorization', 'content-length', 'content-encoding'];
 
 async function handle(req: Request, { params }: { params: Promise<{ path?: string[] }> }) {
@@ -20,7 +20,7 @@ async function handle(req: Request, { params }: { params: Promise<{ path?: strin
 
   let upstream: Response;
   try {
-    upstream = await fetch(apiUrl(`/api/v1/admin/river/${path.map(encodeURIComponent).join('/')}${search}`), {
+    upstream = await fetch(apiUrl(`/admin/river/${path.map(encodeURIComponent).join('/')}${search}`), {
       method: req.method,
       headers,
       body: req.method === 'GET' || req.method === 'HEAD' ? undefined : req.body,

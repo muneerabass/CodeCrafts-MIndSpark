@@ -243,7 +243,7 @@ const jobCols: ColumnDef<FailedJob, unknown>[] = [
   { header: 'Kind', cell: ({ row }) => row.original.kind },
   { header: 'State', cell: ({ row }) => <StatusPill status={row.original.state} /> },
   { header: 'Attempts', cell: ({ row }) => row.original.attempt },
-  { header: 'Last error', cell: ({ row }) => <span className="line-clamp-2 max-w-md text-sm">{row.original.errors?.at(-1) ?? '—'}</span> },
+  { header: 'Last error', cell: ({ row }) => <span className="line-clamp-2 max-w-md text-sm">{row.original.errors?.at(-1)?.error ?? '—'}</span> },
   { header: 'Finalized', cell: ({ row }) => fmtDateTime(row.original.finalized_at) },
 ];
 export function JobsTable({ data }: { data: FailedJob[] }) {

@@ -47,7 +47,7 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
   const typed = orgs as Org[];
   const org = typed.find((o) => o.id === s.session.activeOrganizationId) ?? typed[0] ?? null;
   return {
-    user: { id: s.user.id, name: s.user.name, email: s.user.email, image: s.user.image ?? null },
+    user: { id: s.user.id, name: s.user.name?.trim() || s.user.email.split('@')[0], email: s.user.email, image: s.user.image ?? null },
     org,
     role: org?.role ?? null,
     sa: s.user.role === 'admin' || superadminEmails.includes(s.user.email.toLowerCase()),
