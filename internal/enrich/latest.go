@@ -19,6 +19,7 @@ type Latest struct {
 	Found              bool       // false: deps.dev doesn't know the package
 	DefaultVersion     string     // the version deps.dev marks isDefault (usually latest stable)
 	LatestPublished    *time.Time // newest publishedAt over all versions; nil if unknown
+	FirstPublished     *time.Time // oldest publishedAt: when the package itself appeared
 	Deprecated         bool       // the default version is deprecated
 	DeprecatedVersions []string   // every deprecated version
 	DeprecatedReason   string     // deprecation message of the default version
@@ -77,7 +78,7 @@ func (e *Enricher) latest(ctx context.Context, names map[key]string) (map[key]*L
 		return out, nil
 	}
 	rows, err := e.pool.Query(ctx, `SELECT ecosystem, name_norm, found, coalesce(default_version, ''), latest_published,
-		  deprecated, deprecated_versions, coalesce(deprecated_reason, '')
+		  deprecated, deprecated_versions, coalesce(deprecated_reason, ''), first_published
 		FROM package_latest WHERE fetched_at > $3
 		  AND (ecosystem, name_norm) IN (SELECT * FROM unnest($1::text[], $2::text[]))`,
 		ecos, nns, time.Now().Add(-e.o.CacheTTL))
@@ -86,7 +87,7 @@ func (e *Enricher) latest(ctx context.Context, names map[key]string) (map[key]*L
 			var k key
 			l := &Latest{}
 			if err = rows.Scan(&k.eco, &k.name, &l.Found, &l.DefaultVersion, &l.LatestPublished,
-				&l.Deprecated, &l.DeprecatedVersions, &l.DeprecatedReason); err != nil {
+				&l.Deprecated, &l.DeprecatedVersions, &l.DeprecatedReason, &l.FirstPublished); err != nil {
 				break
 			}
 			out[k] = l
@@ -125,13 +126,13 @@ func (e *Enricher) latest(ctx context.Context, names map[key]string) (map[key]*L
 			dv = []string{}
 		}
 		b.Queue(`INSERT INTO package_latest (ecosystem, name_norm, default_version, latest_published, deprecated,
-			  deprecated_versions, deprecated_reason, found, fetched_at)
-			VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, NULLIF($7, ''), $8, now())
+			  deprecated_versions, deprecated_reason, found, fetched_at, first_published)
+			VALUES ($1, $2, NULLIF($3, ''), $4, $5, $6, NULLIF($7, ''), $8, now(), $9)
 			ON CONFLICT (ecosystem, name_norm) DO UPDATE SET default_version = EXCLUDED.default_version,
 			  latest_published = EXCLUDED.latest_published, deprecated = EXCLUDED.deprecated,
 			  deprecated_versions = EXCLUDED.deprecated_versions, deprecated_reason = EXCLUDED.deprecated_reason,
-			  found = EXCLUDED.found, fetched_at = now()`,
-			k.eco, k.name, l.DefaultVersion, l.LatestPublished, l.Deprecated, dv, l.DeprecatedReason, l.Found)
+			  found = EXCLUDED.found, fetched_at = now(), first_published = EXCLUDED.first_published`,
+			k.eco, k.name, l.DefaultVersion, l.LatestPublished, l.Deprecated, dv, l.DeprecatedReason, l.Found, l.FirstPublished)
 	}
 	if b.Len() > 0 {
 		if err := e.pool.SendBatch(ctx, b).Close(); err != nil {
@@ -163,8 +164,14 @@ func (e *Enricher) fetchLatest(ctx context.Context, eco, name string) (*Latest, 
 	}
 	l := &Latest{Found: true}
 	for _, ver := range v.Versions {
-		if t, err := time.Parse(time.RFC3339, ver.PublishedAt); err == nil && (l.LatestPublished == nil || t.After(*l.LatestPublished)) {
-			l.LatestPublished = &t
+		if t, err := time.Parse(time.RFC3339, ver.PublishedAt); err == nil {
+			if l.LatestPublished == nil || t.After(*l.LatestPublished) {
+				l.LatestPublished = &t
+			}
+			if l.FirstPublished == nil || t.Before(*l.FirstPublished) {
+				t := t
+				l.FirstPublished = &t
+			}
 		}
 		if ver.IsDeprecated {
 			l.DeprecatedVersions = append(l.DeprecatedVersions, ver.VersionKey.Version)

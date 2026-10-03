@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/depguard/depguard/internal/scan"
@@ -69,7 +70,7 @@ func (e *Enricher) DepsDevGraph(ctx context.Context, eco, name, version string) 
 		} `json:"edges"`
 	}
 	u := fmt.Sprintf("%s/v3/systems/%s/packages/%s/versions/%s:dependencies", e.o.DepsDevURL,
-		system, url.PathEscape(name), url.PathEscape(version))
+		system, url.PathEscape(name), url.PathEscape(depsDevVersion(system, version)))
 	err = e.getJSON(ctx, u, &v)
 	if err != nil && !errors.Is(err, errNotFound) {
 		return nil, nil, err // not cached: transient
@@ -108,4 +109,13 @@ func pairs(es []graphEdge) [][2]int {
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// depsDevVersion adapts a version to deps.dev's form: Go module versions carry a
+// leading "v" there (v1.2.3), while lockfile parsers report them without it.
+func depsDevVersion(system, v string) string {
+	if system == "go" && v != "" && !strings.HasPrefix(v, "v") {
+		return "v" + v
+	}
+	return v
 }

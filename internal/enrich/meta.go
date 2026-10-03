@@ -128,7 +128,7 @@ func (e *Enricher) meta(ctx context.Context, items []item) map[metaKey]*pkgMeta 
 			} `json:"relatedProjects"`
 		}
 		u := fmt.Sprintf("%s/v3/systems/%s/packages/%s/versions/%s", e.o.DepsDevURL,
-			depsDevSystems[k.eco], url.PathEscape(names[k]), url.PathEscape(k.version))
+			depsDevSystems[k.eco], url.PathEscape(names[k]), url.PathEscape(depsDevVersion(depsDevSystems[k.eco], k.version)))
 		err := e.getJSON(ctx, u, &v)
 		if errors.Is(err, errNotFound) {
 			fetched[i] = &pkgMeta{}

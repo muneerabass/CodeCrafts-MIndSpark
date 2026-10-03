@@ -150,11 +150,14 @@ func (c *checker) evaluate(p *models.Package, f facts) []scan.Finding {
 				fmt.Sprintf("No release in %d months (last %s) and %s", months, l.LatestPublished.Format("2006-01-02"), why), p, d))
 		}
 	}
-	if t, ok := f.published[p]; c.cfg.NewPackage && ok && c.now().Sub(t) < newPackage {
+	// A brand-new package (not a new version of an established one) is the
+	// window in which typosquats and malware are most common.
+	if c.cfg.NewPackage && l != nil && l.FirstPublished != nil && c.now().Sub(*l.FirstPublished) < newPackage {
+		t := *l.FirstPublished
 		days := int(math.Max(0, c.now().Sub(t).Hours()/24))
 		out = append(out, c.finding(RuleNewPackage, scan.SeverityLow,
-			fmt.Sprintf("%s@%s was published %d days ago", p.GetName(), p.GetVersion(), days), p,
-			map[string]any{"published_at": t.UTC().Format(time.RFC3339), "age_days": days}))
+			fmt.Sprintf("%s is a new package: first published %d days ago", p.GetName(), days), p,
+			map[string]any{"first_published": t.UTC().Format(time.RFC3339), "age_days": days}))
 	}
 	// Without Insights we don't know; only flag when enrichment ran.
 	if c.cfg.NoRepo && repo == "" && p.Insights != nil {

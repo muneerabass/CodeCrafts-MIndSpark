@@ -47,6 +47,7 @@ func TestRules(t *testing.T) {
 	old := now.AddDate(-3, 0, 0)
 	ancient := now.AddDate(-5, 0, 0)
 	recent := now.AddDate(0, -2, 0)
+	brandNew := now.AddDate(0, 0, -3)
 
 	squat := pkg("lodahs", "1.0.0", "github.com/x/lodahs", 3, -1)
 	starred := pkg("lodahs", "1.0.0", "github.com/x/lodahs", 5000, -1)
@@ -57,6 +58,7 @@ func TestRules(t *testing.T) {
 	staleNoRepo := pkg("stale-norepo", "1.0.0", "", 0, -1)
 	ancientNoRepo := pkg("ancient-norepo", "1.0.0", "", 0, -1)
 	fresh := pkg("brand-new-pkg", "0.0.1", "github.com/x/n", 10, -1)
+	newVersionOldPkg := pkg("established-lib", "9.0.0", "github.com/x/e", 10, -1) // new release of an old package
 
 	f := facts{
 		latest: map[*models.Package]*enrich.Latest{
@@ -66,7 +68,8 @@ func TestRules(t *testing.T) {
 			staleMaintained:   {Found: true, LatestPublished: &old},
 			staleNoRepo:       {Found: true, LatestPublished: &old},
 			ancientNoRepo:     {Found: true, LatestPublished: &ancient},
-			fresh:             {Found: true, LatestPublished: &recent},
+			fresh:             {Found: true, LatestPublished: &brandNew, FirstPublished: &brandNew},
+			newVersionOldPkg:  {Found: true, LatestPublished: &brandNew, FirstPublished: &old},
 		},
 		published: map[*models.Package]time.Time{fresh: now.AddDate(0, 0, -3), deprecatedVer: old},
 	}
@@ -83,6 +86,7 @@ func TestRules(t *testing.T) {
 		{staleNoRepo, []string{RuleNoSourceRepo}}, // missing repo data alone is not evidence of abandonment
 		{ancientNoRepo, []string{RuleUnmaintained, RuleNoSourceRepo}},
 		{fresh, []string{RuleNewPackage}},
+		{newVersionOldPkg, nil}, // a fresh release of an established package is not flagged
 	}
 	for _, tc := range cases {
 		if got := rules(c.evaluate(tc.p, f)); !slices.Equal(got, tc.want) {
@@ -145,6 +149,8 @@ func TestCheckFromCache(t *testing.T) {
 	_, err := pool.Exec(ctx, `
 		INSERT INTO package_latest (ecosystem, name_norm, default_version, latest_published, deprecated, deprecated_versions, deprecated_reason)
 		VALUES ('npm', 'request', '2.88.2', now() - interval '5 years', true, '{2.88.2}', 'request has been deprecated');
+		INSERT INTO package_latest (ecosystem, name_norm, default_version, latest_published, first_published)
+		VALUES ('npm', 'fresh-thing', '0.1.0', now() - interval '2 days', now() - interval '2 days');
 		INSERT INTO package_meta (ecosystem, name_norm, version, published_at) VALUES ('npm', 'fresh-thing', '0.1.0', now() - interval '2 days')`)
 	if err != nil {
 		t.Fatal(err)

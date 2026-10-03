@@ -94,6 +94,9 @@ func (c checker) Check(_ context.Context, in scan.CheckInput) ([]scan.Finding, e
 	var out []scan.Finding
 	var shipped []chosen
 	for _, p := range in.Packages {
+		if eco := string(p.Ecosystem); eco == "GitHubActions" || (eco == "" && p.Manifest != nil && p.Manifest.Ecosystem == "GitHubActions") {
+			continue // CI workflow actions are not distributed with the application
+		}
 		dev := in.Context[p].Dev
 		d := parseList(scan.Licenses(p))
 		a := pick(d, score)
