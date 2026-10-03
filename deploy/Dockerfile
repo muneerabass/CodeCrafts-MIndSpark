@@ -22,7 +22,11 @@ ENTRYPOINT ["/usr/local/bin/api"]
 # read-only rootfs, no capabilities and a non-root user (see compose.yml).
 FROM python:3.13-slim-bookworm AS worker
 RUN pip install --no-cache-dir "guarddog==3.2.0" \
- && useradd --uid 10001 --create-home depguard
+ && useradd --uid 10001 --create-home depguard \
+ && ln -s "$(python -c 'import guarddog,os;print(os.path.dirname(guarddog.__file__))')/analyzer/metadata/resources" /var/lib/guarddog-resources \
+ && chown -R 10001 /var/lib/guarddog-resources/
+# guarddog refreshes its top-packages lists in place (every 30 days); compose mounts a
+# writable named volume over this directory (seeded from the image) so the rootfs stays read-only.
 COPY --from=build /out/worker /usr/local/bin/worker
 COPY --from=build /out/depguard-feeds /usr/local/bin/depguard-feeds
 USER 10001

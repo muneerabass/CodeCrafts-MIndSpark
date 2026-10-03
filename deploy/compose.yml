@@ -71,6 +71,8 @@ services:
       HOME: /tmp
     secrets: [github_app_key]
     tmpfs: ["/tmp:size=2g"]
+    volumes:
+      - guarddog_resources:/usr/local/lib/python3.13/site-packages/guarddog/analyzer/metadata/resources
     depends_on: { api: { condition: service_healthy } }   # api runs migrations first
     deploy:
       resources: { limits: { cpus: "2", memory: 3g } }
@@ -137,6 +139,7 @@ secrets:
     file: ${GITHUB_APP_PRIVATE_KEY_FILE:-./secrets/github-app.pem}
 
 volumes:
+  guarddog_resources:
   pgdata:
   caddy_data:
   caddy_config:
