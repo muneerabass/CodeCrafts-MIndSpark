@@ -2,37 +2,71 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, ChevronDown, Download, GitBranch, X } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, Download, GitBranch, GitCommitHorizontal, GitPullRequest, Play, Terminal, Workflow, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTable, type ColumnDef } from '@/components/data-table';
 import { Chip, DependencyBadge, RiskBadge, ScanStatus, ViolationCount, VulnCount, triggerLabel } from '@/components/badges';
 import { Ecosystem } from '@/components/icons';
-import { fmtDate } from '@/lib/format';
+import { ago, fmtDateTime } from '@/lib/format';
 import type { ScanPackage, ScanRow } from '@/lib/types';
+
+const triggerIcon: Record<string, typeof GitBranch> = { pull_request: GitPullRequest, push: GitCommitHorizontal, manual: Play, cli: Terminal, ci: Workflow };
 
 const cols: ColumnDef<ScanRow, unknown>[] = [
   {
     header: 'Scanned Project',
-    cell: ({ row }) => (
-      <Link href={`/projects/${row.original.project.id}`} className="inline-flex items-center gap-2 font-medium hover:text-primary hover:underline">
-        <GitBranch className="size-4 text-muted-foreground" aria-hidden /> {row.original.project.name}
-      </Link>
-    ),
+    cell: ({ row }) => {
+      const r = row.original;
+      const i = r.project.name.lastIndexOf('/');
+      return (
+        <div className="min-w-0">
+          <Link href={`/projects/${r.project.id}`} className="block truncate hover:text-primary hover:underline">
+            {i > 0 && <span className="text-muted-foreground">{r.project.name.slice(0, i + 1)}</span>}
+            <span className="font-semibold">{r.project.name.slice(i + 1)}</span>
+          </Link>
+          <span className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs text-muted-foreground">
+            <GitBranch className="size-3" aria-hidden />
+            {r.version}
+          </span>
+        </div>
+      );
+    },
   },
-  { header: 'Project Version', cell: ({ row }) => <Chip>{row.original.version}</Chip> },
-  { header: 'Trigger', cell: ({ row }) => <Chip>{triggerLabel(row.original.trigger)}</Chip> },
+  {
+    header: 'Trigger',
+    cell: ({ row }) => {
+      const Icon = triggerIcon[row.original.trigger] ?? Play;
+      return (
+        <span className="inline-flex items-center gap-1.5 text-sm">
+          <span className="flex size-7 items-center justify-center rounded-md border bg-background">
+            <Icon className="size-3.5 text-muted-foreground" aria-hidden />
+          </span>
+          {triggerLabel(row.original.trigger)}
+        </span>
+      );
+    },
+  },
+  { header: 'Status', cell: ({ row }) => <ScanStatus status={row.original.status} /> },
   { header: 'Policy Violations', cell: ({ row }) => <ViolationCount n={row.original.violations} /> },
   { header: 'Vulnerabilities', cell: ({ row }) => <VulnCount n={row.original.vulns} /> },
-  { header: 'Scan Date', cell: ({ row }) => fmtDate(row.original.created_at) },
-  { header: 'Status', cell: ({ row }) => <ScanStatus status={row.original.status} /> },
+  {
+    header: 'Scan Date',
+    cell: ({ row }) => (
+      <span className="text-sm text-muted-foreground" title={fmtDateTime(row.original.created_at)} suppressHydrationWarning>
+        {ago(row.original.created_at)}
+      </span>
+    ),
+  },
   {
     id: 'report',
     header: () => <span className="sr-only">Report</span>,
     cell: ({ row }) => (
-      <Link href={`/scans/${row.original.id}`} className="border-l pl-4 text-sm font-medium text-primary hover:underline">
-        Open Report
-      </Link>
+      <Button asChild variant="outline" size="sm" className="h-8">
+        <Link href={`/scans/${row.original.id}`}>
+          Open Report <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
+      </Button>
     ),
   },
 ];

@@ -13,6 +13,17 @@ export const fmtDateTime = (v: string | null | undefined) => {
   const x = parse(v);
   return x && !isNaN(+x) ? `${dt.format(x)} UTC` : '—';
 };
+/** "3h ago", "2d ago", or the date for older items. */
+export function ago(v: string | null | undefined) {
+  if (!v) return '';
+  const m = Math.round((Date.now() - new Date(v).getTime()) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
+  if (m < 60 * 24 * 30) return `${Math.round(m / 1440)}d ago`;
+  return fmtDate(v);
+}
+
 export const titleCase = (s: string) => s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export const DIRECT_OPTIONS = [
@@ -39,7 +50,9 @@ export function suspiciousReason(rule: string, d: Record<string, unknown> = {}, 
     case 'deprecated':
       return (s('reason') || 'Deprecated by its maintainers') + (s('default_version') ? ` (latest: ${s('default_version')})` : '');
     case 'unmaintained':
-      return [s('latest_published') && `Last release ${fmtDate(s('latest_published'))}`, s('maintained_score') && `Scorecard Maintained ${s('maintained_score')}/10`].filter(Boolean).join('; ') || fallback;
+      return (
+        [s('latest_published') && `Last release ${fmtDate(s('latest_published'))}`, s('maintained_score') && `Scorecard Maintained ${s('maintained_score')}/10`].filter(Boolean).join('; ') || fallback
+      );
     case 'new-package':
       return s('age_days') ? `Version published ${s('age_days')} days ago` : s('published_at') ? `Version published ${fmtDate(s('published_at'))}` : fallback;
     case 'unusual-behaviour':

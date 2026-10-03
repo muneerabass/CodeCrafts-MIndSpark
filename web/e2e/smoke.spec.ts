@@ -96,7 +96,7 @@ test('project detail tabs', async ({ page }) => {
 
 const lists: [string, string[]][] = [
   ['/components', ['Component', 'Status', 'Dependency', 'Projects', 'Policy Violations', 'Vulnerabilities', 'Last Updated']],
-  ['/scans', ['Scanned Project', 'Project Version', 'Trigger', 'Policy Violations', 'Vulnerabilities', 'Scan Date', 'Status']],
+  ['/scans', ['Scanned Project', 'Trigger', 'Status', 'Policy Violations', 'Vulnerabilities', 'Scan Date']],
   ['/package-analysis', ['Component', 'Project Name', 'Project Version', 'Status', 'Component Version', 'Verification', 'Scan Date']],
   ['/vulnerabilities', ['ID', 'Summary', 'Risk', 'Affected Components', 'Affected Projects', 'Published', 'Modified']],
   ['/policy/violations', ['Rule', 'Category', 'Severity', 'Component', 'Summary', 'Project']],

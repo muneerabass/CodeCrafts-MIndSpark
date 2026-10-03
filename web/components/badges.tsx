@@ -46,15 +46,20 @@ export function Chip({ children, className }: { children: React.ReactNode; class
 }
 
 export function ScanStatus({ status }: { status: string }) {
-  const cls =
+  const st =
     status === 'success' || status === 'completed'
-      ? 'text-emerald-600'
+      ? { cls: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300', dot: 'bg-emerald-500' }
       : status === 'failed' || status === 'error'
-        ? 'text-red-600'
-        : status === 'running' || status === 'queued' || status === 'pending'
-          ? 'text-primary'
-          : 'text-muted-foreground';
-  return <span className={cn('text-sm font-medium', cls)}>{titleCase(status)}</span>;
+        ? { cls: 'bg-red-500/10 text-red-700 ring-red-500/25 dark:text-red-300', dot: 'bg-red-500' }
+        : status === 'running'
+          ? { cls: 'bg-sky-500/10 text-sky-700 ring-sky-500/25 dark:text-sky-300', dot: 'bg-sky-500 animate-pulse' }
+          : { cls: 'bg-muted text-muted-foreground ring-border', dot: 'bg-muted-foreground/60' };
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1', st.cls)}>
+      <span className={cn('size-1.5 rounded-full', st.dot)} aria-hidden />
+      {titleCase(status)}
+    </span>
+  );
 }
 
 export const triggerLabel = (t: string) => ({ pull_request: 'Pull request', push: 'Push', manual: 'Manual', cli: 'CLI', ci: 'CI' })[t] ?? titleCase(t);

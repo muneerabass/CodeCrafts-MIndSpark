@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Bot, Bug, CheckCircle2, ChevronRight, FileChartLine, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Skull, TriangleAlert } from 'lucide-react';
 import { Pagination } from '@/components/data-table';
-import { fmtDate } from '@/lib/format';
+import { ago } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { levelLabel } from '@/lib/pr';
 import type { PullRequest, UrgencyLevel } from '@/lib/types';
@@ -66,17 +66,6 @@ const scoreTile: Record<UrgencyLevel, string> = {
   clean: 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400',
   pending: 'bg-muted text-muted-foreground ring-border',
 };
-
-/** "3h ago", "2d ago", or the date for older items. */
-export function ago(v: string | null | undefined) {
-  if (!v) return '';
-  const m = Math.round((Date.now() - new Date(v).getTime()) / 60000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
-  if (m < 60 * 24 * 30) return `${Math.round(m / 1440)}d ago`;
-  return fmtDate(v);
-}
 
 const chipTone = {
   red: 'bg-red-500/10 text-red-700 ring-red-500/20 dark:text-red-300',
