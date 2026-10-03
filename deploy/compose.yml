@@ -6,8 +6,8 @@ x-go-env: &go-env
   DATABASE_OWNER_URL: postgres://depguard:${POSTGRES_PASSWORD}@postgres:5432/depguard?sslmode=disable
   DATABASE_QUERY_URL: postgres://depguard_query:${DEPGUARD_QUERY_PASSWORD}@postgres:5432/depguard?sslmode=disable
   SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET}
-  PUBLIC_URL: ${PUBLIC_URL}
-  PUBLIC_API_URL: ${PUBLIC_API_URL}
+  PUBLIC_URL: https://${APP_HOST}
+  PUBLIC_API_URL: https://${API_HOST}
   TENANT_DOMAIN_SUFFIX: ${TENANT_DOMAIN_SUFFIX}
   GITHUB_APP_ID: ${GITHUB_APP_ID}
   GITHUB_APP_SLUG: ${GITHUB_APP_SLUG}
@@ -84,8 +84,8 @@ services:
     environment:
       DATABASE_URL_WEB: postgres://depguard_web:${DEPGUARD_WEB_PASSWORD}@postgres:5432/depguard_web?sslmode=disable
       API_URL: http://api:8080
-      PUBLIC_API_URL: ${PUBLIC_API_URL}
-      BETTER_AUTH_URL: ${PUBLIC_URL}
+      PUBLIC_API_URL: https://${API_HOST}
+      BETTER_AUTH_URL: https://${APP_HOST}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
       SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET}
       TENANT_DOMAIN_SUFFIX: ${TENANT_DOMAIN_SUFFIX}
@@ -105,10 +105,11 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
-    ports: ["80:80", "443:443", "443:443/udp", "8080:8080"]
+    ports: ["80:80", "443:443", "443:443/udp"]
     environment:
-      APP_HOST: ${APP_HOST:-}
-      API_HOST: ${API_HOST:-}
+      APP_HOST: ${APP_HOST}
+      API_HOST: ${API_HOST}
+      ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

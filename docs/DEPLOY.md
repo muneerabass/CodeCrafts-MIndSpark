@@ -1,34 +1,31 @@
 # Deploying depguard (single host, Docker Compose)
 
-## 1. Server
+## 1. Server and DNS
 - A Linux VM with Docker Engine + Compose plugin. 4 vCPU / 8 GB RAM / 80 GB disk is enough to start
-  (the OSV mirror is a few GB; scans are CPU-bound). Open ports 80 and 8080 (and 443 once you add domains).
-- **No domain needed to start**: the dashboard runs at `http://<server-ip>/` and the API at
-  `http://<server-ip>:8080/`.
-- **Adding domains later**: point two DNS A records (e.g. `app.example.com`, `api.example.com`) at the VM,
-  set `APP_HOST`/`API_HOST` in `deploy/.env`, change `PUBLIC_URL`/`PUBLIC_API_URL` to the `https://`
-  domain URLs, update the GitHub App's webhook/callback URLs, and restart — Caddy obtains certificates
-  automatically.
+  (the OSV mirror is a few GB; scans are CPU-bound).
+- Two DNS A/AAAA records pointing at the VM: `APP_HOST` (web UI, e.g. `app.example.com`) and
+  `API_HOST` (webhooks, CLI, agent, MCP, e.g. `api.example.com`). Ports 80/443 open. Caddy obtains TLS
+  certificates automatically.
 
 ## 2. Configure
 ```sh
 git clone <your repo> depguard && cd depguard/deploy
-./init-env.sh        # asks for the server IP + your admin email, generates all secrets
-# then add SMTP_* (email provider) and GITHUB_* (step 3) to deploy/.env
+cp .env.example .env
+# fill in hosts, emails, SMTP; generate every secret with: openssl rand -hex 32
 ```
 
 ## 3. Create the GitHub App (one time)
 From any machine with Go and a browser:
 ```sh
-go run ./cmd/ghapp-setup -app-url http://<server-ip> -api-url http://<server-ip>:8080 [-org your-org]
+go run ./cmd/ghapp-setup -app-url https://app.example.com -api-url https://api.example.com [-org your-org]
 ```
 Open the printed local URL, confirm on GitHub, then copy the printed `GITHUB_*` lines into
 `deploy/.env` and the key file to `deploy/secrets/github-app.pem` (mode 600). The app requests:
 Contents read, Pull requests read, Checks write, Issues write (PR comments), Metadata read; events
 pull_request, push, check_run (installation events are always delivered). The same app's client
-id/secret are used for "Sign in with GitHub" (callback `<PUBLIC_URL>/api/auth/callback/github`).
+id/secret are used for "Sign in with GitHub" (callback `https://APP_HOST/api/auth/callback/github`).
 
-Optional Google login: create an OAuth client with redirect `<PUBLIC_URL>/api/auth/callback/google`.
+Optional Google login: create an OAuth client with redirect `https://APP_HOST/api/auth/callback/google`.
 
 ## 4. Start
 ```sh
@@ -41,7 +38,7 @@ EPSS. The initial OSV bootstrap takes a while (npm is the largest ecosystem); pr
 `docker compose exec worker depguard-feeds sync --once`.
 
 ## 5. First login and first tenant
-1. Sign in at `PUBLIC_URL` with an email listed in `SUPERADMIN_EMAILS` (platform admin).
+1. Sign in at `https://APP_HOST` with an email listed in `SUPERADMIN_EMAILS` (platform admin).
 2. **Admin → Tenants → Create tenant**: name + owner email. The owner receives an invitation email.
 3. Install the GitHub App on the customer's org (Setup → Integrations → "Add another organization").
    New installations appear under **Admin → Pending installations**; link them to the tenant. Until
@@ -60,7 +57,7 @@ EPSS. The initial OSV bootstrap takes a while (npm is the largest ecosystem); pr
   docker compose start api worker web
   ```
 - **Upgrades**: `git pull && docker compose --env-file .env up -d --build` (migrations run automatically).
-- **Health**: `<PUBLIC_API_URL>/healthz`; Admin → Ops health shows feed freshness, failed jobs and
+- **Health**: `https://API_HOST/healthz`; Admin → Ops health shows feed freshness, failed jobs and
   webhook deliveries (with redeliver). River's job UI is under Admin → Jobs.
 - **Secrets rotation**: rotate `GITHUB_WEBHOOK_SECRET` in the GitHub App settings and `.env` together;
   rotating `SERVICE_JWT_SECRET` or `BETTER_AUTH_SECRET` signs everyone out.
