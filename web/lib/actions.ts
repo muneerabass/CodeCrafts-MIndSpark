@@ -8,7 +8,7 @@ import { api } from './api';
 import { createClient } from './supabase/server';
 import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
-import { sendMail } from './email';
+import { deliverInvitation, upsertInvitation } from './invitations';
 import { publicUrl } from './auth';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
 import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
@@ -73,46 +73,17 @@ export const inviteMember = async (email: string, role: string) =>
     noBypass();
     const validEmail = z.email('Enter a valid email').parse(email.trim());
     const validRole = roleSchema.parse(role);
-    const id = crypto.randomUUID().replaceAll('-', '');
-    await db.insert(schema.invitation).values({
-      id,
-      organizationId: ctx.org.id,
-      email: validEmail.toLowerCase(),
-      role: validRole,
-      status: 'pending',
-      expiresAt: new Date(Date.now() + 7 * 86_400_000),
-      inviterId: ctx.user.id,
-    });
-    await sendMail(validEmail, `You're invited to ${ctx.org.name} on depguard`, `You have been invited to join ${ctx.org.name} on depguard.`, {
-      label: 'Accept invitation',
-      url: `${publicUrl}/accept-invitation/${id}`,
-    });
+    const id = await upsertInvitation(ctx.org.id, validEmail, validRole, ctx.user.id);
+    return deliverInvitation(validEmail, ctx.org.name, id);
   });
 
 export const resendInvitation = async (email: string, role: string) =>
   run(async () => {
     const ctx = await requireRole('owner');
     noBypass();
-    const validRole = roleSchema.parse(role);
-    // Cancel existing pending invitations for this email in this org, then create a new one.
-    await db
-      .update(schema.invitation)
-      .set({ status: 'cancelled' })
-      .where(and(eq(schema.invitation.organizationId, ctx.org.id), eq(schema.invitation.email, email.toLowerCase()), eq(schema.invitation.status, 'pending')));
-    const id = crypto.randomUUID().replaceAll('-', '');
-    await db.insert(schema.invitation).values({
-      id,
-      organizationId: ctx.org.id,
-      email: email.toLowerCase(),
-      role: validRole,
-      status: 'pending',
-      expiresAt: new Date(Date.now() + 7 * 86_400_000),
-      inviterId: ctx.user.id,
-    });
-    await sendMail(email, `You're invited to ${ctx.org.name} on depguard`, `You have been invited to join ${ctx.org.name} on depguard.`, {
-      label: 'Accept invitation',
-      url: `${publicUrl}/accept-invitation/${id}`,
-    });
+    const validEmail = z.email('Enter a valid email').parse(email.trim());
+    const id = await upsertInvitation(ctx.org.id, validEmail, roleSchema.parse(role), ctx.user.id);
+    return deliverInvitation(validEmail, ctx.org.name, id);
   });
 
 export const cancelInvitation = async (invitationId: string) =>

@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { createClient } from './supabase/server';
 import { superadminEmails } from './auth';
+import { acceptPendingInvitations } from './invitations';
 import { db, schema } from './db';
 import type { Role } from './types';
 
@@ -38,6 +39,9 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
+
+  // Pending invitations for this verified email become memberships on sign-in.
+  await acceptPendingInvitations({ id: user.id, email: user.email, emailVerified: Boolean(user.email_confirmed_at) });
 
   const name = (user.user_metadata?.full_name as string) || (user.user_metadata?.name as string) || user.email?.split('@')[0] || '';
   const email = user.email ?? '';

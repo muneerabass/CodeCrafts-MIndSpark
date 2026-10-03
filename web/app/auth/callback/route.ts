@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { publicUrl } from '@/lib/auth';
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  // Behind the reverse proxy request.url is the internal address, so redirect to the public URL.
+  const { searchParams } = new URL(request.url);
+  const origin = publicUrl;
   const code = searchParams.get('code');
   const next = searchParams.get('next') ?? '/dashboard';
 

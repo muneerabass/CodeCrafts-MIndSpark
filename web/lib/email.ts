@@ -12,6 +12,9 @@ function getTransport() {
   return transport;
 }
 
+/** True when an SMTP server is configured; without it invitations are shared by link. */
+export const emailConfigured = () => Boolean(process.env.SMTP_HOST?.trim());
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export async function sendMail(to: string, subject: string, intro: string, cta: { label: string; url: string }) {

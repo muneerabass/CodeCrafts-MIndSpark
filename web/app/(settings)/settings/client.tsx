@@ -354,6 +354,7 @@ export function InviteDialog() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<string>('member');
+  const [share, setShare] = useState<{ email: string; role: string; signInUrl: string; note?: string } | null>(null);
   const { pending, run } = useAction();
   return (
     <Dialog
@@ -363,6 +364,7 @@ export function InviteDialog() {
         if (o) {
           setEmail('');
           setRole('member');
+          setShare(null);
         }
       }}
     >
@@ -376,17 +378,46 @@ export function InviteDialog() {
           className="grid gap-4"
           onSubmit={async (e) => {
             e.preventDefault();
-            const sent = await run(async () => {
-              const r = await inviteMember(email, role);
-              return r.ok ? { ok: true as const, data: true } : r;
-            }, `Invitation sent to ${email}`);
-            if (sent) setOpen(false);
+            const r = await run(() => inviteMember(email, role));
+            if (!r) return;
+            if (r.emailed) {
+              toast.success(`Invitation emailed to ${email}`);
+              setOpen(false);
+            } else {
+              setShare({ email, role, signInUrl: r.signInUrl, note: r.emailError });
+            }
           }}
         >
           <DialogHeader>
             <DialogTitle>Invite a teammate</DialogTitle>
-            <DialogDescription>They will get an email with a link to join this tenant. Invitations expire after 7 days.</DialogDescription>
+            <DialogDescription>
+              They get access as soon as they sign in with GitHub or Google using this email address. Invitations expire after 7 days.
+            </DialogDescription>
           </DialogHeader>
+          {share ? (
+            <div className="grid gap-3 rounded-md border border-primary/20 bg-accent p-3 text-sm text-accent-foreground" role="status">
+              <p>
+                <span className="font-medium">Invitation created</span> for <span className="font-medium">{share.email}</span> as{' '}
+                {titleCase(share.role)}. {share.note ?? 'Email is not configured on this server, so send them this link yourself:'}
+              </p>
+              <div className="flex gap-2">
+                <Input readOnly value={share.signInUrl} aria-label="Sign-in link" className="font-mono text-xs" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(share.signInUrl);
+                    toast.success('Link copied');
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+              <p className="text-muted-foreground">
+                They sign in with GitHub or Google using {share.email} and land on this tenant&apos;s dashboard automatically.
+              </p>
+            </div>
+          ) : null}
           <div className="grid gap-1.5">
             <Label htmlFor="inv-email">Email</Label>
             <Input id="inv-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" />
@@ -406,11 +437,13 @@ export function InviteDialog() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {share ? 'Done' : 'Cancel'}
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending && <Loader2 className="animate-spin" />} Send invitation
-            </Button>
+            {!share && (
+              <Button type="submit" disabled={pending}>
+                {pending && <Loader2 className="animate-spin" />} Send invitation
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
@@ -451,7 +484,7 @@ export function MemberMenu({ m }: { m: MemberRow }) {
 export function InvitationActions({ inv }: { inv: InvitationRow }) {
   return (
     <div className="flex gap-1">
-      <ActionButton variant="ghost" size="sm" action={() => resendInvitation(inv.email, inv.role)} ok={`Invitation re-sent to ${inv.email}`}>
+      <ActionButton variant="ghost" size="sm" action={() => resendInvitation(inv.email, inv.role)} ok={`Invitation for ${inv.email} refreshed`}>
         Resend
       </ActionButton>
       <ActionButton variant="ghost" size="sm" className="text-destructive" confirm={`Cancel the invitation for ${inv.email}?`} action={() => cancelInvitation(inv.id)} ok="Invitation cancelled">
