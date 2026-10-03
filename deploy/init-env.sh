@@ -12,17 +12,22 @@ set_var() { # set_var NAME VALUE (replaces the line, keeps everything else)
   awk -v k="$1" -v v="$2" 'BEGIN{FS=OFS="="} $1==k{print k"="v; done=1; next} {print} END{if(!done) print k"="v}' .env > "$tmp"
   mv "$tmp" .env
 }
-ask() { # ask NAME "question" default
+ask() { # ask NAME "question" default — only when unset or still the example value
   cur=$(get "$1")
   case "$cur" in ""|*example.com*) ;; *) return ;; esac
   printf '%s [%s]: ' "$2" "$3"; read -r ans
   set_var "$1" "${ans:-$3}"
 }
 
-ask APP_HOST "Web dashboard domain" "app.example.com"
-ask API_HOST "API domain (webhooks, CLI, agents, MCP)" "api.example.com"
-ask ACME_EMAIL "Email for HTTPS certificates" "ops@example.com"
-ask TENANT_DOMAIN_SUFFIX "Tenant domain suffix" "example.com"
+# No domain needed: the dashboard runs on http://<server>/ and the API on :8080.
+# Add domains later by setting APP_HOST/API_HOST and switching the URLs to https.
+if [ -z "$(get PUBLIC_URL)" ]; then
+  guess=$(hostname -I 2>/dev/null | awk '{print $1}')
+  printf 'Server public IP or hostname [%s]: ' "${guess:-localhost}"; read -r host
+  host=${host:-${guess:-localhost}}
+  set_var PUBLIC_URL "http://$host"
+  set_var PUBLIC_API_URL "http://$host:8080"
+fi
 ask SUPERADMIN_EMAILS "Platform admin email(s), comma-separated" "you@example.com"
 
 for k in POSTGRES_PASSWORD DEPGUARD_APP_PASSWORD DEPGUARD_QUERY_PASSWORD DEPGUARD_WEB_PASSWORD SERVICE_JWT_SECRET BETTER_AUTH_SECRET; do

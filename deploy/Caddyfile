@@ -1,9 +1,8 @@
-# Automatic HTTPS for both public hosts.
-{
-	email {$ACME_EMAIL}
-}
+# Without domains (APP_HOST/API_HOST empty): plain HTTP on the server IP —
+#   dashboard http://<ip>/ and API http://<ip>:8080/.
+# With domains set: automatic HTTPS (Let's Encrypt) for both hosts.
 
-{$APP_HOST} {
+{$APP_HOST::80} {
 	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -16,7 +15,7 @@
 
 # Machine-facing API: GitHub webhooks, CLI/CI uploads, endpoint agent, MCP.
 # /api/v1 (web-only, service JWT) and /admin are not exposed publicly.
-{$API_HOST} {
+{$API_HOST::8080} {
 	encode zstd gzip
 	header -Server
 	@internal path /api/v1/* /admin/*
