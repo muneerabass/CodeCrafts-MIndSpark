@@ -80,9 +80,6 @@ func NewPath(chain []PathNode, adv []Vuln, imported *bool, dev, approximate bool
 		p.Target = chain[len(chain)-1]
 		p.DirectHead = chain[0].Name + "@" + chain[0].Version
 	}
-	if approximate && len(chain) == 1 {
-		p.Depth = 0 // no graph: depth unknown
-	}
 	malware, kev, epss := false, false, 0.0
 	p.Risk = strings.ToUpper(sev)
 	sort.SliceStable(p.Advisories, func(i, j int) bool { return rankOf(p.Advisories[i].Risk) < rankOf(p.Advisories[j].Risk) })
@@ -179,8 +176,10 @@ func Paths(r Report) []PathItem {
 			chains = [][]string{p.Via}
 		}
 		approx := p.GraphSource == "depsdev"
+		unknownDepth := false
 		if len(chains) == 0 {
 			chains, approx = [][]string{{key}}, p.Direct == nil || !*p.Direct
+			unknownDepth = approx // not in any graph and not known to be direct
 		}
 		for _, c := range chains {
 			nodes := make([]PathNode, len(c))
@@ -188,7 +187,11 @@ func Paths(r Report) []PathItem {
 				n, v := ParseNameVersion(nv)
 				nodes[i] = PathNode{Name: n, Version: v, ComponentID: ids[nv]}
 			}
-			out = append(out, NewPath(nodes, append([]Vuln(nil), p.Vulns...), p.Imported, p.Dev, approx, sf.Severity, sf.Summary))
+			item := NewPath(nodes, append([]Vuln(nil), p.Vulns...), p.Imported, p.Dev, approx, sf.Severity, sf.Summary)
+			if unknownDepth {
+				item.Depth = 0
+			}
+			out = append(out, item)
 		}
 	}
 	SortPaths(out)

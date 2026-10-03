@@ -130,7 +130,19 @@ booleans `has_vulns=true`, `has_violations=true`. Errors `{"error":"msg"}` with 
 | POST `/github/webhook` | GitHub App webhooks |
 | GET `/healthz`, `/readyz`, `/metrics` | ops |
 
+### Install guard (see docs/CLI.md)
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/v1/packages/check` | pre-install verdict: packages and/or before/after lockfiles + manifests + repo rules → `{decision, block_mode, checked, packages[]}` |
+| GET | `/v1/me` | tenant of the API key and a policy summary (`depguard login`, `init`, `doctor`) |
+
+Migration 00006 adds `malysis_verdict` (SafeDep community malware verdict cache, shared, no RLS).
+Policy JSON: `presets.packages[]` = `{ecosystem?, name, versions?, deny?, allow?, reason?, severity?}`.
+
 ## Environment variables
+
+`MALYSIS_DISABLED=1` (api) turns off the SafeDep community malware lookups used by install checks.
 ```
 DATABASE_URL            postgres://depguard_app:...@postgres:5432/depguard   (runtime, RLS)
 DATABASE_OWNER_URL      postgres://depguard:...@postgres:5432/depguard        (migrations)

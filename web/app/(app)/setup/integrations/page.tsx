@@ -127,8 +127,8 @@ export default async function IntegrationsPage() {
           <GridCards slugs={['github-actions', 'gitlab-ci', 'bitbucket-pipes']} />
         </Section>
 
-        <Section title="Developer Tools" count={3}>
-          <GridCards slugs={['cli', 'pmg', 'mcp']} />
+        <Section title="Developer Tools" count={4}>
+          <GridCards slugs={['install-guard', 'cli', 'pmg', 'mcp']} />
         </Section>
 
         <Section title="AI Governance & Endpoints">

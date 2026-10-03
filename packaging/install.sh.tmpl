@@ -1,0 +1,22 @@
+#!/bin/sh
+# depguard CLI installer: downloads the binary for this machine.
+#   curl -fsSL __BASE__/install.sh | sh
+set -eu
+BASE="__BASE__/downloads/cli"
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m)
+case "$arch" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "depguard: unsupported architecture $arch" >&2; exit 1 ;; esac
+case "$os" in linux|darwin) ;; *) echo "depguard: unsupported OS $os (on Windows use: npm i -g __BASE__/downloads/depguard-cli.tgz)" >&2; exit 1 ;; esac
+dir="${DEPGUARD_INSTALL_DIR:-$HOME/.local/bin}"
+if [ -w /usr/local/bin ] && [ -z "${DEPGUARD_INSTALL_DIR:-}" ]; then dir=/usr/local/bin; fi
+mkdir -p "$dir"
+tmp=$(mktemp)
+echo "◆ depguard: downloading for $os/$arch…"
+curl -fsSL "$BASE/depguard-$os-$arch" -o "$tmp"
+chmod 755 "$tmp"
+mv "$tmp" "$dir/depguard"
+echo "◆ depguard: installed $("$dir/depguard" version) to $dir/depguard"
+case ":$PATH:" in *":$dir:"*) ;; *) echo "  add $dir to your PATH" ;; esac
+echo ""
+echo "  next:  depguard login --api-key dg_...   (API key from Settings → API Keys)"
+echo "         depguard init                     (in your project: guards npm/pip/go/cargo installs)"

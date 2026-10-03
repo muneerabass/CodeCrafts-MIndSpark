@@ -47,15 +47,58 @@ export function InventoryTable({ data, total }: { data: InventoryItem[]; total: 
   return <DataTable columns={inventoryCols} data={data} total={total} empty="No AI tools, MCP servers, skills or extensions reported yet." />;
 }
 
+// Install guard (depguard CLI) and PMG event types, in plain words.
+const EVENT_LABELS: Record<string, string> = {
+  'guard.allow': 'Install allowed',
+  'guard.warn': 'Install allowed with warnings',
+  'guard.block': 'Install blocked',
+  'guard.override': 'Install forced (override)',
+  'guard.package.block': 'Package blocked',
+  'guard.package.warn': 'Package warning',
+  'guard.package.allow': 'Package allowed',
+};
+const eventTone = (t: string) =>
+  t.includes('block') ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200' : t.includes('override') ? 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200' : t.includes('warn') ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200';
+
 const pkgEventCols: ColumnDef<PackageEvent, unknown>[] = [
-  { header: 'Time', cell: ({ row }) => fmtDateTime(row.original.ts) },
-  { header: 'Event', cell: ({ row }) => <span className={cn('text-sm font-medium', row.original.event_type.includes('block') && 'text-red-600')}>{titleCase(row.original.event_type)}</span> },
-  { header: 'Package', cell: ({ row }) => <span className="font-medium">{row.original.package_name}</span> },
-  { header: 'Version', cell: ({ row }) => <Chip>{row.original.version}</Chip> },
-  { header: 'Ecosystem', cell: ({ row }) => <Ecosystem name={row.original.ecosystem} /> },
+  { header: 'Time', cell: ({ row }) => <span className="whitespace-nowrap">{fmtDateTime(row.original.ts)}</span> },
+  {
+    header: 'Event',
+    cell: ({ row }) => <span className={cn('rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap', eventTone(row.original.event_type))}>{EVENT_LABELS[row.original.event_type] ?? titleCase(row.original.event_type)}</span>,
+  },
+  {
+    header: 'Package',
+    cell: ({ row }) => {
+      const e = row.original;
+      const cmd = typeof e.details?.command === 'string' ? e.details.command : null;
+      return e.package_name ? (
+        <span className="inline-flex items-center gap-1.5 font-medium">
+          {e.package_name} {e.version && <Chip>{e.version}</Chip>}
+        </span>
+      ) : cmd ? (
+        <span className="font-mono text-xs">{cmd}</span>
+      ) : (
+        '—'
+      );
+    },
+  },
+  { header: 'Ecosystem', cell: ({ row }) => (row.original.ecosystem ? <Ecosystem name={row.original.ecosystem} /> : '—') },
+  {
+    header: 'Details',
+    cell: ({ row }) => {
+      const e = row.original;
+      const reason = typeof e.details?.reason === 'string' && e.details.reason ? e.details.reason : null;
+      return (
+        <span className="block max-w-md text-xs whitespace-normal text-muted-foreground">
+          {e.message ?? '—'}
+          {reason && <span className="mt-0.5 block text-orange-700 dark:text-orange-300">Reason: {reason}</span>}
+        </span>
+      );
+    },
+  },
 ];
 export function PackageEventsTable({ data, total }: { data: PackageEvent[]; total: number }) {
-  return <DataTable columns={pkgEventCols} data={data} total={total} empty="No package installs recorded. Install PMG on this machine to see them." />;
+  return <DataTable columns={pkgEventCols} data={data} total={total} empty="No package installs recorded yet. Set up the depguard install guard (Setup → Install Guard) on this machine." />;
 }
 
 const agentEventCols: ColumnDef<AgentEvent, unknown>[] = [

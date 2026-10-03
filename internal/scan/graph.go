@@ -2,6 +2,7 @@ package scan
 
 import (
 	"encoding/json"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
@@ -387,4 +388,168 @@ func normName(eco, name string) string {
 		n = pypiSep.ReplaceAllString(n, "-")
 	}
 	return n
+}
+
+// AddLockEdges adds dependency edges that vet's parser leaves out, from the
+// raw lockfile (npm package-lock optional/peer deps, bun.lock).
+func AddLockEdges(m *models.PackageManifest, displayPath string, lock []byte) {
+	switch path.Base(displayPath) {
+	case "package-lock.json", "npm-shrinkwrap.json":
+		AddNpmLockEdges(m, lock)
+	case "bun.lock":
+		AddBunLockEdges(m, lock)
+	}
+}
+
+// AddBunLockEdges builds the dependency graph of a bun.lock (text format,
+// JSON with trailing commas). Package keys are install paths ("send/ms" is the
+// ms nested under send); a dependency resolves to the nearest enclosing key,
+// like node_modules lookup. Workspace dependencies become roots.
+func AddBunLockEdges(m *models.PackageManifest, lock []byte) {
+	dg := m.DependencyGraph
+	if dg == nil || dg.Present() || m.Ecosystem != models.EcosystemNpm {
+		return
+	}
+	type deps struct {
+		Dependencies         map[string]string `json:"dependencies"`
+		DevDependencies      map[string]string `json:"devDependencies"`
+		OptionalDependencies map[string]string `json:"optionalDependencies"`
+		PeerDependencies     map[string]string `json:"peerDependencies"`
+	}
+	var lf struct {
+		Workspaces map[string]deps              `json:"workspaces"`
+		Packages   map[string][]json.RawMessage `json:"packages"`
+	}
+	if json.Unmarshal(stripTrailingCommas(lock), &lf) != nil || len(lf.Packages) == 0 {
+		return
+	}
+	nodes := map[string]*models.Package{}
+	for _, n := range dg.GetNodes() {
+		nodes[n.Data.Id()] = n.Data
+	}
+	pkgAt := func(key string) *models.Package {
+		e := lf.Packages[key]
+		if len(e) == 0 {
+			return nil
+		}
+		var ident string
+		if json.Unmarshal(e[0], &ident) != nil {
+			return nil
+		}
+		at := strings.LastIndex(ident, "@")
+		if at <= 0 {
+			return nil
+		}
+		return nodes[(&models.Package{PackageDetails: models.NewPackageDetail(models.EcosystemNpm, ident[:at], ident[at+1:])}).Id()]
+	}
+	depsOf := func(key string) []string {
+		e := lf.Packages[key]
+		var out []string
+		for _, raw := range e[1:] {
+			var d deps
+			if json.Unmarshal(raw, &d) != nil {
+				continue
+			}
+			for _, mp := range []map[string]string{d.Dependencies, d.OptionalDependencies, d.PeerDependencies} {
+				for n := range mp {
+					out = append(out, n)
+				}
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	resolve := func(from, name string) *models.Package {
+		for cur := from; ; cur = parentKey(cur) {
+			k := name
+			if cur != "" {
+				k = cur + "/" + name
+			}
+			if p := pkgAt(k); p != nil {
+				return p
+			}
+			if cur == "" {
+				return nil
+			}
+		}
+	}
+	keys := make([]string, 0, len(lf.Packages))
+	for k := range lf.Packages {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	added := false
+	for _, k := range keys {
+		from := pkgAt(k)
+		if from == nil {
+			continue
+		}
+		for _, d := range depsOf(k) {
+			if to := resolve(k, d); to != nil && to != from {
+				dg.AddDependency(from, to)
+				added = true
+			}
+		}
+	}
+	for _, ws := range lf.Workspaces {
+		for _, mp := range []map[string]string{ws.Dependencies, ws.DevDependencies, ws.OptionalDependencies, ws.PeerDependencies} {
+			for n := range mp {
+				if p := resolve("", n); p != nil {
+					dg.AddRootNode(p)
+					added = true
+				}
+			}
+		}
+	}
+	if added {
+		dg.SetPresent(true)
+	}
+}
+
+// parentKey drops the last package name from a bun.lock key ("a/@s/b" -> "a").
+func parentKey(k string) string {
+	parts := strings.Split(k, "/")
+	n := len(parts) - 1
+	if n >= 1 && strings.HasPrefix(parts[n-1], "@") {
+		n-- // scoped name spans two segments
+	}
+	if n <= 0 {
+		return ""
+	}
+	return strings.Join(parts[:n], "/")
+}
+
+// stripTrailingCommas makes JSON-with-trailing-commas (bun.lock) valid JSON.
+func stripTrailingCommas(b []byte) []byte {
+	out := make([]byte, 0, len(b))
+	inStr, esc := false, false
+	for i := 0; i < len(b); i++ {
+		c := b[i]
+		if inStr {
+			out = append(out, c)
+			switch {
+			case esc:
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				inStr = false
+			}
+			continue
+		}
+		if c == '"' {
+			inStr = true
+		}
+		if c == ',' {
+			j := i + 1
+			for j < len(b) && (b[j] == ' ' || b[j] == '\n' || b[j] == '\r' || b[j] == '\t') {
+				j++
+			}
+			if j < len(b) && (b[j] == '}' || b[j] == ']') {
+				continue
+			}
+		}
+		out = append(out, c)
+	}
+	return out
 }

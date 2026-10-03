@@ -134,6 +134,13 @@ mkdir -p "$GOPATH"
 (cd "$SRC" && CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /opt/depguard/bin/ \
    ./cmd/api ./cmd/worker ./cmd/depguard ./cmd/depguard-feeds)
 
+log "Build CLI downloads (install.sh, npm package, PyPI wheels)"
+(cd "$SRC" && VERSION="0.1.$(date -u +%Y%m%d%H%M)" DEPGUARD_APP_URL="https://$APP_HOST" DEPGUARD_API_URL="https://$API_HOST" \
+   sh packaging/build.sh >/dev/null)
+rm -rf /opt/depguard/downloads.new && cp -a "$SRC/dist/downloads" /opt/depguard/downloads.new
+chmod -R a+rX /opt/depguard/downloads.new
+rm -rf /opt/depguard/downloads && mv /opt/depguard/downloads.new /opt/depguard/downloads
+
 log "Build web app"
 WEB_BUILD="$SRC/web"
 (cd "$WEB_BUILD" && pnpm install --frozen-lockfile --silent --store-dir /var/cache/depguard/pnpm \

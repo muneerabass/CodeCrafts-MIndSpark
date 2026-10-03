@@ -136,6 +136,10 @@ test('reports and detail pages', async ({ page }) => {
   await columns(page, ['Kind', 'Name', 'Version', 'Scope', 'Config Path']);
   await page.getByRole('link', { name: 'Agent Activity' }).click();
   await columns(page, ['Agent', 'Action', 'Tool', 'Result']);
+  // install guard decisions from the depguard CLI
+  await page.getByRole('link', { name: 'Package Events' }).click();
+  await columns(page, ['Time', 'Event', 'Package', 'Ecosystem', 'Details']);
+  for (const t of ['Install blocked', 'Package blocked', 'Install forced (override)', 'npm install lodash@4.17.15', 'Reason: legacy app, upgrade tracked in JIRA-42']) await expect(page.getByText(t).first()).toBeVisible();
 });
 
 test('query page runs SQL', async ({ page }) => {
@@ -152,6 +156,20 @@ test('policy editor', async ({ page }) => {
   for (const t of ['Suspicious', 'Typosquats', 'Unusual behaviour', 'License compliance checks', 'Block at severity']) await expect(page.getByText(t, { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Typosquats' })).toBeChecked();
   await expect(page.getByRole('switch', { name: 'No source repository' })).not.toBeChecked();
+  // package & version rules
+  const rules = page.getByRole('table', { name: 'Package rules' });
+  await expect(rules.getByLabel('Rule 1 package')).toHaveValue('lodash');
+  await expect(rules.getByLabel('Rule 1 versions')).toHaveValue('>=4.17.21');
+  await expect(rules.getByLabel('Rule 2 package')).toHaveValue('request');
+  await expect(rules.getByText('every version')).toBeVisible();
+  await page.getByRole('button', { name: 'Add package rule' }).click();
+  await rules.getByLabel('Rule 3 package').fill('moment');
+  await rules.getByLabel('Rule 3 versions').fill('>=');
+  await expect(rules.getByText(/Use e\.g\./)).toBeVisible();
+  await rules.getByLabel('Rule 3 versions').fill('<3 || >=3.1');
+  await expect(rules.getByText(/Use e\.g\./)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Remove rule 3' }).click();
+  await expect(rules.getByLabel('Rule 3 package')).toHaveCount(0);
 });
 
 test('suspicious findings and violation filters', async ({ page }) => {
@@ -181,6 +199,10 @@ test('setup integrations and guides', async ({ page }) => {
   await expect(page.getByText('/mcp').first()).toBeVisible();
   await page.goto('/setup/guides/github-actions');
   await expect(page.getByText(/--fail-on-violation/).first()).toBeVisible();
+  await page.goto('/setup/integrations');
+  await expect(page.getByText('Install Guard').first()).toBeVisible();
+  await page.goto('/setup/guides/install-guard');
+  for (const t of [/install\.sh \| sh/, /npm install --save-dev .*depguard-cli\.tgz/, /pip install --find-links .*pypi\/ depguard-cli/, /depguard init/, /depguard check/]) await expect(page.getByText(t).first()).toBeVisible();
 });
 
 test('settings pages', async ({ page }) => {

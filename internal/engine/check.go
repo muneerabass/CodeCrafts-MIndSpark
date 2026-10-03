@@ -125,6 +125,11 @@ func (d Deps) CheckPackages(ctx context.Context, tenant string, req CheckRequest
 			siblings[f.Path] = []byte(f.Content)
 		}
 		for _, m := range after {
+			for _, f := range req.After {
+				if f.Path == m.GetDisplayPath() {
+					scan.AddLockEdges(m, f.Path, []byte(f.Content))
+				}
+			}
 			rc.graphs[m.GetDisplayPath()] = scan.BuildGraph(m, scan.ReadDirectDeps(m.Ecosystem, siblings))
 		}
 		self := projectNames(req.Manifests)

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Bug, FlaskConical, Info, Loader2, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
+import { Bug, FlaskConical, Info, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAction } from '@/components/client';
 import { savePolicy, testPolicy } from '@/lib/actions';
-import type { CustomRule, Policy, Severity, SuspiciousPreset } from '@/lib/types';
+import type { CustomRule, PackageRule, Policy, Severity, SuspiciousPreset } from '@/lib/types';
 
 const Monaco = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
@@ -122,6 +122,8 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
           <Label htmlFor="p-mal">Block malicious packages</Label>
         </div>
       </Preset>
+
+      <PackageRulesCard rules={p.presets.packages ?? []} ro={ro} onChange={(packages) => setP({ ...p, presets: { ...p.presets, packages } })} />
 
       <Preset icon={Scale} title="License" description="Check dependency licenses against your project license and usage model, plus a deny list of SPDX identifiers.">
         <div className="flex flex-wrap items-center gap-4">
@@ -394,5 +396,129 @@ function RuleEditor({ i, rule, ro, onChange, onRemove }: { i: number; rule: Cust
         </span>
       </div>
     </fieldset>
+  );
+}
+
+const ECOSYSTEM_CHOICES = [
+  { v: 'any', l: 'Any ecosystem' },
+  { v: 'npm', l: 'npm' },
+  { v: 'pypi', l: 'PyPI' },
+  { v: 'go', l: 'Go' },
+  { v: 'cargo', l: 'Cargo' },
+  { v: 'maven', l: 'Maven' },
+  { v: 'rubygems', l: 'RubyGems' },
+  { v: 'packagist', l: 'Packagist' },
+  { v: 'nuget', l: 'NuGet' },
+];
+type RuleMode = 'versions' | 'deny' | 'allow';
+const modeOf = (r: PackageRule): RuleMode => (r.deny ? 'deny' : r.allow ? 'allow' : 'versions');
+// Mirrors internal/pkgrules.ParseRange: comparisons (>= > <= < = !=) joined by spaces/commas, alternatives by ||.
+const RANGE_RE = /^\s*((>=|<=|!=|==|>|<|=)?\s*[^\s,<>=!|]+[\s,]*)+(\|\|\s*((>=|<=|!=|==|>|<|=)?\s*[^\s,<>=!|]+[\s,]*)+)*$/;
+export const validRange = (s: string) => s.trim() === '' || RANGE_RE.test(s);
+
+function PackageRulesCard({ rules, ro, onChange }: { rules: PackageRule[]; ro: boolean; onChange: (r: PackageRule[]) => void }) {
+  const update = (i: number, v: Partial<PackageRule>) => onChange(rules.map((r, j) => (j === i ? { ...r, ...v } : r)));
+  const setMode = (i: number, m: RuleMode) => update(i, { deny: m === 'deny' || undefined, allow: m === 'allow' || undefined, versions: m === 'versions' ? rules[i].versions : undefined });
+  return (
+    <Preset icon={PackageCheck} title="Package & version rules" description="Ban packages, set minimum/maximum allowed versions, or mark packages as trusted. Enforced on PR and repository scans and before installs with the depguard CLI.">
+      {rules.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No package rules yet. Example: lodash, allowed versions &gt;=4.17.21.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm" aria-label="Package rules">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="pb-2 font-medium">Ecosystem</th>
+                <th className="pb-2 font-medium">Package</th>
+                <th className="pb-2 font-medium">Rule</th>
+                <th className="pb-2 font-medium">Allowed versions</th>
+                <th className="pb-2 font-medium">Severity</th>
+                <th className="pb-2 font-medium">Reason</th>
+                <th className="pb-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((r, i) => {
+                const mode = modeOf(r);
+                const bad = mode === 'versions' && !validRange(r.versions ?? '');
+                return (
+                  <tr key={i} className="align-top">
+                    <td className="py-1 pr-2">
+                      <Select value={r.ecosystem || 'any'} onValueChange={(v) => update(i, { ecosystem: v === 'any' ? undefined : v })} disabled={ro}>
+                        <SelectTrigger className="w-36" aria-label={`Rule ${i + 1} ecosystem`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ECOSYSTEM_CHOICES.map((e) => (
+                            <SelectItem key={e.v} value={e.v}>
+                              {e.l}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-1 pr-2">
+                      <Input aria-label={`Rule ${i + 1} package`} className="w-44 font-mono" placeholder="lodash or @types/*" value={r.name} onChange={(e) => update(i, { name: e.target.value })} disabled={ro} />
+                    </td>
+                    <td className="py-1 pr-2">
+                      <Select value={mode} onValueChange={(v) => setMode(i, v as RuleMode)} disabled={ro}>
+                        <SelectTrigger className="w-40" aria-label={`Rule ${i + 1} type`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="versions">Allowed versions</SelectItem>
+                          <SelectItem value="deny">Banned</SelectItem>
+                          <SelectItem value="allow">Trusted</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-1 pr-2">
+                      {mode === 'versions' ? (
+                        <>
+                          <Input aria-label={`Rule ${i + 1} versions`} aria-invalid={bad} className="w-40 font-mono" placeholder=">=4.17.21 <5" value={r.versions ?? ''} onChange={(e) => update(i, { versions: e.target.value })} disabled={ro} />
+                          {bad && <p className="mt-1 text-xs text-destructive">Use e.g. &gt;=1.2.0 &lt;2 or &lt;2 || &gt;=3</p>}
+                        </>
+                      ) : (
+                        <span className="inline-block pt-2 text-xs text-muted-foreground">{mode === 'deny' ? 'every version' : 'skips suspicious/license checks'}</span>
+                      )}
+                    </td>
+                    <td className="py-1 pr-2">
+                      <Select value={r.severity ?? 'high'} onValueChange={(v) => update(i, { severity: v as Severity })} disabled={ro || mode === 'allow'}>
+                        <SelectTrigger className="w-32" aria-label={`Rule ${i + 1} severity`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SEVERITIES.map((s) => (
+                            <SelectItem key={s} value={s} className="capitalize">
+                              {s}
+                              {s === 'critical' || s === 'high' ? ' (blocks)' : ' (warns)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-1 pr-2">
+                      <Input aria-label={`Rule ${i + 1} reason`} className="w-48" placeholder="Why this rule exists" value={r.reason ?? ''} onChange={(e) => update(i, { reason: e.target.value })} disabled={ro} />
+                    </td>
+                    <td className="py-1">
+                      {!ro && (
+                        <Button type="button" variant="ghost" size="icon" aria-label={`Remove rule ${i + 1}`} onClick={() => onChange(rules.filter((_, j) => j !== i))}>
+                          <Trash2 />
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {!ro && (
+        <Button type="button" variant="outline" className="w-fit" onClick={() => onChange([...rules, { ecosystem: 'npm', name: '', versions: '' }])}>
+          <Plus /> Add package rule
+        </Button>
+      )}
+    </Preset>
   );
 }

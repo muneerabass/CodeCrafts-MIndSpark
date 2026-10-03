@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ExternalLink, KeyRound } from 'lucide-react';
 import { api } from '@/lib/api';
+import { publicUrl } from '@/lib/auth';
 import { requireOrg } from '@/lib/session';
 import type { Integrations, Settings } from '@/lib/types';
 import { PageHeader } from '@/components/page';
@@ -37,7 +38,7 @@ const keyNote = (
   </>
 );
 
-function stepsFor(slug: string, apiUrl: string, mcpUrl: string, s: Settings, installUrl: string): Step[] {
+function stepsFor(slug: string, apiUrl: string, mcpUrl: string, s: Settings, installUrl: string, appUrl: string): Step[] {
   switch (slug) {
     case 'github-app':
       return [
@@ -127,6 +128,35 @@ pipelines:
       - step: *depguard`,
         },
       ];
+    case 'install-guard': {
+      const dl = `${appUrl}/downloads`;
+      return [
+        {
+          title: 'Install the depguard CLI',
+          body: 'One small binary for Linux, macOS and Windows. Pick whichever fits the project; all install the same CLI.',
+          code: `# any machine\ncurl -fsSL ${appUrl}/install.sh | sh\n\n# as a dev dependency of a JavaScript project\nnpm install --save-dev ${dl}/depguard-cli.tgz\n\n# Python projects\npip install --find-links ${dl}/pypi/ depguard-cli\n\n# Go toolchain\n${install}`,
+        },
+        { title: 'Log in', body: <>Connects this machine to <b>{s.domain}</b>. {keyNote}</>, code: `depguard login --api-url ${apiUrl} --api-key dg_your_key_here` },
+        {
+          title: 'Link the project and guard installs',
+          body: 'Run in the repository root. It writes .depguard.yml (commit it) and puts small shims for npm, pnpm, yarn, pip, uv, poetry, go and cargo first on your PATH, so every install is checked: typed commands, IDE terminals, scripts and Makefiles.',
+          code: 'depguard init\n# open a new terminal, then check the setup\ndepguard doctor',
+        },
+        {
+          title: 'Install as usual',
+          body: 'depguard works out what the install would bring in (direct and transitive) without running install scripts, checks it against your policy and then runs the real command. Blocking findings stop the install; warnings are shown and the install continues. Malware always blocks.',
+          code: 'npm install express\npip install requests\ngo get golang.org/x/net\ncargo add serde\n\n# install anyway (logged on the dashboard with the reason)\ndepguard --force --reason "fix tracked in JIRA-42" npm install lodash@4.17.15',
+        },
+        {
+          title: 'Add project rules (optional)',
+          body: <>Team rules live on the <Link className="text-primary underline" href="/policy">Policy</Link> page (Package &amp; version rules). A repository can add stricter rules in .depguard.yml; it can never loosen team policy.</>,
+          file: '.depguard.yml',
+          code: 'project: my-org/my-app\nfail_closed: false   # true = block installs when depguard is unreachable\nrules:\n  - { ecosystem: npm, name: lodash, versions: ">=4.17.21", reason: "prototype pollution fixes" }\n  - { name: request, deny: true, reason: "deprecated, use undici" }\n  - { ecosystem: pypi, name: django, versions: ">=4.2 <6", severity: medium }',
+        },
+        { title: 'In CI', body: 'Check the committed lockfiles on every build; the job fails when a dependency is blocked.', code: `export DEPGUARD_API_URL=${apiUrl}\nexport DEPGUARD_API_KEY=\${{ secrets.DEPGUARD_API_KEY }}\ndepguard check` },
+        { title: 'See every decision', body: <>Allowed, warned, blocked and forced installs appear per machine under <Link className="text-primary underline" href="/endpoints">Endpoints</Link> → Package Events.</> },
+      ];
+    }
     case 'cli':
       return [
         { title: 'Install the CLI', code: install },
@@ -195,7 +225,7 @@ export default async function GuidePage({ params }: { params: Promise<{ slug: st
   ]);
   const apiUrl = (integrations.api_url || process.env.PUBLIC_API_URL || 'http://localhost:8080').replace(/\/$/, '');
   const mcpUrl = integrations.mcp_url || `${apiUrl}/mcp`;
-  const steps = stepsFor(slug, apiUrl, mcpUrl, settings, integrations.github.install_url || '#');
+  const steps = stepsFor(slug, apiUrl, mcpUrl, settings, integrations.github.install_url || '#', publicUrl.replace(/\/$/, ''));
 
   return (
     <>

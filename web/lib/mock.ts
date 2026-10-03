@@ -167,6 +167,10 @@ let policy: T.Policy = {
     license: { deny: [], enabled: true, blocking_severity: 'high' },
     popularity: { enabled: false, min_stars: 10 },
     maintenance: { enabled: true, min_scorecard: 3 },
+    packages: [
+      { ecosystem: 'npm', name: 'lodash', versions: '>=4.17.21', reason: 'security baseline' },
+      { name: 'request', deny: true, reason: 'deprecated, use undici' },
+    ],
     suspicious: { typosquat: true, unmaintained: true, unmaintained_months: 24, deprecated: true, new_package: true, no_source_repo: false, unusual_behaviour: true, blocking: ['typosquat', 'unusual-behaviour'] },
   },
   custom: [{ name: 'no-install-scripts', category: 'malware', summary: 'Block packages that run install scripts', expr: 'pkg.ecosystem == "npm" && pkg.name.startsWith("evil-")' }],
@@ -380,6 +384,9 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       ], q);
     case 'GET /endpoints/:/package-events':
       return paginate<T.PackageEvent>([
+        { id: 3, ts: iso(0), event_type: 'guard.block', package_name: null, version: null, ecosystem: 'npm', message: 'npm install: block (1 package with findings of 1 checked)', details: { command: 'npm install lodash@4.17.15', dir: 'web', reason: '' } },
+        { id: 4, ts: iso(0), event_type: 'guard.package.block', package_name: 'lodash', version: '4.17.15', ecosystem: 'npm', message: 'lodash 4.17.15 is outside the allowed versions >=4.17.21. Reason: security baseline', details: { rules: ['version-not-allowed', 'vulnerability-high-or-higher'] } },
+        { id: 5, ts: iso(0), event_type: 'guard.override', package_name: null, version: null, ecosystem: 'pypi', message: 'pip install: override (1 package with findings of 12 checked)', details: { command: 'pip install django==3.2', reason: 'legacy app, upgrade tracked in JIRA-42' } },
         { id: 1, ts: iso(0), event_type: 'install_allowed', package_name: 'express', version: '5.1.0', ecosystem: 'npm' },
         { id: 2, ts: iso(0), event_type: 'malware_blocked', package_name: 'event-stream-lite', version: '1.0.2', ecosystem: 'npm' },
       ], q);

@@ -260,9 +260,12 @@ export type Policy = {
     popularity: { enabled: boolean; min_stars: number };
     maintenance: { enabled: boolean; min_scorecard: number };
     suspicious?: SuspiciousPreset;
+    packages?: PackageRule[];
   };
   custom: CustomRule[];
 };
+/** Package & version rule: banned package, allowed version range (min/max) or trusted package. */
+export type PackageRule = { ecosystem?: string; name: string; versions?: string; deny?: boolean; allow?: boolean; reason?: string; severity?: Severity };
 export type SuspiciousPreset = {
   typosquat: boolean;
   unmaintained: boolean;
@@ -299,9 +302,11 @@ export type PackageEvent = {
   id: number;
   ts: string;
   event_type: string;
-  package_name: string;
-  version: string;
-  ecosystem: string;
+  package_name: string | null;
+  version: string | null;
+  ecosystem: string | null;
+  message?: string | null;
+  details?: Record<string, unknown>;
 };
 export type AgentEvent = {
   id: string;

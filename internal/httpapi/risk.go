@@ -253,6 +253,7 @@ JOIN components c ON c.id = g.component_id`, pvID, scanID)
 	if err := erows.Err(); err != nil {
 		return nil, err
 	}
+	ix := newPathIndex(parents)
 	resp := &graphResp{Source: "lockfile", Nodes: []*pathNode{}, Edges: []pathEdge{}, Paths: []render.PathItem{}}
 	switch {
 	case nEdges == 0:
@@ -269,11 +270,12 @@ JOIN components c ON c.id = g.component_id`, pvID, scanID)
 		if advisory != "" && !slices.ContainsFunc(n.advs, func(v render.Vuln) bool { return v.ID == advisory }) {
 			continue
 		}
-		chains := findPaths(parents, id, maxPathsPerItem)
+		chains := ix.paths(id, maxPathsPerItem)
 		approxAll := false
 		if len(chains) == 0 { // no graph for this package: show it on its own
 			chains, approxAll = [][]string{{id}}, n.Direct == nil || !*n.Direct
 		}
+		unknownDepth := approxAll // not in the graph and not known to be direct
 		for _, ch := range chains {
 			approx := approxAll
 			chain := make([]render.PathNode, len(ch))
@@ -286,7 +288,11 @@ JOIN components c ON c.id = g.component_id`, pvID, scanID)
 				}
 				approx = approx || depsdev[[2]string{parent, cid}]
 			}
-			resp.Paths = append(resp.Paths, render.NewPath(chain, slices.Clone(n.advs), n.imported, n.dev, approx, n.suspSev, n.suspText))
+			item := render.NewPath(chain, slices.Clone(n.advs), n.imported, n.dev, approx, n.suspSev, n.suspText)
+			if unknownDepth {
+				item.Depth = 0
+			}
+			resp.Paths = append(resp.Paths, item)
 		}
 	}
 	render.SortPaths(resp.Paths)
@@ -332,29 +338,88 @@ func riskRank(r string) int {
 	return 4
 }
 
-// findPaths returns up to k shortest chains app→…→target (component ids, the
-// direct dependency first) by breadth-first search over parent edges.
-// ponytail: BFS over partial paths with an expansion cap; fine for lockfile
-// graphs (≤ a few thousand nodes), swap for Yen's k-shortest if it ever isn't.
-func findPaths(parents map[string][]string, target string, k int) [][]string {
-	var out [][]string
-	queue := [][]string{{target}}
-	for steps := 0; len(queue) > 0 && len(out) < k && steps < 20000; steps++ {
-		cur := queue[0]
+// pathIndex answers "chains from the app to X" for a whole version: one
+// breadth-first pass from the app gives every node's distance; each target's
+// chains are then read back along parents that are reachable from the app,
+// nearest first, so unreachable parts of the graph are never explored.
+type pathIndex struct {
+	parents map[string][]string // child -> parents ("" = the app), nearest first
+	dist    map[string]int
+}
+
+func newPathIndex(parents map[string][]string) *pathIndex {
+	children := map[string][]string{}
+	for c, ps := range parents {
+		for _, p := range ps {
+			children[p] = append(children[p], c)
+		}
+	}
+	dist := map[string]int{"": 0}
+	queue := []string{""}
+	for len(queue) > 0 {
+		n := queue[0]
 		queue = queue[1:]
-		for _, p := range parents[cur[len(cur)-1]] {
-			if p == "" {
-				ch := slices.Clone(cur)
-				slices.Reverse(ch)
-				if out = append(out, ch); len(out) == k {
-					break
-				}
-				continue
-			}
-			if !slices.Contains(cur, p) && len(cur) < 64 {
-				queue = append(queue, append(slices.Clone(cur), p))
+		for _, c := range children[n] {
+			if _, seen := dist[c]; !seen {
+				dist[c] = dist[n] + 1
+				queue = append(queue, c)
 			}
 		}
+	}
+	sorted := make(map[string][]string, len(parents))
+	for c, ps := range parents {
+		var r []string
+		for _, p := range ps {
+			if _, ok := dist[p]; ok {
+				r = append(r, p)
+			}
+		}
+		slices.SortFunc(r, func(a, b string) int {
+			if dist[a] != dist[b] {
+				return dist[a] - dist[b]
+			}
+			return strings.Compare(a, b)
+		})
+		sorted[c] = slices.Compact(r)
+	}
+	return &pathIndex{parents: sorted, dist: dist}
+}
+
+// paths returns up to k distinct chains app→…→target (component ids, the
+// direct dependency first), shortest first and at most two links longer than
+// the shortest; nil when target is not reachable from the app.
+func (ix *pathIndex) paths(target string, k int) [][]string {
+	d, ok := ix.dist[target]
+	if !ok || target == "" {
+		return nil
+	}
+	limit, steps := d+2, 0
+	var out [][]string
+	var walk func(node string, suffix []string)
+	walk = func(node string, suffix []string) {
+		if steps++; len(out) >= 4*k || steps > 4000 {
+			return
+		}
+		if node == "" {
+			ch := slices.Clone(suffix)
+			slices.Reverse(ch)
+			out = append(out, ch)
+			return
+		}
+		if len(suffix)+ix.dist[node] >= limit+1 {
+			return // cannot reach the app within the length limit
+		}
+		next := append(slices.Clone(suffix), node)
+		for _, p := range ix.parents[node] {
+			if p == "" || !slices.Contains(next, p) {
+				walk(p, next)
+			}
+		}
+	}
+	walk(target, nil)
+	slices.SortStableFunc(out, func(a, b []string) int { return len(a) - len(b) })
+	if len(out) > k {
+		out = out[:k]
 	}
 	return out
 }

@@ -168,9 +168,7 @@ func (d Deps) buildRisk(ctx context.Context, manifests []*models.PackageManifest
 	dd, _ := d.Enricher.(depsDevGrapher)
 	for _, m := range manifests {
 		p := m.GetDisplayPath()
-		if path.Base(p) == "package-lock.json" {
-			scan.AddNpmLockEdges(m, in.aux[p])
-		}
+		scan.AddLockEdges(m, p, in.aux[p])
 		siblings := map[string][]byte{}
 		for fp, b := range in.aux {
 			if path.Dir(fp) == path.Dir(p) {
