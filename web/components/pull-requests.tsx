@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Bot, Bug, CheckCircle2, ChevronRight, FileChartLine, GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft, Skull, TriangleAlert } from 'lucide-react';
 import { Pagination } from '@/components/data-table';
-import { fmtDate, fmtDateTime } from '@/lib/format';
+import { fmtDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { levelLabel } from '@/lib/pr';
 import type { PullRequest, UrgencyLevel } from '@/lib/types';
@@ -78,67 +78,71 @@ export function ago(v: string | null | undefined) {
   return fmtDate(v);
 }
 
-function Counter({ icon: Icon, n, label, cls }: { icon: typeof Bug; n: number; label: string; cls?: string }) {
+const chipTone = {
+  red: 'bg-red-500/10 text-red-700 ring-red-500/20 dark:text-red-300',
+  amber: 'bg-amber-500/10 text-amber-700 ring-amber-500/20 dark:text-amber-300',
+  orange: 'bg-orange-500/10 text-orange-700 ring-orange-500/20 dark:text-orange-300',
+};
+
+function Chip({ icon: Icon, n, label, tone }: { icon: typeof Bug; n: number; label: string; tone: keyof typeof chipTone }) {
+  if (!n) return null;
   return (
-    <span className={cn('inline-flex items-center gap-1 tabular-nums', n ? cls : 'text-muted-foreground/60')} title={`${n} ${label}`}>
+    <span className={cn('inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap ring-1', chipTone[tone])}>
       <Icon className="size-3.5" aria-hidden />
-      {n}
-      <span className="sr-only">{label}</span>
+      <span className="tabular-nums">{n.toLocaleString('en-GB')}</span> {label}
     </span>
   );
 }
 
+// "x has 3 known vulnerabilities (GHSA-…, GHSA-…)" -> "x has 3 known vulnerabilities"
+const shortReason = (t: string) => t.replace(/\s*\([^()]*\)\s*$/, '');
+
 function PRRow({ pr, showRepo }: { pr: PullRequest; showRepo: boolean }) {
   const s = pr.scan;
   const reason = pr.reasons[0]?.text ?? (pr.urgency_level === 'pending' ? 'Review in progress' : 'No issues found');
-  const scored = pr.urgency_level !== 'pending';
+  const code = pr.review?.findings ?? 0;
+  const any = s && (s.malicious || s.vulns || s.violations || code);
   return (
-    <li className="group relative flex items-center gap-4 px-4 py-3 transition-colors hover:bg-muted/40">
-      <span className={cn('flex size-12 shrink-0 flex-col items-center justify-center rounded-xl ring-1', scoreTile[pr.urgency_level])} title="Urgency: how soon this PR should be fixed">
-        <span className="text-base leading-none font-semibold tabular-nums">{scored && pr.urgency_level !== 'clean' ? pr.urgency : pr.urgency_level === 'clean' ? '✓' : '…'}</span>
-        <span className="mt-0.5 text-[9px] font-semibold tracking-wide uppercase">{levelLabel[pr.urgency_level]}</span>
+    <li className="group relative flex items-center gap-4 px-4 py-4 transition-colors hover:bg-muted/40 md:px-6">
+      <span className={cn('flex size-14 shrink-0 flex-col items-center justify-center rounded-xl ring-1', scoreTile[pr.urgency_level])} title="Urgency: how soon this PR should be fixed">
+        <span className="text-lg leading-none font-semibold tabular-nums">{pr.urgency_level === 'clean' ? '✓' : pr.urgency_level === 'pending' ? '…' : pr.urgency}</span>
+        <span className="mt-1 text-[9px] font-semibold tracking-wider uppercase">{levelLabel[pr.urgency_level]}</span>
       </span>
-      <div className="min-w-0 flex-1">
+
+      <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2">
           <PRStateIcon state={pr.state} draft={pr.draft} />
           <Link href={prHref(pr)} className="truncate font-medium outline-none after:absolute after:inset-0 group-hover:text-primary focus-visible:after:ring-2 focus-visible:after:ring-ring">
             {pr.title || `#${pr.number}`}
           </Link>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-          {showRepo && <span className="font-medium text-foreground/80">{pr.repo_full_name}</span>}
-          <span>#{pr.number}</span>
-          <span aria-hidden>·</span>
-          <span>{pr.author_login || 'unknown'}</span>
-          <span aria-hidden className="hidden sm:inline">
-            ·
-          </span>
-          <code className="hidden rounded bg-muted px-1 text-[11px] sm:inline">{pr.head_ref}</code>
+        <div className="truncate text-xs text-muted-foreground">
+          {showRepo && <span className="font-medium text-foreground/70">{pr.repo_full_name} </span>}#{pr.number} by {pr.author_login || 'unknown'}
+          <span suppressHydrationWarning> · updated {ago(pr.gh_updated_at)}</span>
         </div>
-        <div className={cn('mt-1 flex items-center gap-1.5 text-xs', pr.reasons.length ? 'text-foreground/80' : 'text-muted-foreground')}>
-          {pr.reasons.length ? <TriangleAlert className="size-3.5 shrink-0 text-amber-500" aria-hidden /> : <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" aria-hidden />}
-          <span className="truncate" title={reason}>
-            {reason}
-          </span>
-          {pr.reasons.length > 1 && <span className="shrink-0 text-muted-foreground">+{pr.reasons.length - 1}</span>}
+        <div className={cn('flex items-center gap-1.5 text-sm', pr.reasons.length ? 'text-foreground/85' : 'text-muted-foreground')} title={pr.reasons.map((r) => r.text).join('\n')}>
+          {pr.reasons.length ? <TriangleAlert className="size-4 shrink-0 text-amber-500" aria-hidden /> : <CheckCircle2 className="size-4 shrink-0 text-emerald-500" aria-hidden />}
+          <span className="truncate">{shortReason(reason)}</span>
+          {pr.reasons.length > 1 && <span className="shrink-0 text-xs text-muted-foreground">and {pr.reasons.length - 1} more</span>}
         </div>
       </div>
-      <div className="hidden shrink-0 flex-col items-end gap-1.5 md:flex">
-        {s ? (
-          <div className="flex items-center gap-3 text-xs">
-            {s.malicious > 0 && <Counter icon={Skull} n={s.malicious} label="malware" cls="font-semibold text-red-600 dark:text-red-400" />}
-            <Counter icon={Bug} n={s.vulns} label="vulnerabilities" cls="text-red-600 dark:text-red-400" />
-            <Counter icon={FileChartLine} n={s.violations} label="policy violations" cls="text-amber-600 dark:text-amber-400" />
-            <Counter icon={Bot} n={pr.review?.findings ?? 0} label="code findings" cls="text-orange-600 dark:text-orange-400" />
-          </div>
-        ) : (
+
+      <div className="hidden max-w-[17rem] shrink-0 flex-wrap justify-end gap-1.5 md:flex">
+        {!s ? (
           <span className="text-xs text-muted-foreground">Not scanned yet</span>
+        ) : any ? (
+          <>
+            <Chip icon={Skull} n={s.malicious} label="malware" tone="red" />
+            <Chip icon={Bug} n={s.vulns} label={s.vulns === 1 ? 'vuln' : 'vulns'} tone="red" />
+            <Chip icon={FileChartLine} n={s.violations} label={s.violations === 1 ? 'violation' : 'violations'} tone="amber" />
+            <Chip icon={Bot} n={code} label="code" tone="orange" />
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="size-3.5" aria-hidden /> No findings
+          </span>
         )}
-        <PRLabels labels={pr.labels.filter((l) => !l.startsWith('size/'))} max={3} />
       </div>
-      <span className="hidden w-16 shrink-0 text-right text-xs text-muted-foreground lg:block" title={fmtDateTime(pr.gh_updated_at)} suppressHydrationWarning>
-        {ago(pr.gh_updated_at)}
-      </span>
       <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
     </li>
   );
