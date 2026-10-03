@@ -112,7 +112,7 @@ try {
 
   // 4. Real scans through the CLI with that key.
   const env = { ...process.env, DEPGUARD_API_URL: API, DEPGUARD_API_KEY: key };
-  const scanDirs = [[`${ROOT}test/e2e/fixtures/e2e-app`, 'acme/e2e-app']];
+  const scanDirs = [[`${ROOT}test/e2e/fixtures/e2e-app`, 'acme/e2e-app'], [`${ROOT}test/e2e/fixtures/risk-npm`, 'acme/risk-npm'], [`${ROOT}test/e2e/fixtures/risk-python`, 'acme/risk-python']];
   if (process.env.E2E_EXTRA_PROJECT) scanDirs.push([process.env.E2E_EXTRA_PROJECT, 'extra/project']);
   for (const [dir, name] of scanDirs) {
     try { execSync(`${CLI} scan --project ${name} --version main --source github`, { cwd: dir, env, stdio: 'pipe' }); }
@@ -166,6 +166,39 @@ try {
     const href = await ep.getAttribute('href');
     for (const tab of ['inventory', 'package-events', 'agent-events']) await checkPage(owner, `${href}?tab=${tab}`, null, `endpoint-${tab}`);
   } else fail('/endpoints/[id]', 'no endpoint row link');
+
+  // Risk analysis (brief: transitive, suspicious, licenses, attack paths, report).
+  await owner.goto(`${WEB}/projects`);
+  await owner.getByText('acme/risk-npm').first().click();
+  await owner.waitForURL(/\/projects\/[^/?]+/);
+  const rp = new URL(owner.url()).pathname;
+  await checkPage(owner, `${rp}?tab=components&direct=false`, ['qs', 'Transitive'], 'risk-transitive');
+  await checkPage(owner, `${rp}?tab=paths`, ['Attack', 'qs@6.7.0', 'body-parser@1.19.0', 'lodahs'], 'risk-attack-paths');
+  const graphNodes = await owner.locator('.react-flow__node').count();
+  graphNodes > 3 ? ok('attack path graph rendered', `${graphNodes} nodes`) : fail('attack path graph rendered', `${graphNodes} nodes`);
+  await checkPage(owner, `${rp}?tab=licenses`, ['MIT', 'GPL-3.0', 'ffmpeg-static'], 'risk-licenses');
+  await checkPage(owner, '/package-analysis?view=suspicious', ['typosquat', 'lodash'], 'risk-suspicious'); // most severe first
+  await checkPage(owner, '/package-analysis?view=suspicious&rule=deprecated', ['request'], 'risk-deprecated');
+  await checkPage(owner, '/policy/violations?category=license', ['license'], 'risk-license-violations');
+  await checkPage(owner, '/dashboard', ['Transitive', 'Attack Paths', 'Suspicious', 'License'], 'risk-dashboard');
+  await owner.goto(`${WEB}/projects`);
+  await owner.getByText('acme/risk-python').first().click();
+  await owner.waitForURL(/\/projects\/[^/?]+/);
+  await checkPage(owner, `${new URL(owner.url()).pathname}?tab=paths`, ['urllib3', 'approximate'], 'risk-python-paths');
+  // Scan report page + downloads.
+  await owner.goto(`${WEB}/scans`);
+  await owner.getByRole('row', { name: /acme\/risk-npm/ }).getByText(/Open Report/i).first().click();
+  await owner.waitForURL(/\/scans\/[^/?]+/);
+  const scanPath = new URL(owner.url()).pathname;
+  await checkPage(owner, scanPath, ['qs', 'lodahs', 'ffmpeg-static'], 'risk-scan-report');
+  for (const fmt of ['md', 'json', 'html']) {
+    const r = await owner.request.get(`${WEB}/api${scanPath}/report?format=${fmt}`);
+    const body = await r.text();
+    const want = fmt === 'json' ? '"paths"' : 'Attack paths';
+    r.ok() && body.includes(want) && body.includes('lodahs') ? ok(`report download ${fmt}`, `${body.length} bytes`) : fail(`report download ${fmt}`, `HTTP ${r.status()} ${body.slice(0, 120)}`);
+  }
+  const vulnPage = '/vulnerabilities/GHSA-hrpp-h998-j3pp';
+  await checkPage(owner, vulnPage, ['body-parser@1.19.0', 'acme/risk-npm'], 'risk-vuln-paths');
 
   // Query page: run a real SQL query.
   await owner.goto(`${WEB}/query`);

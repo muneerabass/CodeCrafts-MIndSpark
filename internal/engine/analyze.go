@@ -91,6 +91,20 @@ func (d Deps) evaluate(ctx context.Context, changes []scan.Change, st settings, 
 }
 
 // countViolations counts policy violations and checker findings.
+// countSuspicious counts packages with at least one suspicious-category finding
+// (typosquat, deprecated, unmaintained…). guarddog verdicts add to it later.
+func countSuspicious(fs []*finding) (n int) {
+	for _, f := range fs {
+		for _, c := range f.checks {
+			if c.Category == scan.CategorySuspicious {
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
 func countViolations(fs []*finding) (n int) {
 	for _, f := range fs {
 		n += len(f.violations) + len(f.checks)
@@ -294,8 +308,8 @@ func persist(ctx context.Context, tx pgx.Tx, in persistIn) error {
 			WHERE id=$1 AND license_source IS DISTINCT FROM 'override'`, in.projectID, rc.detected[0], rc.detected[1])
 	}
 	b.Queue(`UPDATE scans SET status='success', error=NULL, finished_at=now(), components_count=$2, vulns_count=$3,
-		violations_count=$4, malicious_count=$5, conclusion=$6, report_md=$7 WHERE id=$1`,
-		in.scanID, len(in.findings), vulnCount, countViolations(in.findings), malCount, in.conclusion, in.reportMD)
+		violations_count=$4, malicious_count=$5, conclusion=$6, report_md=$7, suspicious_count=$8 WHERE id=$1`,
+		in.scanID, len(in.findings), vulnCount, countViolations(in.findings), malCount, in.conclusion, in.reportMD, countSuspicious(in.findings))
 	return tx.SendBatch(ctx, b).Close()
 }
 

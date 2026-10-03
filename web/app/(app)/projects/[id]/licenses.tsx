@@ -117,7 +117,7 @@ const cols: ColumnDef<LFinding, unknown>[] = [
     ),
   },
   { header: 'License', cell: ({ row }) => <span className="font-mono text-xs">{str(row.original.details.license) || '—'}</span> },
-  { header: 'Explanation', cell: ({ row }) => <span className="block max-w-xl text-sm">{str(row.original.details.explanation) || row.original.summary}</span> },
+  { header: 'Explanation', cell: ({ row }) => <span className="block max-w-xl text-sm whitespace-normal">{str(row.original.details.explanation) || row.original.summary}</span> },
 ];
 
 export function LicenseFindingsTable({ data }: { data: LFinding[] }) {

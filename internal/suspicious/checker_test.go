@@ -45,6 +45,7 @@ func TestRules(t *testing.T) {
 	cfg.NoRepo = true
 	c := &checker{cfg: cfg, now: func() time.Time { return now }}
 	old := now.AddDate(-3, 0, 0)
+	ancient := now.AddDate(-5, 0, 0)
 	recent := now.AddDate(0, -2, 0)
 
 	squat := pkg("lodahs", "1.0.0", "github.com/x/lodahs", 3, -1)
@@ -54,6 +55,7 @@ func TestRules(t *testing.T) {
 	staleUnmaintained := pkg("stale-pkg", "1.0.0", "github.com/x/s", 10, 0)
 	staleMaintained := pkg("stale-but-ok", "1.0.0", "github.com/x/s", 10, 8)
 	staleNoRepo := pkg("stale-norepo", "1.0.0", "", 0, -1)
+	ancientNoRepo := pkg("ancient-norepo", "1.0.0", "", 0, -1)
 	fresh := pkg("brand-new-pkg", "0.0.1", "github.com/x/n", 10, -1)
 
 	f := facts{
@@ -63,6 +65,7 @@ func TestRules(t *testing.T) {
 			staleUnmaintained: {Found: true, LatestPublished: &old},
 			staleMaintained:   {Found: true, LatestPublished: &old},
 			staleNoRepo:       {Found: true, LatestPublished: &old},
+			ancientNoRepo:     {Found: true, LatestPublished: &ancient},
 			fresh:             {Found: true, LatestPublished: &recent},
 		},
 		published: map[*models.Package]time.Time{fresh: now.AddDate(0, 0, -3), deprecatedVer: old},
@@ -77,7 +80,8 @@ func TestRules(t *testing.T) {
 		{deprecatedPkg, []string{RuleDeprecated}},
 		{staleUnmaintained, []string{RuleUnmaintained}},
 		{staleMaintained, nil},
-		{staleNoRepo, []string{RuleUnmaintained, RuleNoSourceRepo}},
+		{staleNoRepo, []string{RuleNoSourceRepo}}, // missing repo data alone is not evidence of abandonment
+		{ancientNoRepo, []string{RuleUnmaintained, RuleNoSourceRepo}},
 		{fresh, []string{RuleNewPackage}},
 	}
 	for _, tc := range cases {

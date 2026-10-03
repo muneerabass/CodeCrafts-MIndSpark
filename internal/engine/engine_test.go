@@ -619,7 +619,11 @@ func TestRiskAnalysisEndToEnd(t *testing.T) {
 		t.Fatalf("push violations %q", v)
 	}
 	var concl, lic, licSrc string
-	pg.Owner.QueryRow(ctx, `SELECT conclusion FROM scans WHERE trigger='push'`).Scan(&concl)
+	var suspicious int
+	pg.Owner.QueryRow(ctx, `SELECT conclusion, suspicious_count FROM scans WHERE trigger='push'`).Scan(&concl, &suspicious)
+	if suspicious != 1 {
+		t.Fatalf("push suspicious_count=%d, want 1 (typosquat finding)", suspicious)
+	}
 	pg.Owner.QueryRow(ctx, `SELECT license, license_source FROM projects WHERE name='o/r'`).Scan(&lic, &licSrc)
 	if concl != "failure" || lic != "MIT" || licSrc != "license_file" || fc.projects[0].License != "MIT" {
 		t.Fatalf("push conclusion=%s license=%s/%s checker project=%+v", concl, lic, licSrc, fc.projects)

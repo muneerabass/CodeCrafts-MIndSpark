@@ -132,6 +132,11 @@ func (c checker) Check(_ context.Context, in scan.CheckInput) ([]scan.Finding, e
 			}
 			switch t.category() {
 			case CatUnknown:
+				if strings.EqualFold(lic, "non-standard") {
+					// A license file exists but is not a recognised SPDX license: review, don't block.
+					add(RuleUnknown, scan.SeverityMedium, t, fmt.Sprintf("%s ships a license that is not a standard SPDX license (%s); review its text to confirm you may use and redistribute it.", name, lic), nil)
+					break
+				}
 				sev := scan.SeverityMedium
 				if distributed {
 					sev = scan.SeverityHigh

@@ -212,5 +212,6 @@ JOIN projects p ON p.id = v.project_id JOIN project_versions pv ON pv.id = v.pro
 		filterSpec{eq: map[string]string{"rule": "t.rule_name", "category": "t.category", "project_id": "t.project_id", "version": "t.version",
 			"severity": "t.severity"},
 			dateCol: "t.created_at"},
-		"t.created_at DESC, t.id", nil, "project_id")(w, r)
+		// Most severe first so malware/typosquats are never buried under low-severity noise.
+		"CASE t.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, t.created_at DESC, t.id", nil, "project_id")(w, r)
 }

@@ -49,7 +49,7 @@ const suspCols: ColumnDef<Violation, unknown>[] = [
   },
   { header: 'Rule', cell: ({ row }) => <Chip>{row.original.rule_name}</Chip> },
   { header: 'Severity', cell: ({ row }) => <RiskBadge risk={row.original.severity ?? 'high'} /> },
-  { header: 'Reason', cell: ({ row }) => <span className="block max-w-lg text-sm">{suspiciousReason(row.original.rule_name, row.original.details, row.original.summary)}</span> },
+  { header: 'Reason', cell: ({ row }) => <span className="block max-w-lg text-sm whitespace-normal">{suspiciousReason(row.original.rule_name, row.original.details, row.original.summary)}</span> },
   { header: 'Similar To', cell: ({ row }) => (det(row.original, 'similar_to') ? <span className="font-medium">{det(row.original, 'similar_to')}</span> : '—') },
   {
     header: 'Project',

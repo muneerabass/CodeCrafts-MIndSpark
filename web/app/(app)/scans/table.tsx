@@ -93,7 +93,7 @@ const pkgCols: ColumnDef<ScanPackage, unknown>[] = [
           </li>
         ))}
         {row.original.violations.map((v) => (
-          <li key={v.rule_name} className="text-xs text-amber-700">
+          <li key={v.rule_name} className="text-xs whitespace-normal text-amber-700">
             {v.rule_name}: {v.summary}
           </li>
         ))}

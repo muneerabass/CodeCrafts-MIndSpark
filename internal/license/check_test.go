@@ -64,7 +64,8 @@ func TestRules(t *testing.T) {
 		want                     string
 	}{
 		// license-unknown
-		{"MIT", bin, "npm", "non-standard", "license-unknown:high!"},
+		{"MIT", bin, "npm", "non-standard", "license-unknown:medium"}, // unclassified license text: review, not block
+		{"MIT", bin, "npm", "", "license-unknown:high!"},
 		{"MIT", src, "npm", "", "license-unknown:high!"},
 		{"MIT", saas, "npm", "NOASSERTION", "license-unknown:medium"},
 		{"MIT", intl, "npm", "non-standard", "license-unknown:medium"},

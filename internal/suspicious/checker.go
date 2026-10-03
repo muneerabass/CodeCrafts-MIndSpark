@@ -127,14 +127,27 @@ func (c *checker) evaluate(p *models.Package, f facts) []scan.Finding {
 	if c.cfg.Unmaintained && l != nil && l.LatestPublished != nil &&
 		l.LatestPublished.Before(c.now().AddDate(0, -c.cfg.UnmaintainedMonths, 0)) {
 		score, hasScore := maintainedScore(p)
-		if (repo == "" && p.Insights != nil) || (hasScore && score <= 1) {
+		months := int(c.now().Sub(*l.LatestPublished).Hours() / 24 / 30)
+		inactiveRepo := hasScore && score <= 1
+		noRepo := repo == "" && p.Insights != nil
+		// Require evidence of abandonment: an inactive repo (Scorecard), or no repo
+		// at all plus a very stale release. Finished, stable libraries with an
+		// active repo are not flagged; missing data alone is not evidence.
+		if inactiveRepo || (noRepo && months >= 48) {
 			d := map[string]any{"latest_published": l.LatestPublished.UTC().Format(time.RFC3339), "maintained_score": nil}
 			if hasScore {
 				d["maintained_score"] = score
 			}
-			months := int(c.now().Sub(*l.LatestPublished).Hours() / 24 / 30)
-			out = append(out, c.finding(RuleUnmaintained, scan.SeverityMedium,
-				fmt.Sprintf("No release in %d months (last %s) and no sign of maintenance", months, l.LatestPublished.Format("2006-01-02")), p, d))
+			sev := scan.SeverityLow
+			if inactiveRepo && months >= 48 {
+				sev = scan.SeverityMedium
+			}
+			why := "no recent activity in its source repository"
+			if !inactiveRepo {
+				why = "no linked source repository"
+			}
+			out = append(out, c.finding(RuleUnmaintained, sev,
+				fmt.Sprintf("No release in %d months (last %s) and %s", months, l.LatestPublished.Format("2006-01-02"), why), p, d))
 		}
 	}
 	if t, ok := f.published[p]; c.cfg.NewPackage && ok && c.now().Sub(t) < newPackage {
