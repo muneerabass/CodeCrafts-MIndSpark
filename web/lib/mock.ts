@@ -261,7 +261,9 @@ let installations: T.AdminInstallation[] = [
 
 function paginate<X>(rows: X[], q: URLSearchParams): T.List<X> {
   const page = Math.max(1, Number(q.get('page') ?? 1));
-  const size = [10, 20, 50].includes(Number(q.get('page_size'))) ? Number(q.get('page_size')) : 20;
+  // Same rule as the real API (internal/httpapi/util.go), so a bad page_size fails in tests too.
+  if (q.has('page_size') && ![10, 20, 50].includes(Number(q.get('page_size')))) throw new Error('page_size must be 10, 20 or 50');
+  const size = Number(q.get('page_size') ?? 20);
   return { items: rows.slice((page - 1) * size, page * size), total: rows.length };
 }
 

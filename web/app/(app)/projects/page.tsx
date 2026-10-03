@@ -14,7 +14,7 @@ export const metadata = { title: 'Projects' };
 export default async function ProjectsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const { role } = await requireOrg();
-  const count = (q: Record<string, string>) => api<List<Project>>('/projects', { query: { ...q, page_size: 1 } }).then((l) => l.total);
+  const count = (q: Record<string, string>) => api<List<Project>>('/projects', { query: { ...q, page_size: 10 } }).then((l) => l.total);
   const [data, total, withVulns, withViolations] = await Promise.all([
     api<List<Project>>('/projects', { query: listQuery(sp, ['name', 'source', 'from', 'to', 'has_vulns', 'has_violations']) }),
     count({}),
