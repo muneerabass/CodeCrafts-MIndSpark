@@ -155,9 +155,6 @@ func (d Deps) CheckPackages(ctx context.Context, tenant string, req CheckRequest
 
 	ectx, cancel := context.WithTimeout(ctx, checkDeadline)
 	defer cancel()
-	// The community malware lookup runs alongside enrichment.
-	mal := make(chan map[*models.Package]malysisVerdict, 1)
-	go func() { mal <- d.queryMalysis(ectx, pkgs) }()
 
 	if len(changes) > MaxCheckPackages {
 		return nil, fmt.Errorf("at most %d packages per check", MaxCheckPackages)
@@ -167,7 +164,6 @@ func (d Deps) CheckPackages(ctx context.Context, tenant string, req CheckRequest
 		return nil, err
 	}
 	extra := pkgrules.New(req.RepoRules)
-	verdicts := <-mal
 
 	res := &CheckResult{Decision: DecisionAllow, BlockMode: st.BlockMode, Checked: len(pkgs)}
 	now := time.Now()
@@ -191,25 +187,14 @@ func (d Deps) CheckPackages(ctx context.Context, tenant string, req CheckRequest
 				FixedIn: bestFix(f.pkg, f.vulns)})
 		}
 		for _, x := range f.checks {
-			v.Findings = append(v.Findings, CheckFinding{Rule: x.Rule, Category: x.Category, Severity: x.Severity, Blocking: x.Blocking, Summary: x.Summary})
+			url, _ := x.Details["report_url"].(string)
+			v.Findings = append(v.Findings, CheckFinding{Rule: x.Rule, Category: x.Category, Severity: x.Severity, Blocking: x.Blocking, Summary: x.Summary, URL: url})
 		}
 		// Repo rules (.depguard.yml) only add findings; exclusions still apply like team rules.
 		if len(scan.ApplyExclusions([]scan.Violation{{Package: f.pkg}}, st.Exclusions, now)) > 0 {
 			for _, x := range extra.Findings(f.pkg) {
 				v.Findings = append(v.Findings, CheckFinding{Rule: x.Rule, Category: x.Category, Severity: x.Severity, Blocking: x.Blocking, Summary: x.Summary + " (repo rule)"})
 			}
-		}
-		if mv, ok := verdicts[f.pkg]; ok && mv.Malware && !f.malware {
-			fnd := CheckFinding{Rule: "malware-analysis", Category: "malware", URL: mv.URL}
-			if mv.Verified {
-				malware = true
-				fnd.Severity, fnd.Blocking = scan.SeverityCritical, true
-				fnd.Summary = fmt.Sprintf("%s %s is confirmed malicious by SafeDep malware analysis.", f.pkg.GetName(), f.pkg.GetVersion())
-			} else {
-				fnd.Severity, fnd.Blocking = scan.SeverityHigh, true
-				fnd.Summary = fmt.Sprintf("%s %s was flagged as possibly malicious by SafeDep malware analysis (not yet verified).", f.pkg.GetName(), f.pkg.GetVersion())
-			}
-			v.Findings = append(v.Findings, fnd)
 		}
 		if len(v.Findings) == 0 {
 			continue
@@ -229,22 +214,6 @@ func (d Deps) CheckPackages(ctx context.Context, tenant string, req CheckRequest
 	}
 	sortVerdicts(res.Packages)
 	return res, nil
-}
-
-type malysisVerdict struct {
-	Malware, Verified bool
-	URL               string
-}
-
-func (d Deps) queryMalysis(ctx context.Context, pkgs []*models.Package) map[*models.Package]malysisVerdict {
-	out := map[*models.Package]malysisVerdict{}
-	if d.Malysis == nil {
-		return out
-	}
-	for p, v := range d.Malysis.Query(ctx, pkgs) {
-		out[p] = malysisVerdict{v.Malware, v.Verified, v.ReportURL()}
-	}
-	return out
 }
 
 func violationSummary(v scan.Violation, vulns []scan.Vuln) string {

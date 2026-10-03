@@ -16,6 +16,7 @@ import (
 	"github.com/depguard/depguard/internal/db"
 	"github.com/depguard/depguard/internal/ghapp"
 	"github.com/depguard/depguard/internal/ids"
+	"github.com/depguard/depguard/internal/llm"
 	"github.com/depguard/depguard/internal/malysis"
 	"github.com/depguard/depguard/internal/scan"
 	"github.com/jackc/pgx/v5"
@@ -56,9 +57,11 @@ type Deps struct {
 	PrioritizeGuarddog func(pkgs []*models.Package, findings []scan.Finding) []*models.Package
 	// MaxGuarddogJobs caps guarddog analyses per scan (default 25).
 	MaxGuarddogJobs int
-	// Malysis adds SafeDep's community malware verdicts to pre-install checks; nil skips it.
+	// Malysis adds SafeDep's community malware verdicts to scans and pre-install checks; nil skips it.
 	Malysis *malysis.Client
-	Logger  *slog.Logger
+	// LLM runs the AI security review of pull requests; nil or keyless disables it.
+	LLM    *llm.Client
+	Logger *slog.Logger
 }
 
 // AddWorkers registers ScanPullRequest, ScanRepository, ScanUpload,
@@ -81,6 +84,10 @@ func AddWorkers(w *river.Workers, d Deps) {
 	river.AddWorker(w, &uploadWorker{d: d})
 	river.AddWorker(w, &guarddogWorker{d: d})
 	river.AddWorker(w, &syncWorker{d: d})
+	river.AddWorker(w, &aiReviewWorker{d: d})
+	river.AddWorker(w, &refreshWorker{d: d})
+	river.AddWorker(w, &prActionWorker{d: d})
+	river.AddWorker(w, &syncAllWorker{d: d})
 }
 
 // Size limits for anything fetched from repositories.

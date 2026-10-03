@@ -67,3 +67,37 @@ func (SyncInstallation) Kind() string { return "sync_installation" }
 type CleanupScanUploads struct{}
 
 func (CleanupScanUploads) Kind() string { return "cleanup_scan_uploads" }
+
+// ReviewPullRequest runs the AI security review of a PR head commit.
+type ReviewPullRequest struct {
+	TenantID       string `json:"tenant_id"`
+	InstallationID int64  `json:"installation_id"`
+	PRID           string `json:"pr_id"`
+	HeadSHA        string `json:"head_sha"`
+}
+
+func (ReviewPullRequest) Kind() string { return "review_pull_request" }
+
+// RefreshPullRequest re-ranks a PR and re-renders its comment and labels
+// (after late results such as guarddog verdicts).
+type RefreshPullRequest struct {
+	TenantID       string `json:"tenant_id"`
+	InstallationID int64  `json:"installation_id"`
+	PRID           string `json:"pr_id"`
+}
+
+func (RefreshPullRequest) Kind() string { return "refresh_pull_request" }
+
+// PRAction performs a dashboard action on a PR (pr_activity row).
+type PRAction struct {
+	TenantID   string `json:"tenant_id"`
+	ActivityID string `json:"activity_id"`
+}
+
+func (PRAction) Kind() string { return "pr_action" }
+
+// SyncAllInstallations queues SyncInstallation for every linked installation
+// (periodic: repositories and pull requests stay right if a webhook is missed).
+type SyncAllInstallations struct{}
+
+func (SyncAllInstallations) Kind() string { return "sync_all_installations" }

@@ -192,7 +192,8 @@ func (d Deps) completeCheckRun(ctx context.Context, gh *github.Client, owner, re
 	batch := func(a []render.Annotation) []*github.CheckRunAnnotation {
 		var out []*github.CheckRunAnnotation
 		for _, x := range a {
-			out = append(out, &github.CheckRunAnnotation{Path: github.Ptr(x.Path), StartLine: github.Ptr(1), EndLine: github.Ptr(1),
+			line := max(1, x.Line)
+			out = append(out, &github.CheckRunAnnotation{Path: github.Ptr(x.Path), StartLine: github.Ptr(line), EndLine: github.Ptr(line),
 				AnnotationLevel: github.Ptr(x.Level), Title: github.Ptr(trunc(x.Title, 255)), Message: github.Ptr(trunc(x.Message, 64000))})
 		}
 		return out

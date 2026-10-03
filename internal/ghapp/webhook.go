@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/depguard/depguard/internal/db"
+	"github.com/depguard/depguard/internal/ids"
 	"github.com/depguard/depguard/internal/jobs"
+	"github.com/depguard/depguard/internal/render"
 	"github.com/google/go-github/v92/github"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -174,6 +177,8 @@ func (d Deps) dispatch(ctx context.Context, tx pgx.Tx, ev any) (string, error) {
 		return d.onPush(ctx, tx, e)
 	case *github.CheckRunEvent:
 		return d.onCheckRun(ctx, tx, e)
+	case *github.IssueCommentEvent:
+		return d.onIssueComment(ctx, tx, e)
 	}
 	return StatusIgnored, nil
 }
@@ -265,19 +270,23 @@ func linkedTenant(ctx context.Context, tx pgx.Tx, installationID int64) (tenant 
 var prActions = map[string]bool{"opened": true, "synchronize": true, "reopened": true, "ready_for_review": true}
 
 func (d Deps) onPullRequest(ctx context.Context, tx pgx.Tx, e *github.PullRequestEvent) (string, error) {
-	if !prActions[e.GetAction()] {
-		return StatusIgnored, nil
-	}
-	_, scanDrafts, ok, err := linkedTenant(ctx, tx, e.GetInstallation().GetID())
+	tenant, scanDrafts, ok, err := linkedTenant(ctx, tx, e.GetInstallation().GetID())
 	if err != nil || !ok {
 		return StatusIgnored, err
 	}
 	pr := e.GetPullRequest()
-	if pr.GetDraft() && !scanDrafts {
-		return StatusIgnored, nil
-	}
 	if err := UpsertRepo(ctx, tx, e.GetInstallation().GetID(), e.GetRepo()); err != nil {
 		return "", err
+	}
+	// Every PR event keeps the Pull Requests view current (title, draft, closed, merged).
+	if _, err := UpsertPR(ctx, tx, tenant, e.GetInstallation().GetID(), e.GetRepo(), pr); err != nil {
+		return "", err
+	}
+	if !prActions[e.GetAction()] {
+		return StatusProcessed, nil
+	}
+	if pr.GetDraft() && !scanDrafts {
+		return StatusProcessed, nil
 	}
 	return d.insert(ctx, tx, jobs.ScanPullRequest{
 		InstallationID: e.GetInstallation().GetID(),
@@ -332,5 +341,80 @@ func (d Deps) onCheckRun(ctx context.Context, tx pgx.Tx, e *github.CheckRunEvent
 		HeadSHA:        cr.GetHeadSHA(),
 		BaseRef:        pr.GetBase().GetRef(),
 		HeadRef:        pr.GetHead().GetRef(),
+	})
+}
+
+// UpsertPR records pull request metadata (webhook payload, API response or
+// backfill) in the tenant transaction and returns the pull_requests id. An
+// older payload never overwrites newer data.
+func UpsertPR(ctx context.Context, tx pgx.Tx, tenant string, installationID int64, repo *github.Repository, pr *github.PullRequest) (string, error) {
+	state := "open"
+	switch {
+	case pr.GetMerged() || pr.MergedAt != nil:
+		state = "merged"
+	case pr.GetState() == "closed":
+		state = "closed"
+	}
+	ts := func(t *github.Timestamp) *time.Time {
+		if t == nil {
+			return nil
+		}
+		v := t.Time
+		return &v
+	}
+	var id string
+	err := tx.QueryRow(ctx, `INSERT INTO pull_requests (id, tenant_id, repo_id, repo_full_name, number, title, author_login, author_avatar,
+		  html_url, state, draft, base_ref, head_ref, head_sha, base_sha, installation_id, gh_created_at, gh_updated_at, closed_at, merged_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+		ON CONFLICT (tenant_id, repo_id, number) DO UPDATE SET repo_full_name=EXCLUDED.repo_full_name, title=EXCLUDED.title,
+		  author_login=EXCLUDED.author_login, author_avatar=EXCLUDED.author_avatar, html_url=EXCLUDED.html_url, state=EXCLUDED.state,
+		  draft=EXCLUDED.draft, base_ref=EXCLUDED.base_ref, head_ref=EXCLUDED.head_ref, head_sha=EXCLUDED.head_sha, base_sha=EXCLUDED.base_sha,
+		  installation_id=EXCLUDED.installation_id, gh_created_at=EXCLUDED.gh_created_at, gh_updated_at=EXCLUDED.gh_updated_at,
+		  closed_at=EXCLUDED.closed_at, merged_at=EXCLUDED.merged_at, updated_at=now()
+		WHERE pull_requests.gh_updated_at IS NULL OR EXCLUDED.gh_updated_at IS NULL OR EXCLUDED.gh_updated_at >= pull_requests.gh_updated_at
+		RETURNING id`,
+		ids.New(), tenant, repo.GetID(), repo.GetFullName(), pr.GetNumber(), pr.GetTitle(), pr.GetUser().GetLogin(), pr.GetUser().GetAvatarURL(),
+		pr.GetHTMLURL(), state, pr.GetDraft(), pr.GetBase().GetRef(), pr.GetHead().GetRef(), pr.GetHead().GetSHA(), pr.GetBase().GetSHA(),
+		installationID, ts(pr.CreatedAt), ts(pr.UpdatedAt), ts(pr.ClosedAt), ts(pr.MergedAt)).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) { // newer data already stored
+		err = tx.QueryRow(ctx, `SELECT id FROM pull_requests WHERE tenant_id=$1 AND repo_id=$2 AND number=$3`, tenant, repo.GetID(), pr.GetNumber()).Scan(&id)
+	}
+	return id, err
+}
+
+// onIssueComment handles the "Re-run depguard review" checkbox: ticking it
+// edits our sticky comment, and we queue a fresh scan and AI review.
+func (d Deps) onIssueComment(ctx context.Context, tx pgx.Tx, e *github.IssueCommentEvent) (string, error) {
+	c := e.GetComment()
+	bot := d.Config.Slug + "[bot]"
+	if e.GetAction() != "edited" || !e.GetIssue().IsPullRequest() || c.GetUser().GetLogin() != bot ||
+		e.GetSender().GetLogin() == bot || !strings.Contains(c.GetBody(), render.Marker) || !render.RerunRequested(c.GetBody()) {
+		return StatusIgnored, nil
+	}
+	tenant, _, ok, err := linkedTenant(ctx, tx, e.GetInstallation().GetID())
+	if err != nil || !ok {
+		return StatusIgnored, err
+	}
+	var prID, head, base, baseRef, headRef string
+	var draft bool
+	err = tx.QueryRow(ctx, `SELECT id, head_sha, base_sha, base_ref, head_ref, draft FROM pull_requests
+		WHERE tenant_id=$1 AND repo_id=$2 AND number=$3 AND state='open'`, tenant, e.GetRepo().GetID(), e.GetIssue().GetNumber()).
+		Scan(&prID, &head, &base, &baseRef, &headRef, &draft)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return StatusIgnored, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE pr_reviews SET ai_status='queued', ai_note='' WHERE pr_id=$1 AND head_sha=$2`, prID, head); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO pr_activity (id, tenant_id, pr_id, actor_email, kind, body, status) VALUES ($1,$2,$3,$4,'rescan','Re-run requested from the PR comment','posted')`,
+		ids.New(), tenant, prID, "@"+e.GetSender().GetLogin()); err != nil {
+		return "", err
+	}
+	return d.insert(ctx, tx, jobs.ScanPullRequest{
+		InstallationID: e.GetInstallation().GetID(), RepoID: e.GetRepo().GetID(), RepoFullName: e.GetRepo().GetFullName(),
+		PRNumber: e.GetIssue().GetNumber(), BaseSHA: base, HeadSHA: head, BaseRef: baseRef, HeadRef: headRef, IsDraft: draft,
 	})
 }

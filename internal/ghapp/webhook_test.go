@@ -110,7 +110,8 @@ func TestWebhook(t *testing.T) {
 
 	t.Run("draft skipped", func(t *testing.T) {
 		send("pull_request", "d3", pr(2, true, "h3"))
-		if status("d3") != "ignored" || jobs("scan_pull_request") != 1 {
+		// Recorded for the Pull Requests view, but not scanned.
+		if status("d3") != "processed" || jobs("scan_pull_request") != 1 {
 			t.Fatalf("status %q jobs %d", status("d3"), jobs("scan_pull_request"))
 		}
 	})

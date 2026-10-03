@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
-const PUBLIC = ['/sign-in', '/accept-invitation', '/attributions', '/auth/callback'];
+const PUBLIC = ['/sign-in', '/accept-invitation', '/attributions', '/auth/callback', '/badges'];
 const bypass = process.env.NODE_ENV !== 'production' && process.env.E2E_AUTH_BYPASS === '1';
 
 export async function proxy(req: NextRequest) {

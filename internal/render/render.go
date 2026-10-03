@@ -319,6 +319,7 @@ func Truncate(s, fullURL string) string {
 // Annotation is a check-run annotation on a manifest file.
 type Annotation struct {
 	Path, Level, Title, Message string
+	Line                        int // 0 = first line of the file
 }
 
 // CheckRun returns the check-run title, summary (≤ MaxLen) and annotations.

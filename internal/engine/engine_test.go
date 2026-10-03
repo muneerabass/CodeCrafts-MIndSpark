@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,6 +94,7 @@ type fakeGitHub struct {
 	comments  map[int64]string // id -> body
 	created   int              // comments created
 	updated   int              // comments edited
+	labels    map[int][]string // PR -> labels
 	nextID    int64
 	tree      map[string]string // path -> blob sha of every commit's tree
 	license   string            // GET /license spdx_id; "" = 404
@@ -100,7 +102,7 @@ type fakeGitHub struct {
 
 func newFakeGitHub() *fakeGitHub {
 	return &fakeGitHub{blobs: map[string][]byte{}, baseFiles: map[string]string{}, prFiles: map[int][]map[string]string{},
-		heads: map[int]string{}, checks: map[int64]map[string]any{}, comments: map[int64]string{}, nextID: 100,
+		heads: map[int]string{}, checks: map[int64]map[string]any{}, comments: map[int64]string{}, labels: map[int][]string{}, nextID: 100,
 		tree: map[string]string{"package-lock.json": "head1", "node_modules/dep/package-lock.json": "head1", "src/main.js": "x"}}
 }
 
@@ -210,6 +212,36 @@ func (g *fakeGitHub) handler() http.Handler {
 		g.comments[id] = body["body"]
 		g.updated++
 		write(w, comment(id, body["body"]))
+	})
+	mux.HandleFunc("GET /repos/o/r/issues/{n}/labels", func(w http.ResponseWriter, r *http.Request) {
+		n, _ := strconv.Atoi(r.PathValue("n"))
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		out := []any{map[string]any{"name": "team-label"}}
+		for _, l := range g.labels[n] {
+			out = append(out, map[string]any{"name": l})
+		}
+		write(w, out)
+	})
+	mux.HandleFunc("POST /repos/o/r/labels", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		write(w, map[string]any{"name": "x"})
+	})
+	mux.HandleFunc("POST /repos/o/r/issues/{n}/labels", func(w http.ResponseWriter, r *http.Request) {
+		n, _ := strconv.Atoi(r.PathValue("n"))
+		var add []string
+		json.NewDecoder(r.Body).Decode(&add)
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		g.labels[n] = append(g.labels[n], add...)
+		write(w, []any{})
+	})
+	mux.HandleFunc("DELETE /repos/o/r/issues/{n}/labels/{name}", func(w http.ResponseWriter, r *http.Request) {
+		n, _ := strconv.Atoi(r.PathValue("n"))
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		g.labels[n] = slices.DeleteFunc(g.labels[n], func(l string) bool { return l == r.PathValue("name") })
+		write(w, []any{})
 	})
 	mux.HandleFunc("GET /repos/o/r/git/trees/{sha}", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
@@ -361,20 +393,46 @@ func TestPullRequestEndToEnd(t *testing.T) {
 	if c := lastCheck(); c["conclusion"] != "failure" || c["status"] != "completed" {
 		t.Fatalf("check run: %v", c)
 	}
-	if gh.created != 1 || gh.updated != 0 {
+	if gh.created != 1 {
 		t.Fatalf("comments created=%d updated=%d", gh.created, gh.updated)
 	}
 	var body string
 	for _, b := range gh.comments {
 		body = b
 	}
-	if !strings.Contains(body, "evil-pkg @ 1.0.0") || !strings.Contains(body, "Malware-Fail") || strings.Contains(body, "ok-pkg") {
-		t.Fatalf("comment body:\n%s", body)
+	for _, want := range []string{"evil-pkg @ 1.0.0", `alt="MALWARE: fail"`, "Remove malicious package", "npm uninstall evil-pkg",
+		"Fix before merging", "[!CAUTION]", render.RerunMarker, "/pull-requests/"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("comment body lacks %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "ok-pkg") {
+		t.Fatalf("unchanged package in comment:\n%s", body)
+	}
+	// The PR is recorded, ranked critical (malware) and labelled on GitHub, keeping the team's own label.
+	var level, prTitle string
+	var urgency int
+	var prLabels []string
+	err := pg.Owner.QueryRow(ctx, `SELECT urgency_level, urgency, labels, title FROM pull_requests WHERE repo_id=7 AND number=1`).Scan(&level, &urgency, &prLabels, &prTitle)
+	if err != nil || level != "critical" || urgency != 100 || !slices.Contains(prLabels, "malware") || !slices.Contains(prLabels, "blocked") {
+		t.Fatalf("pull_requests row: %v level=%s urgency=%d labels=%v", err, level, urgency, prLabels)
+	}
+	gh.mu.Lock()
+	ghLabels := slices.Clone(gh.labels[1])
+	gh.mu.Unlock()
+	if !slices.Contains(ghLabels, "depguard:malware") || !slices.Contains(ghLabels, "depguard:blocked") || !slices.Contains(ghLabels, "depguard:urgent") {
+		t.Fatalf("GitHub labels %v", ghLabels)
+	}
+	// Rule-based review stored for the head commit; AI review skipped (no model configured).
+	var aiStatus string
+	pg.Owner.QueryRow(ctx, `SELECT r.ai_status FROM pr_reviews r JOIN pull_requests p ON p.id=r.pr_id WHERE p.number=1 AND r.head_sha='h1'`).Scan(&aiStatus)
+	if aiStatus != "skipped" {
+		t.Fatalf("review ai_status %q", aiStatus)
 	}
 	var status, concl string
 	var mal, viol, comps int
 	var commentID *int64
-	err := pg.Owner.QueryRow(ctx, `SELECT status, conclusion, malicious_count, violations_count, components_count, comment_id FROM scans
+	err = pg.Owner.QueryRow(ctx, `SELECT status, conclusion, malicious_count, violations_count, components_count, comment_id FROM scans
 		WHERE pr_number=1 AND head_sha='h1'`).Scan(&status, &concl, &mal, &viol, &comps, &commentID)
 	if err != nil || status != "success" || concl != "failure" || mal != 1 || viol != 2 || comps != 2 || commentID == nil {
 		t.Fatalf("scan row: %v %s %s mal=%d viol=%d comps=%d", err, status, concl, mal, viol, comps)
@@ -406,9 +464,10 @@ func TestPullRequestEndToEnd(t *testing.T) {
 	}
 
 	// 2) New head SHA → same comment edited, not a new one.
+	updatedBefore := gh.updated
 	gh.setPR(1, "h2", lockFile("head2"), map[string][]byte{"head2": npmLock("ok-pkg@1.0.0", "evil-pkg@1.0.0")})
 	runPR(1, "h2")
-	if gh.created != 1 || gh.updated != 1 {
+	if gh.created != 1 || gh.updated <= updatedBefore {
 		t.Fatalf("comments created=%d updated=%d", gh.created, gh.updated)
 	}
 

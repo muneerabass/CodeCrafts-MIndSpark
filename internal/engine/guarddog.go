@@ -89,7 +89,30 @@ func (w *guarddogWorker) Work(ctx context.Context, job *river.Job[jobs.GuarddogA
 			}
 		}
 	}
-	return withTenant(ctx, d, a.TenantID, func(tx pgx.Tx) error { return recordGuarddog(ctx, tx, a, v) })
+	var prID string
+	var inst int64
+	err = withTenant(ctx, d, a.TenantID, func(tx pgx.Tx) error {
+		if err := recordGuarddog(ctx, tx, a, v); err != nil {
+			return err
+		}
+		if v.Issues == 0 {
+			return nil
+		}
+		// A suspicious package in a PR: re-rank the PR and update its comment and labels.
+		err := tx.QueryRow(ctx, `SELECT id, COALESCE(installation_id, 0) FROM pull_requests WHERE latest_scan_id=$1`, a.ScanID).Scan(&prID, &inst)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	})
+	if err != nil || prID == "" {
+		return err
+	}
+	if err := d.enqueue(ctx, jobs.RefreshPullRequest{TenantID: a.TenantID, InstallationID: inst, PRID: prID},
+		&river.InsertOpts{MaxAttempts: 5}); err != nil {
+		d.Logger.Warn("enqueue PR refresh after guarddog", "pr", prID, "err", err)
+	}
+	return nil
 }
 
 func loadGuarddogVerdict(ctx context.Context, d Deps, a jobs.GuarddogAnalyze) (*guarddogVerdict, error) {

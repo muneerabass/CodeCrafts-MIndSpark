@@ -82,6 +82,7 @@ func (d Deps) evaluate(ctx context.Context, changes []scan.Change, st settings, 
 		out = append(out, f)
 	}
 	d.runCheckers(ctx, out, st, rc)
+	d.malwareAnalysis(ctx, out, st)
 	for _, f := range out {
 		for _, c := range f.checks {
 			f.risky = f.risky || c.Category == scan.CategoryLicense
@@ -366,5 +367,44 @@ func (d Deps) finishScan(ctx context.Context, tenant, scanID, status string, cau
 	})
 	if err != nil {
 		d.Logger.Error("update scan status", "scan", scanID, "err", err)
+	}
+}
+
+// malwareAnalysis adds SafeDep's malware analysis verdicts (beyond the OSV
+// MAL- feed): confirmed malware is malware; an unconfirmed detection is a
+// blocking suspicious finding. Exclusions never hide confirmed malware.
+func (d Deps) malwareAnalysis(ctx context.Context, fs []*finding, st settings) {
+	if d.Malysis == nil || len(fs) == 0 {
+		return
+	}
+	pkgs := make([]*models.Package, 0, len(fs))
+	for _, f := range fs {
+		if !f.malware {
+			pkgs = append(pkgs, f.pkg)
+		}
+	}
+	mctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	verdicts := d.Malysis.Query(mctx, pkgs)
+	now := time.Now()
+	for _, f := range fs {
+		v, ok := verdicts[f.pkg]
+		if !ok || !v.Malware {
+			continue
+		}
+		details := map[string]any{"report_url": v.ReportURL(), "verified": v.Verified, "source": "safedep-malysis"}
+		if v.Verified {
+			f.malware = true
+			f.checks = append(f.checks, scan.Finding{Rule: "malware-analysis", Category: "malware", Severity: scan.SeverityCritical, Blocking: true,
+				Package: f.pkg, Details: details,
+				Summary: fmt.Sprintf("%s %s is confirmed malicious by SafeDep malware analysis.", f.pkg.GetName(), f.pkg.GetVersion())})
+			continue
+		}
+		if len(scan.ApplyExclusions([]scan.Violation{{Package: f.pkg}}, st.Exclusions, now)) == 0 {
+			continue // an accepted risk
+		}
+		f.checks = append(f.checks, scan.Finding{Rule: "possible-malware", Category: scan.CategorySuspicious, Severity: scan.SeverityHigh, Blocking: true,
+			Package: f.pkg, Details: details,
+			Summary: fmt.Sprintf("%s %s was flagged as possibly malicious by SafeDep malware analysis (not yet confirmed).", f.pkg.GetName(), f.pkg.GetVersion())})
 	}
 }

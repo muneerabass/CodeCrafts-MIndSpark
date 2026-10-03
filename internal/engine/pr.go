@@ -2,14 +2,17 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/depguard/depguard/internal/db"
+	"github.com/depguard/depguard/internal/ghapp"
 	"github.com/depguard/depguard/internal/ids"
 	"github.com/depguard/depguard/internal/jobs"
+	"github.com/depguard/depguard/internal/prsettings"
 	"github.com/depguard/depguard/internal/render"
 	"github.com/depguard/depguard/internal/scan"
 	"github.com/google/go-github/v92/github"
@@ -232,35 +235,89 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 			"A newer commit was pushed; see the check run for the latest commit.", nil)
 	}
 
+	// Record the PR (metadata, head) and run the rule-based security review of its diff.
+	var prID string
+	var ps prsettings.Settings
+	if err := withTenant(ctx, d, s.tenant, func(tx pgx.Tx) error {
+		var err error
+		ps = loadPRSettings(ctx, tx)
+		prID, err = ghapp.UpsertPR(ctx, tx, s.tenant, a.InstallationID, &github.Repository{ID: github.Ptr(a.RepoID), FullName: github.Ptr(a.RepoFullName)}, pr)
+		return err
+	}); err != nil {
+		return fmt.Errorf("record PR: %w", err)
+	}
+	diffFiles, err := prFiles(ctx, gh, s.owner, s.repo, a.PRNumber)
+	if err != nil {
+		return fmt.Errorf("list PR diff: %w", err)
+	}
+	aiOn := ps.AIReview.Enabled && d.LLM.Enabled()
+	aiNote := ""
+	switch {
+	case !ps.AIReview.Enabled:
+		aiNote = "turned off in Settings → Pull requests"
+	case !d.LLM.Enabled():
+		aiNote = "no AI model is configured on the server"
+	}
+	rv, err := d.storeRulesReview(ctx, s.tenant, prID, s.scanID, a.HeadSHA, diffFiles, aiOn, aiNote)
+	if err != nil {
+		return fmt.Errorf("store review: %w", err)
+	}
+
 	concl := conclusion(findings, s.settings)
+	// Leaked secrets found by the rules fail the check like a blocking policy violation.
+	secrets := 0
+	for _, f := range rv.Findings {
+		if f.Severity == "critical" {
+			secrets++
+		}
+	}
+	if secrets > 0 && s.settings.BlockMode {
+		concl = "failure"
+	} else if secrets > 0 && concl == "success" {
+		concl = "neutral"
+	}
 	rep := d.report(s.scanID, findings, ai, noChanges, rc.project)
-	body := render.Comment(rep)
+	summary := render.Summarize(rep, concl)
 	if len(notes) > 0 {
 		d.Logger.Info("scan notes", "scan", s.scanID, "notes", notes)
 	}
 	err = withTenant(ctx, d, s.tenant, func(tx pgx.Tx) error {
-		return persist(ctx, tx, persistIn{tenant: s.tenant, projectID: s.projectID, versionID: s.versionID, scanID: s.scanID,
-			findings: findings, osvCleanRows: true, conclusion: concl, reportMD: body, risk: rc})
+		if err := persist(ctx, tx, persistIn{tenant: s.tenant, projectID: s.projectID, versionID: s.versionID, scanID: s.scanID,
+			findings: findings, osvCleanRows: true, conclusion: concl, reportMD: render.Comment(rep), risk: rc}); err != nil {
+			return err
+		}
+		sj, _ := json.Marshal(summary)
+		if _, err := tx.Exec(ctx, `UPDATE scans SET pr_summary=$2 WHERE id=$1`, s.scanID, sj); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE pull_requests SET latest_scan_id=$2, updated_at=now() WHERE id=$1`, prID, s.scanID)
+		return err
 	})
 	if err != nil {
 		return fmt.Errorf("persist: %w", err)
 	}
 
-	title, summary, anns := render.CheckRun(rep)
-	if err := d.completeCheckRun(ctx, gh, s.owner, s.repo, s.checkRunID, concl, title, summary, anns); err != nil {
+	title, checkSummary, anns := render.CheckRun(rep)
+	if secrets > 0 {
+		title = fmt.Sprintf("%s · %d critical security issue(s) found in the code", title, secrets)
+		for _, f := range rv.Findings {
+			if f.Severity == "critical" && f.Line > 0 {
+				anns = append(anns, render.Annotation{Path: f.File, Line: f.Line, Level: "failure", Title: f.Title, Message: f.Explanation + " " + f.Suggestion})
+			}
+		}
+	}
+	if err := d.completeCheckRun(ctx, gh, s.owner, s.repo, s.checkRunID, concl, title, checkSummary, anns); err != nil {
 		return fmt.Errorf("complete check run: %w", err)
 	}
 
-	commentID, err := d.upsertComment(ctx, gh, s.owner, s.repo, a.PRNumber, s.prevCommentID, body, concl == "success" && s.settings.SuppressClean)
-	if err != nil {
-		return fmt.Errorf("comment: %w", err)
+	// Rank the PR and post the comment and labels; the AI review updates them when it finishes.
+	if err := d.refreshPR(ctx, gh, s.tenant, prID); err != nil {
+		return fmt.Errorf("update PR comment: %w", err)
 	}
-	if commentID != 0 {
-		if err := withTenant(ctx, d, s.tenant, func(tx pgx.Tx) error {
-			_, err := tx.Exec(ctx, `UPDATE scans SET comment_id=$2 WHERE id=$1`, s.scanID, commentID)
-			return err
-		}); err != nil {
-			return err
+	if aiOn {
+		if err := d.enqueue(ctx, jobs.ReviewPullRequest{TenantID: s.tenant, InstallationID: a.InstallationID, PRID: prID, HeadSHA: a.HeadSHA},
+			&river.InsertOpts{MaxAttempts: 10, UniqueOpts: river.UniqueOpts{ByArgs: true}}); err != nil {
+			d.Logger.Warn("enqueue AI review", "scan", s.scanID, "err", err)
 		}
 	}
 	d.enqueueGuarddog(ctx, s.tenant, s.scanID, findings)

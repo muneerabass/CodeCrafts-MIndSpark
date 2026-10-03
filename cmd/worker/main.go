@@ -21,6 +21,8 @@ import (
 	"github.com/depguard/depguard/internal/feeds"
 	"github.com/depguard/depguard/internal/ghapp"
 	"github.com/depguard/depguard/internal/license"
+	"github.com/depguard/depguard/internal/llm"
+	"github.com/depguard/depguard/internal/malysis"
 	"github.com/depguard/depguard/internal/suspicious"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/riverqueue/river"
@@ -84,6 +86,15 @@ func run(log *slog.Logger) error {
 	})
 	guarddogJobs, _ := strconv.Atoi(os.Getenv("GUARDDOG_MAX_JOBS")) // 0 = default 25
 	workers := river.NewWorkers()
+	var mal *malysis.Client
+	if !envBool("MALYSIS_DISABLED") {
+		if mal, err = malysis.New(pool); err != nil {
+			log.Warn("malware analysis client disabled", "err", err)
+		}
+	}
+	if os.Getenv("AWS_BEARER_TOKEN_BEDROCK") == "" {
+		log.Info("AI review disabled: AWS_BEARER_TOKEN_BEDROCK is not set (rule-based PR review still runs)")
+	}
 	engine.AddWorkers(workers, engine.Deps{
 		Pool:                   pool,
 		Clients:                clients,
@@ -100,6 +111,8 @@ func run(log *slog.Logger) error {
 		},
 		PrioritizeGuarddog: suspicious.Prioritize,
 		MaxGuarddogJobs:    guarddogJobs,
+		Malysis:            mal,
+		LLM:                llm.New(os.Getenv("AWS_BEARER_TOKEN_BEDROCK"), llm.ParseTargets(os.Getenv("DEPGUARD_AI_MODELS"))),
 		Logger:             log,
 	})
 	feeds.AddWorkers(workers, pool)
@@ -109,6 +122,7 @@ func run(log *slog.Logger) error {
 	if clients != nil {
 		ghapp.AddWorkers(workers, ghcfg)
 		periodic = append(periodic, ghapp.PeriodicJobs()...)
+		periodic = append(periodic, engine.PeriodicJobs()...)
 	}
 
 	concurrency, _ := strconv.Atoi(envOr("WORKER_CONCURRENCY", "10"))

@@ -71,13 +71,13 @@ func main() {
 		Public:         *public,
 		DefaultPermissions: map[string]string{
 			"contents":        "read",
-			"pull_requests":   "read",
+			"pull_requests":   "write",
 			"checks":          "write",
 			"issues":          "write",
 			"metadata":        "read",
 			"email_addresses": "read",
 		},
-		DefaultEvents: []string{"pull_request", "push", "check_run"},
+		DefaultEvents: []string{"pull_request", "push", "check_run", "issue_comment"},
 	}
 	mj, err := json.Marshal(m)
 	if err != nil {
