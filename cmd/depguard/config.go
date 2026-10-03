@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -64,7 +65,7 @@ type rule struct {
 // projectConfig is .depguard.yml, committed to the repository.
 type projectConfig struct {
 	Project    string   `yaml:"project"`
-	APIURL     string   `yaml:"api_url,omitempty"`
+	APIURL     string   `yaml:"api_url,omitempty"` // only honoured when it matches the configured API
 	Ecosystems []string `yaml:"ecosystems,omitempty"`
 	FailClosed bool     `yaml:"fail_closed"`
 	Rules      []rule   `yaml:"rules"`
@@ -72,7 +73,8 @@ type projectConfig struct {
 	dir string // directory holding the file
 }
 
-// findProject walks up from dir to the nearest .depguard.yml (nil if none).
+// findProject walks up from dir to the nearest .depguard.yml (nil if none),
+// stopping at the git root or the home directory.
 func findProject(dir string) (*projectConfig, error) {
 	dir, _ = filepath.Abs(dir)
 	for {
@@ -86,18 +88,33 @@ func findProject(dir string) (*projectConfig, error) {
 			return &pc, nil
 		}
 		parent := filepath.Dir(dir)
-		if parent == dir {
+		if parent == dir || repoBoundary(dir) {
 			return nil, nil
 		}
 		dir = parent
 	}
 }
 
-// resolveClient picks credentials: flags > env > .depguard.yml api_url > saved login > build default.
+// repoBoundary: files above a git root or the home directory belong to someone else.
+func repoBoundary(dir string) bool {
+	home, _ := os.UserHomeDir()
+	return exists(filepath.Join(dir, ".git")) || (home != "" && filepath.Clean(home) == dir)
+}
+
+// resolveClient picks credentials: flags > env > saved login > build default.
+// A repository's .depguard.yml api_url is never trusted with the key: it only
+// matters when it matches a URL the user configured.
 func resolveClient(flagURL, flagKey string, pc *projectConfig) (*client, error) {
 	saved := loadCredentials()
-	url := firstNonEmpty(flagURL, os.Getenv("DEPGUARD_API_URL"), projURL(pc), saved.APIURL, defaultAPIURL)
+	env := os.Getenv("DEPGUARD_API_URL")
+	url := firstNonEmpty(flagURL, env, saved.APIURL, defaultAPIURL)
 	key := firstNonEmpty(flagKey, os.Getenv("DEPGUARD_API_KEY"), saved.APIKey)
+	if pc != nil && pc.APIURL != "" {
+		u := strings.TrimRight(pc.APIURL, "/")
+		if u != strings.TrimRight(saved.APIURL, "/") && u != strings.TrimRight(env, "/") && u != strings.TrimRight(defaultAPIURL, "/") {
+			fmt.Fprintf(out, "%s %s\n", brand(), yellow("! ignoring api_url "+pc.APIURL+" from "+projectFile+": not your configured API (use depguard login --api-url)"))
+		}
+	}
 	if key == "" {
 		return nil, errNotLoggedIn
 	}
@@ -109,17 +126,21 @@ func resolveClient(flagURL, flagKey string, pc *projectConfig) (*client, error) 
 
 var errNotLoggedIn = errors.New("not logged in: run `depguard login` (API key from Settings → API Keys)")
 
-func projURL(pc *projectConfig) string {
-	if pc == nil {
-		return ""
-	}
-	return pc.APIURL
-}
-
 func writeFileAtomic(path string, b []byte, mode os.FileMode) error {
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, mode); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	defer os.Remove(f.Name()) // no-op after the rename
+	_, err = f.Write(b)
+	if err == nil {
+		err = f.Chmod(mode)
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

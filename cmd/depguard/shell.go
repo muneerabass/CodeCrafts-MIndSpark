@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -49,18 +50,27 @@ func installShell() error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	// Shims only for tools installed now; `depguard setup shell` again picks up new ones.
+	var shimmed []string
 	for _, t := range guardedTools {
+		path := filepath.Join(dir, t)
+		body := fmt.Sprintf("#!/bin/sh\n# depguard install guard: checks installs, then runs the real %s.\nDG=%q\n[ -x \"$DG\" ] || DG=depguard\n"+
+			"DEPGUARD_SHIM_DEPTH=$((${DEPGUARD_SHIM_DEPTH:-0}+1)); export DEPGUARD_SHIM_DEPTH\nexec \"$DG\" %s \"$@\"\n", t, self, t)
 		if runtime.GOOS == "windows" {
-			body := fmt.Sprintf("@echo off\r\n\"%s\" %s %%*\r\n", self, t)
-			if err := os.WriteFile(filepath.Join(dir, t+".cmd"), []byte(body), 0o755); err != nil {
+			path += ".cmd"
+			body = fmt.Sprintf("@echo off\r\nrem depguard install guard: checks installs, then runs the real %s.\r\nsetlocal\r\n"+
+				"set /a DEPGUARD_SHIM_DEPTH=DEPGUARD_SHIM_DEPTH+1 >nul\r\n\"%s\" %s %%*\r\n", t, self, t)
+		}
+		if _, err := realTool(t); err != nil {
+			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 				return err
 			}
 			continue
 		}
-		body := fmt.Sprintf("#!/bin/sh\n# depguard install guard: checks installs, then runs the real %s.\nDG=%q\n[ -x \"$DG\" ] || DG=depguard\nexec \"$DG\" %s \"$@\"\n", t, self, t)
-		if err := os.WriteFile(filepath.Join(dir, t), []byte(body), 0o755); err != nil {
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 			return err
 		}
+		shimmed = append(shimmed, t)
 	}
 	var changed []string
 	for _, rc := range rcFiles(true) {
@@ -72,7 +82,7 @@ func installShell() error {
 			changed = append(changed, rc.path)
 		}
 	}
-	fmt.Fprintf(out, "%s %s installed for %s\n", brand(), green("✔ install guard"), bold(strings.Join(guardedTools, ", ")))
+	fmt.Fprintf(out, "%s %s installed for %s\n", brand(), green("✔ install guard"), bold(firstNonEmpty(strings.Join(shimmed, ", "), "no package managers found on PATH")))
 	fmt.Fprintf(out, "  shims: %s\n", dim(dir))
 	for _, c := range changed {
 		fmt.Fprintf(out, "  PATH updated in %s\n", dim(c))
@@ -193,7 +203,7 @@ func runDoctor() error {
 	}
 	fmt.Fprintf(out, "%s doctor\n\n", brand())
 	c, err := resolveClient("", "", pc)
-	ok(err == nil, "logged in ("+firstNonEmpty(os.Getenv("DEPGUARD_API_URL"), projURL(pc), saved.APIURL, defaultAPIURL)+")", "not logged in: run depguard login")
+	ok(err == nil, "logged in ("+firstNonEmpty(os.Getenv("DEPGUARD_API_URL"), saved.APIURL, defaultAPIURL)+")", "not logged in: run depguard login")
 	if err == nil {
 		var me map[string]any
 		_, e := c.do("GET", "/v1/me", "", nil, &me)
@@ -209,16 +219,27 @@ func runDoctor() error {
 	}
 	dir := shimDir()
 	onPath := false
-	for _, d := range filepath.SplitList(os.Getenv("PATH")) {
-		if a, _ := filepath.Abs(d); a == dir {
-			onPath = true
-			break
+	if dfi, err := os.Stat(dir); err == nil {
+		for _, d := range filepath.SplitList(os.Getenv("PATH")) {
+			if fi, err := os.Stat(d); err == nil && os.SameFile(fi, dfi) {
+				onPath = true
+				break
+			}
 		}
 	}
 	ok(exists(dir), "shims installed in "+dir, "shims not installed: run depguard setup shell")
 	ok(onPath, "shims are on PATH", "shims are not on PATH in this terminal: open a new terminal")
 	for _, t := range guardedTools {
-		if bin, err := realTool(t); err == nil {
+		bin, err := realTool(t)
+		if err != nil {
+			continue
+		}
+		// What the shell runs for t: the shim, unless another dir (nvm, pyenv, mise, volta) comes first.
+		first, _ := exec.LookPath(t)
+		switch {
+		case first == "" || !isShim(first):
+			fmt.Fprintf(out, "    %s %-7s → %s %s\n", red("✖"), t, dim(bin), red("not guarded: "+firstNonEmpty(first, t)+" runs first (run depguard setup shell, open a new terminal)"))
+		default:
 			fmt.Fprintf(out, "    %s %-7s → %s\n", green("•"), t, dim(bin))
 		}
 	}

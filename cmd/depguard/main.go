@@ -1,7 +1,7 @@
 // Command depguard is the depguard CLI:
 //
 //	depguard login / init / setup shell   connect this machine and project, guard installs
-//	depguard npm|pnpm|yarn|pip|uv|poetry|go|cargo ...   check an install, then run it
+//	depguard npm|npx|pnpm|yarn|pip|uv|uvx|poetry|go|cargo ...   check an install, then run it
 //	depguard check   check the project's lockfiles (CI, git hooks)
 //	depguard scan    upload lockfiles for a full scan (GitHub Actions, GitLab CI, ...)
 //	depguard agent   endpoint agent: check-in, AI tooling inventory, pmg and gryph events
@@ -78,7 +78,7 @@ func usage() {
 %s
   depguard login            connect to your team (API key from Settings → API Keys)
   depguard init             link this project (.depguard.yml) and guard installs
-  depguard setup shell      guard npm, pnpm, yarn, pip, uv, poetry, go and cargo on this machine
+  depguard setup shell      guard npm, npx, pnpm, yarn, pip, uv, uvx, poetry, go and cargo on this machine
   depguard doctor           show whether installs on this machine are guarded
 
 %s

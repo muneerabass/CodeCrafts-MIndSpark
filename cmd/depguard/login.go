@@ -61,6 +61,7 @@ func login(apiURL, apiKey string) (map[string]any, error) {
 	if err := saveCredentials(credentials{APIURL: strings.TrimRight(apiURL, "/"), APIKey: apiKey}); err != nil {
 		return nil, err
 	}
+	_ = os.Remove(guardStatePath()) // clean-check cache and endpoint id belong to the previous login
 	fmt.Fprintf(out, "%s %s to %s %s\n", brand(), green("✔ logged in"), bold(fmt.Sprint(me["domain"])), dim("("+credentialsPath()+")"))
 	return me, nil
 }
@@ -101,9 +102,6 @@ func runInit(args []string) error {
 	ecos := detectEcosystems(cwd)
 	name := firstNonEmpty(*project, gitProject(cwd), filepath.Base(cwd))
 	pc := projectConfig{Project: name, Ecosystems: ecos, Rules: []rule{}}
-	if u := loadCredentials().APIURL; u != "" && u != defaultAPIURL {
-		pc.APIURL = u
-	}
 	b, _ := yaml.Marshal(pc)
 	content := "# depguard install guard — checked before every npm/pip/go/cargo install.\n" +
 		"# Team policy (dashboard → Policy) always applies; rules here can only make it stricter.\n" +
