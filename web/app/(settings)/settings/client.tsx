@@ -34,7 +34,7 @@ import { DataTable, type ColumnDef } from '@/components/data-table';
 import { ActionButton, CopyButton, useAction } from '@/components/client';
 import { EmptyState } from '@/components/page';
 import { Ecosystem } from '@/components/icons';
-import { authClient } from '@/lib/auth-client';
+import { createClient } from '@/lib/supabase/client';
 import {
   cancelInvitation,
   createApiKey,
@@ -539,8 +539,9 @@ export function SessionButtons() {
       <Button
         variant="destructive"
         onClick={async () => {
-          const r = await authClient.signOut();
-          if (r.error) toast.error(r.error.message ?? 'Sign out failed');
+          const supabase = createClient();
+          const { error } = await supabase.auth.signOut();
+          if (error) toast.error(error.message ?? 'Sign out failed');
           else router.push('/sign-in');
         }}
       >

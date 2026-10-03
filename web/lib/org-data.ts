@@ -1,6 +1,7 @@
 import 'server-only';
 import { and, eq } from 'drizzle-orm';
 import { db, schema } from './db';
+import { supabaseAdmin } from './supabase/admin';
 import { authBypass } from './session';
 import type { Role } from './types';
 
@@ -14,13 +15,29 @@ export async function listMembers(orgId: string): Promise<MemberRow[]> {
       { id: 'm_2', userId: 'u_2', name: 'Grace Hopper', email: 'grace@acme.dev', role: 'admin', createdAt: '2026-08-12T10:00:00Z' },
       { id: 'm_3', userId: 'u_3', name: 'Alan Turing', email: 'alan@acme.dev', role: 'member', createdAt: '2026-09-02T10:00:00Z' },
     ];
-  const rows = await db
-    .select({ id: schema.member.id, userId: schema.user.id, name: schema.user.name, email: schema.user.email, role: schema.member.role, createdAt: schema.member.createdAt })
+
+  const members = await db
+    .select({ id: schema.member.id, userId: schema.member.userId, role: schema.member.role, createdAt: schema.member.createdAt })
     .from(schema.member)
-    .innerJoin(schema.user, eq(schema.member.userId, schema.user.id))
     .where(eq(schema.member.organizationId, orgId))
     .orderBy(schema.member.createdAt);
-  return rows.map((r) => ({ ...r, role: r.role as Role, createdAt: r.createdAt.toISOString() }));
+
+  const results: MemberRow[] = [];
+  for (const m of members) {
+    let name = 'Unknown';
+    let email = '';
+    try {
+      const { data } = await supabaseAdmin.auth.admin.getUserById(m.userId);
+      if (data.user) {
+        name = data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.email?.split('@')[0] || 'Unknown';
+        email = data.user.email ?? '';
+      }
+    } catch {
+      // User may have been deleted from Supabase Auth.
+    }
+    results.push({ id: m.id, userId: m.userId, name, email, role: m.role as Role, createdAt: m.createdAt.toISOString() });
+  }
+  return results;
 }
 
 export async function listInvitations(orgId: string): Promise<InvitationRow[]> {

@@ -1,16 +1,20 @@
 'use server';
 
-import { headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { unstable_rethrow } from 'next/navigation';
+import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { api } from './api';
-import { auth } from './auth';
+import { createClient } from './supabase/server';
+import { supabaseAdmin } from './supabase/admin';
+import { db, schema } from './db';
+import { sendMail } from './email';
+import { publicUrl } from './auth';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
 import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-/** Server action errors are scrubbed in production builds, so return them as values. */
 async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   try {
     return { ok: true, data: await fn() };
@@ -21,7 +25,6 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   }
 }
 
-const h = async () => ({ headers: await headers() });
 const noBypass = () => {
   if (authBypass) throw new Error('Not available in E2E bypass mode.');
 };
@@ -32,27 +35,34 @@ export const switchOrg = async (organizationId: string) =>
     noBypass();
     const ctx = await getCtx();
     if (!ctx?.orgs.some((o) => o.id === organizationId)) throw new Error('Not a member of that organization.');
-    await auth.api.setActiveOrganization({ ...(await h()), body: { organizationId } });
+    const jar = await cookies();
+    jar.set('active-org', organizationId, { path: '/', httpOnly: true, sameSite: 'lax', maxAge: 365 * 86400 });
   });
 
 export const updateProfile = async (name: string) =>
   run(async () => {
     noBypass();
-    await auth.api.updateUser({ ...(await h()), body: { name: z.string().trim().min(1, 'Name is required').max(100).parse(name) } });
+    const validated = z.string().trim().min(1, 'Name is required').max(100).parse(name);
+    const supabase = await createClient();
+    const { error } = await supabase.auth.updateUser({ data: { full_name: validated, name: validated } });
+    if (error) throw new Error(error.message);
   });
 
 export const revokeOtherSessions = async () =>
   run(async () => {
     noBypass();
-    await auth.api.revokeOtherSessions(await h());
+    const supabase = await createClient();
+    const { error } = await supabase.auth.signOut({ scope: 'others' });
+    if (error) throw new Error(error.message);
   });
 
-// ---------- tenant (Better Auth organization) ----------
+// ---------- tenant (organization) ----------
 export const updateOrgName = async (name: string) =>
   run(async () => {
     const ctx = await requireRole('admin');
     noBypass();
-    await auth.api.updateOrganization({ ...(await h()), body: { organizationId: ctx.org.id, data: { name: z.string().trim().min(2, 'Name is too short').max(80).parse(name) } } });
+    const validated = z.string().trim().min(2, 'Name is too short').max(80).parse(name);
+    await db.update(schema.organization).set({ name: validated }).where(eq(schema.organization.id, ctx.org.id));
   });
 
 const roleSchema = z.enum(['owner', 'admin', 'member']);
@@ -61,9 +71,21 @@ export const inviteMember = async (email: string, role: string) =>
   run(async () => {
     const ctx = await requireRole('owner');
     noBypass();
-    await auth.api.createInvitation({
-      ...(await h()),
-      body: { email: z.email('Enter a valid email').parse(email.trim()), role: roleSchema.parse(role), organizationId: ctx.org.id },
+    const validEmail = z.email('Enter a valid email').parse(email.trim());
+    const validRole = roleSchema.parse(role);
+    const id = crypto.randomUUID().replaceAll('-', '');
+    await db.insert(schema.invitation).values({
+      id,
+      organizationId: ctx.org.id,
+      email: validEmail.toLowerCase(),
+      role: validRole,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000),
+      inviterId: ctx.user.id,
+    });
+    await sendMail(validEmail, `You're invited to ${ctx.org.name} on depguard`, `You have been invited to join ${ctx.org.name} on depguard.`, {
+      label: 'Accept invitation',
+      url: `${publicUrl}/accept-invitation/${id}`,
     });
   });
 
@@ -71,28 +93,48 @@ export const resendInvitation = async (email: string, role: string) =>
   run(async () => {
     const ctx = await requireRole('owner');
     noBypass();
-    await auth.api.createInvitation({ ...(await h()), body: { email, role: roleSchema.parse(role), organizationId: ctx.org.id, resend: true } });
+    const validRole = roleSchema.parse(role);
+    // Cancel existing pending invitations for this email in this org, then create a new one.
+    await db
+      .update(schema.invitation)
+      .set({ status: 'cancelled' })
+      .where(and(eq(schema.invitation.organizationId, ctx.org.id), eq(schema.invitation.email, email.toLowerCase()), eq(schema.invitation.status, 'pending')));
+    const id = crypto.randomUUID().replaceAll('-', '');
+    await db.insert(schema.invitation).values({
+      id,
+      organizationId: ctx.org.id,
+      email: email.toLowerCase(),
+      role: validRole,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 7 * 86_400_000),
+      inviterId: ctx.user.id,
+    });
+    await sendMail(email, `You're invited to ${ctx.org.name} on depguard`, `You have been invited to join ${ctx.org.name} on depguard.`, {
+      label: 'Accept invitation',
+      url: `${publicUrl}/accept-invitation/${id}`,
+    });
   });
 
 export const cancelInvitation = async (invitationId: string) =>
   run(async () => {
     await requireRole('owner');
     noBypass();
-    await auth.api.cancelInvitation({ ...(await h()), body: { invitationId } });
+    await db.update(schema.invitation).set({ status: 'cancelled' }).where(eq(schema.invitation.id, invitationId));
   });
 
 export const updateMemberRole = async (memberId: string, role: string) =>
   run(async () => {
-    const ctx = await requireRole('owner');
+    await requireRole('owner');
     noBypass();
-    await auth.api.updateMemberRole({ ...(await h()), body: { memberId, role: roleSchema.parse(role), organizationId: ctx.org.id } });
+    const validRole = roleSchema.parse(role);
+    await db.update(schema.member).set({ role: validRole }).where(eq(schema.member.id, memberId));
   });
 
 export const removeMember = async (memberIdOrEmail: string) =>
   run(async () => {
-    const ctx = await requireRole('owner');
+    await requireRole('owner');
     noBypass();
-    await auth.api.removeMember({ ...(await h()), body: { memberIdOrEmail, organizationId: ctx.org.id } });
+    await db.delete(schema.member).where(eq(schema.member.id, memberIdOrEmail));
   });
 
 // ---------- Go API ----------
@@ -203,4 +245,36 @@ export const deleteQuery = async (id: string) =>
   run(async () => {
     await requireOrg();
     await api(`/queries/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  });
+
+// ---------- Accept / decline invitation ----------
+export const acceptInvitation = async (invitationId: string) =>
+  run(async () => {
+    noBypass();
+    const ctx = await getCtx();
+    if (!ctx) throw new Error('Not signed in.');
+    const [inv] = await db
+      .select()
+      .from(schema.invitation)
+      .where(and(eq(schema.invitation.id, invitationId), eq(schema.invitation.status, 'pending')))
+      .limit(1);
+    if (!inv || inv.expiresAt < new Date()) throw new Error('Invitation is no longer valid.');
+    if (inv.email.toLowerCase() !== ctx.user.email.toLowerCase()) throw new Error('This invitation is for a different email address.');
+    const memberId = crypto.randomUUID().replaceAll('-', '');
+    await db.insert(schema.member).values({
+      id: memberId,
+      organizationId: inv.organizationId,
+      userId: ctx.user.id,
+      role: inv.role ?? 'member',
+      createdAt: new Date(),
+    });
+    await db.update(schema.invitation).set({ status: 'accepted' }).where(eq(schema.invitation.id, invitationId));
+    const jar = await cookies();
+    jar.set('active-org', inv.organizationId, { path: '/', httpOnly: true, sameSite: 'lax', maxAge: 365 * 86400 });
+  });
+
+export const declineInvitation = async (invitationId: string) =>
+  run(async () => {
+    noBypass();
+    await db.update(schema.invitation).set({ status: 'rejected' }).where(eq(schema.invitation.id, invitationId));
   });

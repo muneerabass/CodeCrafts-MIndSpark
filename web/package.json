@@ -9,16 +9,20 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "auth:generate": "pnpm dlx auth@1.7.7 generate --config lib/auth.ts --output lib/auth-schema.ts -y",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
     "@tanstack/react-table": "^8.21.3",
+<<<<<<< HEAD
     "@xyflow/react": "^12.12.0",
     "better-auth": "1.7.7",
+=======
+>>>>>>> 1185366 (supabase setup and Oauth)
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "drizzle-orm": "0.45.3",

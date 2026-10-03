@@ -6,21 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GitHubIcon, GoogleIcon } from '@/components/icons';
-import { authClient } from '@/lib/auth-client';
+import { createClient } from '@/lib/supabase/client';
 
 export function SignInForm({ providers, next }: { providers: ('github' | 'google')[]; next: string }) {
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const errorCallbackURL = `/sign-in?next=${encodeURIComponent(next)}`;
 
   async function social(provider: 'github' | 'google') {
     setBusy(provider);
     setError(null);
-    const r = await authClient.signIn.social({ provider, callbackURL: next, errorCallbackURL });
-    if (r.error) {
-      setError(r.error.message ?? 'Could not start sign-in.');
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+    });
+    if (err) {
+      setError(err.message ?? 'Could not start sign-in.');
       setBusy(null);
     }
   }
@@ -29,9 +32,13 @@ export function SignInForm({ providers, next }: { providers: ('github' | 'google
     e.preventDefault();
     setBusy('email');
     setError(null);
-    const r = await authClient.signIn.magicLink({ email: email.trim(), callbackURL: next, errorCallbackURL });
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+    });
     setBusy(null);
-    if (r.error) setError(r.error.message ?? 'Could not send the link.');
+    if (err) setError(err.message ?? 'Could not send the link.');
     else setSent(true);
   }
 

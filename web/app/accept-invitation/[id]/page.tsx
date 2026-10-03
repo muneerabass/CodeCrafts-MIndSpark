@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/icons';
 import { RoleBadge } from '@/components/badges';
 import { db, schema } from '@/lib/db';
+import { supabaseAdmin } from '@/lib/supabase/admin';
 import { authBypass, getCtx } from '@/lib/session';
 import { InvitationActions } from './actions';
 
@@ -35,6 +36,15 @@ function Problem({ title, text, email }: { title: string; text: string; email?: 
   );
 }
 
+async function getInviterName(inviterId: string): Promise<string | null> {
+  try {
+    const { data } = await supabaseAdmin.auth.admin.getUserById(inviterId);
+    return data.user?.user_metadata?.full_name || data.user?.user_metadata?.name || null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function AcceptInvitationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const here = `/accept-invitation/${encodeURIComponent(id)}`;
@@ -59,8 +69,6 @@ export default async function AcceptInvitationPage({ params }: { params: Promise
       </Shell>
     );
 
-  // Read directly: tenant-owner invites are issued by a super-admin who is not a member,
-  // which Better Auth's getInvitation endpoint rejects.
   const [inv] = await db
     .select({
       email: schema.invitation.email,
@@ -68,11 +76,10 @@ export default async function AcceptInvitationPage({ params }: { params: Promise
       status: schema.invitation.status,
       expiresAt: schema.invitation.expiresAt,
       orgName: schema.organization.name,
-      inviter: schema.user.name,
+      inviterId: schema.invitation.inviterId,
     })
     .from(schema.invitation)
     .innerJoin(schema.organization, eq(schema.invitation.organizationId, schema.organization.id))
-    .leftJoin(schema.user, eq(schema.invitation.inviterId, schema.user.id))
     .where(eq(schema.invitation.id, id))
     .limit(1);
 
@@ -87,11 +94,13 @@ export default async function AcceptInvitationPage({ params }: { params: Promise
       />
     );
 
+  const inviterName = await getInviterName(inv.inviterId);
+
   return (
     <Shell>
       <h1 className="text-lg font-semibold">Join {inv.orgName} on depguard</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {inv.inviter ? `${inv.inviter} invited you` : 'You have been invited'} to join as <RoleBadge role={inv.role ?? 'member'} />
+        {inviterName ? `${inviterName} invited you` : 'You have been invited'} to join as <RoleBadge role={inv.role ?? 'member'} />
       </p>
       <InvitationActions id={id} />
     </Shell>

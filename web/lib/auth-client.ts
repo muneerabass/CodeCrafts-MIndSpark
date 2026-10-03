@@ -1,4 +1,3 @@
-import { createAuthClient } from 'better-auth/react';
-import { magicLinkClient, organizationClient } from 'better-auth/client/plugins';
+'use client';
 
-export const authClient = createAuthClient({ plugins: [organizationClient(), magicLinkClient()] });
+export { createClient as createAuthClient } from './supabase/client';

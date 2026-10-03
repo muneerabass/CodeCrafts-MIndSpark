@@ -8,7 +8,6 @@ import { SignInForm } from './form';
 
 export const metadata = { title: 'Sign in' };
 
-/** Only same-site relative paths are allowed as post-login targets. */
 const safeNext = (v: string | undefined) => (v && /^\/(?![/\\])/.test(v) ? v : '/dashboard');
 
 function errorMessage(code: string) {

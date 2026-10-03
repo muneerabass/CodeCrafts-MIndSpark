@@ -1,27 +1,45 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getSessionCookie } from 'better-auth/cookies';
+import { createServerClient } from '@supabase/ssr';
 
-const PUBLIC = ['/sign-in', '/accept-invitation', '/attributions', '/api/auth'];
+const PUBLIC = ['/sign-in', '/accept-invitation', '/attributions', '/auth/callback'];
 const bypass = process.env.NODE_ENV !== 'production' && process.env.E2E_AUTH_BYPASS === '1';
 
 export async function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   if (bypass || PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return NextResponse.next();
 
-  if (!getSessionCookie(req)) {
+  // Refresh Supabase auth tokens on every request.
+  let response = NextResponse.next({ request: req });
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    cookies: {
+      getAll() {
+        return req.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        for (const { name, value } of cookiesToSet) req.cookies.set(name, value);
+        response = NextResponse.next({ request: req });
+        for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, options);
+      },
+    },
+  });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
     const url = new URL('/sign-in', req.url);
     if (pathname !== '/') url.searchParams.set('next', pathname + search);
     return NextResponse.redirect(url);
   }
 
-  // Super-admin area: verify the session for real (cookie presence is not enough).
+  // Super-admin area.
   if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    const { auth, superadminEmails } = await import('@/lib/auth');
-    const s = await auth.api.getSession({ headers: req.headers });
-    const sa = s && (s.user.role === 'admin' || superadminEmails.includes(s.user.email.toLowerCase()));
+    const { superadminEmails } = await import('@/lib/auth');
+    const sa = user.app_metadata?.role === 'admin' || superadminEmails.includes(user.email?.toLowerCase() ?? '');
     if (!sa) return pathname.startsWith('/admin/river') ? new NextResponse('Not found', { status: 404 }) : NextResponse.redirect(new URL('/dashboard', req.url));
   }
-  return NextResponse.next();
+
+  return response;
 }
 
 export const config = {

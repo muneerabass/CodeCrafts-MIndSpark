@@ -25,10 +25,6 @@ const tenantSchema = z.object({
   ownerEmail: z.email('Enter the owner’s email'),
 });
 
-/**
- * Creates a tenant: Better Auth organization (inserted directly so the super-admin is not a member),
- * provisions it in the Go API, then invites the owner by email.
- */
 export const createTenant = async (input: z.input<typeof tenantSchema>) =>
   run(async () => {
     const ctx = await requireSA();

@@ -60,7 +60,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { GitHubIcon, Logo } from '@/components/icons';
 import { RoleBadge } from '@/components/badges';
-import { authClient } from '@/lib/auth-client';
+import { createClient } from '@/lib/supabase/client';
 import { switchOrg } from '@/lib/actions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -298,7 +298,8 @@ function UserCard({ ctx }: { ctx: SidebarCtx }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
-            await authClient.signOut();
+            const supabase = createClient();
+            await supabase.auth.signOut();
             router.push('/sign-in');
           }}
         >

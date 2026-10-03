@@ -70,11 +70,12 @@ func main() {
 		SetupURL:       *appURL + "/setup/integrations",
 		Public:         *public,
 		DefaultPermissions: map[string]string{
-			"contents":      "read",
-			"pull_requests": "read",
-			"checks":        "write",
-			"issues":        "write",
-			"metadata":      "read",
+			"contents":        "read",
+			"pull_requests":   "read",
+			"checks":          "write",
+			"issues":          "write",
+			"metadata":        "read",
+			"email_addresses": "read",
 		},
 		DefaultEvents: []string{"pull_request", "push", "check_run"},
 	}

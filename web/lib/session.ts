@@ -1,16 +1,13 @@
 import 'server-only';
 import { cache } from 'react';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
-import { auth, superadminEmails } from './auth';
+import { createClient } from './supabase/server';
+import { superadminEmails } from './auth';
 import { db, schema } from './db';
 import type { Role } from './types';
 
-/**
- * Test-only auth bypass for Playwright. Impossible in production builds: requires
- * NODE_ENV !== 'production' (next build/start always set production) AND E2E_AUTH_BYPASS=1.
- */
 export const authBypass = process.env.NODE_ENV !== 'production' && process.env.E2E_AUTH_BYPASS === '1';
 
 export type Org = { id: string; name: string; slug: string; role: Role };
@@ -26,7 +23,6 @@ export const tenantDomain = (slug: string) => `${slug}.${process.env.TENANT_DOMA
 
 export const getCtx = cache(async (): Promise<Ctx | null> => {
   if (authBypass) {
-    // Tests may pick the role / super-admin flag per browser context via cookies.
     const jar = await cookies();
     const role = (jar.get('e2e_role')?.value as Role) || (process.env.E2E_ROLE as Role) || 'owner';
     const sa = (jar.get('e2e_sa')?.value ?? process.env.E2E_SA) !== '0';
@@ -36,26 +32,37 @@ export const getCtx = cache(async (): Promise<Ctx | null> => {
     ];
     return { user: { id: 'u_mock', name: 'Ada Lovelace', email: 'ada@acme.dev', image: null }, org: orgs[0], role, sa, orgs };
   }
-  const s = await auth.api.getSession({ headers: await headers() });
-  if (!s) return null;
-  const orgs = await db
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const name = (user.user_metadata?.full_name as string) || (user.user_metadata?.name as string) || user.email?.split('@')[0] || '';
+  const email = user.email ?? '';
+  const image = (user.user_metadata?.avatar_url as string) || null;
+
+  const orgs = (await db
     .select({ id: schema.organization.id, name: schema.organization.name, slug: schema.organization.slug, role: schema.member.role })
     .from(schema.member)
     .innerJoin(schema.organization, eq(schema.member.organizationId, schema.organization.id))
-    .where(eq(schema.member.userId, s.user.id))
-    .orderBy(schema.organization.name);
-  const typed = orgs as Org[];
-  const org = typed.find((o) => o.id === s.session.activeOrganizationId) ?? typed[0] ?? null;
+    .where(eq(schema.member.userId, user.id))
+    .orderBy(schema.organization.name)) as Org[];
+
+  const jar = await cookies();
+  const activeOrgId = jar.get('active-org')?.value;
+  const org = orgs.find((o) => o.id === activeOrgId) ?? orgs[0] ?? null;
+
   return {
-    user: { id: s.user.id, name: s.user.name?.trim() || s.user.email.split('@')[0], email: s.user.email, image: s.user.image ?? null },
+    user: { id: user.id, name: name.trim() || email.split('@')[0], email, image },
     org,
     role: org?.role ?? null,
-    sa: s.user.role === 'admin' || superadminEmails.includes(s.user.email.toLowerCase()),
-    orgs: typed,
+    sa: (user.app_metadata?.role === 'admin') || superadminEmails.includes(email.toLowerCase()),
+    orgs,
   };
 });
 
-/** For pages inside the tenant app: signed in and member of an organization. */
 export async function requireOrg() {
   const ctx = await getCtx();
   if (!ctx) redirect('/sign-in');
@@ -65,7 +72,6 @@ export async function requireOrg() {
 
 export const canWrite = (role: Role | null) => role === 'owner' || role === 'admin';
 
-/** Server actions: owner/admin (or owner only) for the active organization. */
 export async function requireRole(min: 'admin' | 'owner') {
   const ctx = await requireOrg();
   if (min === 'owner' ? ctx.role !== 'owner' : !canWrite(ctx.role)) throw new Error('You do not have permission to do that.');

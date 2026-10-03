@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { authClient } from '@/lib/auth-client';
+import { acceptInvitation, declineInvitation } from '@/lib/actions';
 
 export function InvitationActions({ id }: { id: string }) {
   const router = useRouter();
@@ -14,12 +14,9 @@ export function InvitationActions({ id }: { id: string }) {
   async function act(kind: 'accept' | 'decline') {
     setBusy(kind);
     setError(null);
-    const r =
-      kind === 'accept'
-        ? await authClient.organization.acceptInvitation({ invitationId: id })
-        : await authClient.organization.rejectInvitation({ invitationId: id });
-    if (r.error) {
-      setError(r.error.message ?? 'Something went wrong.');
+    const r = kind === 'accept' ? await acceptInvitation(id) : await declineInvitation(id);
+    if (!r.ok) {
+      setError(r.error);
       setBusy(null);
       return;
     }
