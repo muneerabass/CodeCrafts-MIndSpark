@@ -1,0 +1,28 @@
+# Native deployment: services listen on localhost; Caddy terminates HTTPS.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_HOST} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy 127.0.0.1:3000
+}
+
+# Machine-facing API: GitHub webhooks, CLI/CI uploads, endpoint agent, MCP.
+# /api/v1 (web-only, service JWT) and /admin are not exposed publicly.
+{$API_HOST} {
+	encode zstd gzip
+	header -Server
+	@internal path /api/v1/* /admin/*
+	respond @internal 404
+	request_body {
+		max_size 60MB
+	}
+	reverse_proxy 127.0.0.1:8080
+}

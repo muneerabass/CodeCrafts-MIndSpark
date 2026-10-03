@@ -1,0 +1,22 @@
+[Unit]
+Description=depguard API (REST, webhooks, ingest, MCP)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+User=depguard
+Group=depguard
+EnvironmentFile=/etc/depguard/depguard.env
+Environment=HTTP_ADDR=127.0.0.1:8080
+ExecStart=/opt/depguard/bin/api
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/depguard
+
+[Install]
+WantedBy=multi-user.target

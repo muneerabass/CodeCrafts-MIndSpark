@@ -1,0 +1,8 @@
+[Unit]
+Description=depguard nightly database backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/bin/sh -c 'ts=$(date -u +%%Y%%m%%dT%%H%%M%%SZ); for db in depguard depguard_web; do pg_dump -Fc "$db" > /var/backups/depguard/$db-$ts.dump.tmp && mv /var/backups/depguard/$db-$ts.dump.tmp /var/backups/depguard/$db-$ts.dump; done; find /var/backups/depguard -name "*.dump" -mtime +14 -delete'

@@ -1,0 +1,25 @@
+# Copy to /etc/depguard/deploy.conf on the server (chmod 600). Never commit the real file.
+APP_HOST=app.example.com            # web dashboard (DNS → server IP)
+API_HOST=api.example.com            # GitHub webhooks, CLI, agents, MCP
+ACME_EMAIL=ops@example.com          # Let's Encrypt notices
+TENANT_DOMAIN_SUFFIX=example.com
+SUPERADMIN_EMAILS=you@example.com   # comma-separated platform admins
+
+# GitHub App (PR scanning). Private key goes to /etc/depguard/github-app.pem
+GITHUB_APP_ID=
+GITHUB_APP_SLUG=
+GITHUB_WEBHOOK_SECRET=
+
+# Supabase (sign-in). Dashboard → Project Settings → API
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED=1
+NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED=0
+
+# Outgoing email for team invitations (optional; without it invite links are shown but not emailed)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SMTP_FROM="depguard <no-reply@example.com>"
