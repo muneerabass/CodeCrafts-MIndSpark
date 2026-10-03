@@ -1,0 +1,11 @@
+{
+  "name": "depguard-pr-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Test fixture for the depguard pull request review (do not merge)",
+  "dependencies": {
+    "express": "4.17.1",
+    "lodash": "4.17.15",
+    "mysql": "2.18.1"
+  }
+}
