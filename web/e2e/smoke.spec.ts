@@ -113,12 +113,17 @@ for (const [path, cols] of lists) {
 
 test('reports and detail pages', async ({ page }) => {
   await page.goto('/scans/S01JB8A0000000000000000001');
+  const title = (t: string) => page.locator('[data-slot=card-title]', { hasText: t });
+  for (const t of ['Vulnerabilities by severity', 'Policy findings', 'Where vulnerabilities sit', 'Fix these first']) await expect(title(t)).toBeVisible();
+  await page.getByRole('tab', { name: /Vulnerabilities/ }).click();
+  await expect(title('Vulnerable packages')).toBeVisible();
+  await expect(title('Attack paths')).toContainText('6');
+  await expect(page.getByText('via express@4.17.1 → body-parser@1.19.0').first()).toBeVisible();
+  await page.getByRole('tab', { name: /Suspicious & licenses/ }).click();
+  for (const [t, n] of [['Suspicious packages', '5'], ['License issues', '2']]) await expect(title(t)).toContainText(n);
+  await page.getByRole('tab', { name: /All packages/ }).click();
   await expect(page.getByText('All packages (7)')).toBeVisible();
   await expect(page.getByRole('cell', { name: /event-stream-lite/ }).first()).toBeVisible();
-  const title = (t: string) => page.locator('[data-slot=card-title]', { hasText: t });
-  for (const [t, n] of [['Suspicious packages', '5'], ['License issues', '2'], ['Attack paths', '6']]) await expect(title(t)).toContainText(n);
-  for (const t of ['Vulnerabilities by severity', 'Policy findings', 'Where vulnerabilities sit', 'Fix these first', 'Vulnerable packages']) await expect(title(t)).toBeVisible();
-  await expect(page.getByText('via express@4.17.1 → body-parser@1.19.0').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save as PDF' })).toBeVisible();
   await page.getByRole('button', { name: /Download report/ }).click();
   for (const f of ['Markdown (.md)', 'JSON (.json)', 'HTML (.html)']) await expect(page.getByRole('menuitem', { name: f })).toBeVisible();

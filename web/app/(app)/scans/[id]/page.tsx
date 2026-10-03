@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import { AlertTriangle, Bug, CheckCircle2, FileChartLine, GitBranch, Hexagon, Layers, Route, Scale, ShieldAlert, ShieldX, Skull, Wrench } from 'lucide-react';
+import { AlertTriangle, Bug, CheckCircle2, FileChartLine, GitBranch, Hexagon, Layers, LayoutDashboard, Route, Scale, ShieldAlert, ShieldX, Skull, Wrench } from 'lucide-react';
 import { api, apiOr404 } from '@/lib/api';
 import { fmtDateTime, suspiciousReason, titleCase } from '@/lib/format';
 import type { Finding, PathItem, ScanDetail, ScanPackage } from '@/lib/types';
 import { Breadcrumbs } from '@/components/paths';
 import { Ecosystem } from '@/components/icons';
 import { PageHeader } from '@/components/page';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Chip, RiskBadge, ScanStatus, triggerLabel } from '@/components/badges';
 import { Markdown } from '@/components/markdown';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -197,6 +198,8 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
   const malicious = pkgs.filter((p) => p.malware);
   const blockingGroups = group(findings.filter((f) => f.blocking));
 
+  const suspiciousCount = findings.filter((f) => f.category === 'suspicious').length;
+  const licenseCount = findings.filter((f) => f.category === 'license').length;
   const v = verdict[s.conclusion] ?? null;
   const took = duration(s.created_at, s.finished_at);
 
@@ -265,184 +268,220 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
           <Kpi icon={Skull} tone="text-red-700" label="Malicious" value={s.counts.malicious} sub={s.counts.malicious ? 'remove immediately' : 'none found'} />
         </div>
 
-        {/* ---- charts */}
-        <div className="grid gap-4 md:grid-cols-3 print:grid-cols-2">
-          <ChartCard title="Vulnerabilities by severity" desc="Every advisory affecting an installed package">
-            <SeverityDonut counts={sevCounts} />
-          </ChartCard>
-          <ChartCard title="Policy findings" desc="Blocking issues fail the check; warnings do not">
-            <FindingsByCategory data={catRows} />
-          </ChartCard>
-          <ChartCard title="Where vulnerabilities sit" desc="Vulnerable packages by distance from your code">
-            <VulnsByDepth data={depthData} />
-          </ChartCard>
-        </div>
+        <Tabs defaultValue="overview" className="gap-5">
+          <TabsList className="max-w-full justify-start overflow-x-auto print:hidden [&>button]:shrink-0">
+            <TabsTrigger value="overview" className="group">
+              <LayoutDashboard /> Overview
+            </TabsTrigger>
+            <TabsTrigger value="vulns" className="group">
+              <Bug /> Vulnerabilities <TabCount n={vulnerable.length} />
+            </TabsTrigger>
+            <TabsTrigger value="findings" className="group">
+              <ShieldAlert /> Suspicious &amp; licenses <TabCount n={suspiciousCount + licenseCount} />
+            </TabsTrigger>
+            <TabsTrigger value="packages" className="group">
+              <Layers /> All packages <TabCount n={s.packages.length} />
+            </TabsTrigger>
+          </TabsList>
 
-        {/* ---- fix first */}
-        {(topFixes.length > 0 || blockingGroups.length > 0 || malicious.length > 0) && (
-          <Card className="break-inside-avoid">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Wrench className="size-4 text-primary" aria-hidden /> Fix these first
-              </CardTitle>
-              <CardDescription>The highest-risk items, ranked by severity, exploit likelihood and how directly they reach your app.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ol className="space-y-3">
-                {malicious.map((p) => (
-                  <FixItem key={pkgKey(p)} n={0} tone="red" title={`Remove ${pkgKey(p)}`} body="Known malicious package. Remove it and rotate any secrets the build environment had access to." />
-                ))}
-                {topFixes.map((p, i) => (
-                  <FixItem
-                    key={i}
-                    n={i + 1}
-                    tone={sevRank(p.risk) <= 1 ? 'red' : 'amber'}
-                    title={p.fix || `Upgrade ${p.target.name}`}
-                    body={
-                      <span className="flex flex-wrap items-center gap-2">
-                        <RiskBadge risk={p.risk} />
-                        <span>
-                          {p.advisories.length} advisor
-                          {p.advisories.length === 1 ? 'y' : 'ies'} in {p.target.name}@{p.target.version}
-                          {p.advisories.some((a) => a.kev) && <strong className="text-red-700"> · actively exploited (CISA KEV)</strong>}
-                        </span>
-                        <span className="text-muted-foreground">· risk score {p.score}</span>
-                      </span>
-                    }
-                  />
-                ))}
-                {blockingGroups.map(([rule, items], i) => (
-                  <FixItem
-                    key={rule}
-                    n={topFixes.length + i + 1}
-                    tone="amber"
-                    title={`${ruleHelp(rule).title}: ${items.length} package${items.length === 1 ? '' : 's'}`}
-                    body={`${ruleHelp(rule).action} ${items
-                      .slice(0, 4)
-                      .map((f) => f.component.name)
-                      .join(', ')}${items.length > 4 ? ` and ${items.length - 4} more` : ''}.`}
-                  />
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* ---- vulnerable packages */}
-        <Section
-          icon={Bug}
-          title="Vulnerable packages"
-          count={vulnerable.length}
-          desc="Sorted by worst severity. Transitive packages come in through another dependency."
-          empty="No known vulnerabilities in any installed package."
-        >
-          {vulnerable.length > 0 && (
-            <ShowMore
-              as="table"
-              className="w-full text-sm"
-              shown={12}
-              label="vulnerable packages"
-              head={
-                <thead className="text-left text-xs text-muted-foreground">
-                  <tr className="border-b">
-                    <th className="py-2 pr-3 font-medium">Package</th>
-                    <th className="pr-3 font-medium">Severity</th>
-                    <th className="pr-3 font-medium">Type</th>
-                    <th className="pr-3 font-medium">Advisories</th>
-                    <th className="font-medium">How to fix</th>
-                  </tr>
-                </thead>
-              }
-              rows={vulnerable.map((p) => (
-                <tr key={pkgKey(p)} className="break-inside-avoid border-b align-top last:border-0">
-                  <td className="py-2.5 pr-3">
-                    <span className="inline-flex items-center gap-1.5 font-medium">
-                      <Ecosystem name={p.component.ecosystem} /> {pkgKey(p)}
-                    </span>
-                    {p.direct === false && p.via.length > 1 && <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">via {p.via.slice(0, -1).join(' → ')}</div>}
-                  </td>
-                  <td className="pr-3">
-                    <RiskBadge risk={SEV_ORDER[worst(p)] ?? 'UNKNOWN'} />
-                  </td>
-                  <td className="pr-3 text-xs whitespace-nowrap">
-                    {p.direct ? 'Direct' : p.direct === false ? `Transitive · depth ${p.depth ?? '?'}` : 'Unknown'}
-                    {p.dev ? ' · dev' : ''}
-                  </td>
-                  <td className="pr-3">
-                    <AdvisoryCell vulns={p.vulns} />
-                  </td>
-                  <td className="text-xs text-muted-foreground">{fixFor.get(pkgKey(p)) ?? '—'}</td>
-                </tr>
-              ))}
-            />
-          )}
-        </Section>
-
-        {/* ---- attack paths */}
-        <Section
-          icon={Route}
-          title="Attack paths"
-          count={ranked.length}
-          desc="How each vulnerable package is reached from your app. Score 0–100 combines severity, exploit likelihood (EPSS/KEV), depth and whether your code imports the entry dependency."
-          empty="No attack paths: no vulnerable package is reachable from the app."
-        >
-          {ranked.length > 0 && (
-            <ShowMore
-              className="divide-y"
-              shown={10}
-              label="attack paths"
-              rows={ranked.map((p, i) => (
-                <li key={i} className="flex break-inside-avoid items-start gap-3 py-2.5 text-sm">
-                  <ScoreBar score={p.score} />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <RiskBadge risk={p.risk} />
-                      <Breadcrumbs p={p} />
-                      {p.imported === false && <Chip>not imported</Chip>}
-                      {p.dev && <Chip>dev only</Chip>}
-                      {p.approximate && <Chip>approximate</Chip>}
-                    </div>
-                    {p.fix && <p className="text-xs text-muted-foreground">{p.fix}</p>}
-                  </div>
-                </li>
-              ))}
-            />
-          )}
-        </Section>
-
-        {/* ---- suspicious + licenses */}
-        <FindingGroups
-          icon={ShieldAlert}
-          title="Suspicious packages"
-          items={findings.filter((f) => f.category === 'suspicious')}
-          empty="No suspicious packages: no lookalike names, unmaintained or deprecated packages."
-        />
-        <FindingGroups icon={Scale} title="License issues" items={findings.filter((f) => f.category === 'license')} empty="No license issues for how this project is used." />
-
-        {/* ---- full inventory (screen only) */}
-        <Card className="gap-0 overflow-hidden py-0 print:hidden">
-          <CardHeader className="border-b py-4">
-            <CardTitle className="flex items-center gap-2">
-              <Layers className="size-4 text-primary" aria-hidden /> All packages ({s.packages.length})
-            </CardTitle>
-          </CardHeader>
-          <ScanPackagesTable data={s.packages} />
-        </Card>
-
-        {s.report_md && (
-          <details className="rounded-xl border bg-card p-4 print:hidden">
-            <summary className="cursor-pointer text-sm font-medium">Pull request comment (as posted on GitHub)</summary>
-            <div className="mt-4">
-              <Markdown>{s.report_md}</Markdown>
+          <TabsContent value="overview" forceMount className={tabCls}>
+            {/* ---- charts */}
+            <div className="grid gap-4 md:grid-cols-3 print:grid-cols-2">
+              <ChartCard title="Vulnerabilities by severity" desc="Every advisory affecting an installed package">
+                <SeverityDonut counts={sevCounts} />
+              </ChartCard>
+              <ChartCard title="Policy findings" desc="Blocking issues fail the check; warnings do not">
+                <FindingsByCategory data={catRows} />
+              </ChartCard>
+              <ChartCard title="Where vulnerabilities sit" desc="Vulnerable packages by distance from your code">
+                <VulnsByDepth data={depthData} />
+              </ChartCard>
             </div>
-          </details>
-        )}
+
+            {/* ---- fix first */}
+            {(topFixes.length > 0 || blockingGroups.length > 0 || malicious.length > 0) && (
+              <Card className="break-inside-avoid">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wrench className="size-4 text-primary" aria-hidden /> Fix these first
+                  </CardTitle>
+                  <CardDescription>The highest-risk items, ranked by severity, exploit likelihood and how directly they reach your app.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ol className="space-y-3">
+                    {malicious.map((p) => (
+                      <FixItem key={pkgKey(p)} n={0} tone="red" title={`Remove ${pkgKey(p)}`} body="Known malicious package. Remove it and rotate any secrets the build environment had access to." />
+                    ))}
+                    {topFixes.map((p, i) => (
+                      <FixItem
+                        key={i}
+                        n={i + 1}
+                        tone={sevRank(p.risk) <= 1 ? 'red' : 'amber'}
+                        title={p.fix || `Upgrade ${p.target.name}`}
+                        body={
+                          <span className="flex flex-wrap items-center gap-2">
+                            <RiskBadge risk={p.risk} />
+                            <span>
+                              {p.advisories.length} advisor
+                              {p.advisories.length === 1 ? 'y' : 'ies'} in {p.target.name}@{p.target.version}
+                              {p.advisories.some((a) => a.kev) && <strong className="text-red-700"> · actively exploited (CISA KEV)</strong>}
+                            </span>
+                            <span className="text-muted-foreground">· risk score {p.score}</span>
+                          </span>
+                        }
+                      />
+                    ))}
+                    {blockingGroups.map(([rule, items], i) => (
+                      <FixItem
+                        key={rule}
+                        n={topFixes.length + i + 1}
+                        tone="amber"
+                        title={`${ruleHelp(rule).title}: ${items.length} package${items.length === 1 ? '' : 's'}`}
+                        body={`${ruleHelp(rule).action} ${items
+                          .slice(0, 4)
+                          .map((f) => f.component.name)
+                          .join(', ')}${items.length > 4 ? ` and ${items.length - 4} more` : ''}.`}
+                      />
+                    ))}
+                  </ol>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="vulns" forceMount className={tabCls}>
+            {/* ---- vulnerable packages */}
+            <Section
+              icon={Bug}
+              title="Vulnerable packages"
+              count={vulnerable.length}
+              desc="Sorted by worst severity. Transitive packages come in through another dependency."
+              empty="No known vulnerabilities in any installed package."
+            >
+              {vulnerable.length > 0 && (
+                <ShowMore
+                  as="table"
+                  className="w-full text-sm"
+                  shown={12}
+                  label="vulnerable packages"
+                  head={
+                    <thead className="text-left text-xs text-muted-foreground">
+                      <tr className="border-b">
+                        <th className="py-2 pr-3 font-medium">Package</th>
+                        <th className="pr-3 font-medium">Severity</th>
+                        <th className="pr-3 font-medium">Type</th>
+                        <th className="pr-3 font-medium">Advisories</th>
+                        <th className="font-medium">How to fix</th>
+                      </tr>
+                    </thead>
+                  }
+                  rows={vulnerable.map((p) => (
+                    <tr key={pkgKey(p)} className="break-inside-avoid border-b align-top last:border-0">
+                      <td className="py-2.5 pr-3">
+                        <span className="inline-flex items-center gap-1.5 font-medium">
+                          <Ecosystem name={p.component.ecosystem} /> {pkgKey(p)}
+                        </span>
+                        {p.direct === false && p.via.length > 1 && <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">via {p.via.slice(0, -1).join(' → ')}</div>}
+                      </td>
+                      <td className="pr-3">
+                        <RiskBadge risk={SEV_ORDER[worst(p)] ?? 'UNKNOWN'} />
+                      </td>
+                      <td className="pr-3 text-xs whitespace-nowrap">
+                        {p.direct ? 'Direct' : p.direct === false ? `Transitive · depth ${p.depth ?? '?'}` : 'Unknown'}
+                        {p.dev ? ' · dev' : ''}
+                      </td>
+                      <td className="pr-3">
+                        <AdvisoryCell vulns={p.vulns} />
+                      </td>
+                      <td className="text-xs text-muted-foreground">{fixFor.get(pkgKey(p)) ?? '—'}</td>
+                    </tr>
+                  ))}
+                />
+              )}
+            </Section>
+
+            {/* ---- attack paths */}
+            <Section
+              icon={Route}
+              title="Attack paths"
+              count={ranked.length}
+              desc="How each vulnerable package is reached from your app. Score 0–100 combines severity, exploit likelihood (EPSS/KEV), depth and whether your code imports the entry dependency."
+              empty="No attack paths: no vulnerable package is reachable from the app."
+            >
+              {ranked.length > 0 && (
+                <ShowMore
+                  className="divide-y"
+                  shown={10}
+                  label="attack paths"
+                  rows={ranked.map((p, i) => (
+                    <li key={i} className="flex break-inside-avoid items-start gap-3 py-2.5 text-sm">
+                      <ScoreBar score={p.score} />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <RiskBadge risk={p.risk} />
+                          <Breadcrumbs p={p} />
+                          {p.imported === false && <Chip>not imported</Chip>}
+                          {p.dev && <Chip>dev only</Chip>}
+                          {p.approximate && <Chip>approximate</Chip>}
+                        </div>
+                        {p.fix && <p className="text-xs text-muted-foreground">{p.fix}</p>}
+                      </div>
+                    </li>
+                  ))}
+                />
+              )}
+            </Section>
+          </TabsContent>
+
+          <TabsContent value="findings" forceMount className={tabCls}>
+            {/* ---- suspicious + licenses */}
+            <FindingGroups
+              icon={ShieldAlert}
+              title="Suspicious packages"
+              items={findings.filter((f) => f.category === 'suspicious')}
+              empty="No suspicious packages: no lookalike names, unmaintained or deprecated packages."
+            />
+            <FindingGroups icon={Scale} title="License issues" items={findings.filter((f) => f.category === 'license')} empty="No license issues for how this project is used." />
+          </TabsContent>
+
+          <TabsContent value="packages" forceMount className={cn(tabCls, 'print:!hidden')}>
+            {/* ---- full inventory (screen only) */}
+            <Card className="gap-0 overflow-hidden py-0 print:hidden">
+              <CardHeader className="border-b py-4">
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="size-4 text-primary" aria-hidden /> All packages ({s.packages.length})
+                </CardTitle>
+              </CardHeader>
+              <ScanPackagesTable data={s.packages} />
+            </Card>
+
+            {s.report_md && (
+              <details className="rounded-xl border bg-card p-4 print:hidden">
+                <summary className="cursor-pointer text-sm font-medium">Pull request comment (as posted on GitHub)</summary>
+                <div className="mt-4">
+                  <Markdown>{s.report_md}</Markdown>
+                </div>
+              </details>
+            )}
+          </TabsContent>
+        </Tabs>
 
         <p className="hidden text-center text-xs text-muted-foreground print:block">
           Generated by depguard on {fmtDateTime(new Date().toISOString())} · scan {s.id}
         </p>
       </div>
     </>
+  );
+}
+
+// Inactive tabs stay in the page (hidden) so "Save as PDF" prints every section.
+const tabCls = 'space-y-6 data-[state=inactive]:hidden print:!block print:space-y-4';
+
+function TabCount({ n }: { n: number }) {
+  return (
+    <span className="ml-1 rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground group-data-[state=active]:bg-primary/15 group-data-[state=active]:text-primary">
+      {n}
+    </span>
   );
 }
 
