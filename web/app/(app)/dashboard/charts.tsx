@@ -86,19 +86,3 @@ export function VulnsOverTime({ data }: { data: Dashboard['vulns_over_time'] }) 
     </ChartContainer>
   );
 }
-
-const topCfg = { vulns: { label: 'Vulnerabilities', color: 'var(--chart-1)' } } satisfies ChartConfig;
-export function TopProjects({ data }: { data: Dashboard['top_projects'] }) {
-  if (!data.length) return <NoData />;
-  return (
-    <ChartContainer config={topCfg} className="h-64 w-full" role="img" aria-label="Projects with the most vulnerabilities">
-      <BarChart data={data.slice(0, 8)} layout="vertical" margin={{ left: 8, right: 16 }}>
-        <CartesianGrid horizontal={false} strokeOpacity={0.5} />
-        <XAxis type="number" allowDecimals={false} {...axis} />
-        <YAxis type="category" dataKey="name" width={140} {...axis} />
-        <ChartTooltip cursor={{ fillOpacity: 0.3 }} content={<ChartTooltipContent hideIndicator />} />
-        <Bar dataKey="vulns" fill="var(--color-vulns)" radius={[0, 4, 4, 0]} maxBarSize={28} />
-      </BarChart>
-    </ChartContainer>
-  );
-}
