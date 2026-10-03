@@ -103,7 +103,7 @@ func runGuard(o guardOpts, tool string, args []string) int {
 	inv := classify(tool, args)
 	// Not an install, or already inside a checked install (lifecycle scripts, nested calls).
 	if !inv.install || os.Getenv("DEPGUARD_ACTIVE") != "" || os.Getenv("DEPGUARD_DISABLE") != "" {
-		return execTool(bin, args)
+		return o.run(bin, args)
 	}
 	cwd, _ := os.Getwd()
 	pc, err := findProject(cwd)
@@ -118,7 +118,7 @@ func runGuard(o guardOpts, tool string, args []string) int {
 			return 1
 		}
 		fmt.Fprintf(out, "%s %s %s\n", brand(), yellow("!"), dim(err.Error()+" — running "+tool+" unchecked"))
-		return execTool(bin, args)
+		return o.run(bin, args)
 	}
 
 	start := time.Now()
@@ -159,12 +159,12 @@ func runGuard(o guardOpts, tool string, args []string) int {
 	if res.key != "" && cacheHit(res.key) {
 		sp.end()
 		fmt.Fprintf(out, "%s %s %s\n", brand(), green("✔"), dim("dependencies unchanged since the last clean check"))
-		return execTool(bin, args)
+		return o.run(bin, args)
 	}
 	if len(res.req.Packages) == 0 && len(res.req.After) == 0 {
 		sp.end()
 		fmt.Fprintf(out, "%s %s %s\n", brand(), yellow("!"), dim(firstNonEmpty(res.note, "nothing to check")+" — running "+tool))
-		return execTool(bin, args)
+		return o.run(bin, args)
 	}
 	if pc != nil {
 		res.req.RepoRules = pc.Rules
@@ -179,7 +179,7 @@ func runGuard(o guardOpts, tool string, args []string) int {
 			return 1
 		}
 		fmt.Fprintf(out, "%s %s %s\n", brand(), yellow("!"), dim("check unavailable ("+firstLine(err.Error())+") — running "+tool+" unchecked"))
-		return execTool(bin, args)
+		return o.run(bin, args)
 	}
 	if o.jsonOut {
 		b, _ := json.MarshalIndent(result, "", "  ")
@@ -501,3 +501,12 @@ func notFound(err error) bool {
 }
 
 func indent(s string) string { return "  " + strings.ReplaceAll(s, "\n", "\n  ") }
+
+// run executes the real tool unless this is a dry run (check only, never install).
+func (o guardOpts) run(bin string, args []string) int {
+	if o.dryRun {
+		fmt.Fprintf(out, "  %s\n", dim("dry run: nothing was installed"))
+		return 0
+	}
+	return execTool(bin, args)
+}

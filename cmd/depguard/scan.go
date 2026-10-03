@@ -122,7 +122,8 @@ func runScan(args []string) (int, error) {
 			return 0, errors.New("--report-out must end in .md, .json or .html")
 		}
 	}
-	c, err := newClient(*apiURL, *apiKey)
+	pc, _ := findProject(*dir)
+	c, err := resolveClient(*apiURL, *apiKey, pc)
 	if err != nil {
 		return 0, err
 	}

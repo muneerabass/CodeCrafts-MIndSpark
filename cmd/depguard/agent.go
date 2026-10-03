@@ -58,7 +58,7 @@ func runAgent(args []string) error {
 	fs.BoolVar(&cfg.gryph, "gryph", true, "ship gryph agent events when gryph is on PATH")
 	fs.Parse(args)
 	var err error
-	if cfg.c, err = newClient(*apiURL, *apiKey); err != nil {
+	if cfg.c, err = resolveClient(*apiURL, *apiKey, nil); err != nil {
 		return err
 	}
 	stop := make(chan os.Signal, 1)
