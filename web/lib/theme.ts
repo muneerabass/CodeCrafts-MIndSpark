@@ -1,6 +1,6 @@
 export const THEMES = [
-  { id: 'cyber', label: 'Cyber (dark)', dark: true },
-  { id: 'classic', label: 'Classic (indigo)', dark: false },
+  { id: 'cyber', label: 'Violet (dark)', dark: true },
+  { id: 'classic', label: 'Violet (light)', dark: false },
 ] as const;
 
 export type ThemeId = (typeof THEMES)[number]['id'];
