@@ -262,3 +262,62 @@ test.describe('RBAC', () => {
     await expect(page).toHaveURL(/\/dashboard$/);
   });
 });
+
+test('pull requests: inbox, detail, actions, settings', async ({ page }) => {
+  await page.goto('/pull-requests');
+  await columns(page, ['Urgency', 'Pull Request', 'Why', 'Findings', 'Labels', 'Updated']);
+  const rows = page.locator('tbody tr');
+  await expect(rows.first()).toContainText('Add Stripe webhooks and the payments SDK');
+  await expect(rows.first()).toContainText('Critical');
+  await expect(rows.first()).toContainText('1 malware');
+  await expect(page.getByText('Bump next to 16.1')).toBeVisible();
+  await expect(page.getByText('Docs: payment flow diagram')).toHaveCount(0); // merged PRs are not in the default (open) view
+  await page.getByRole('link', { name: /Medium pull requests/ }).click();
+  await expect(page).toHaveURL(/level=medium/);
+  await expect(page.getByText('Add Stripe webhooks and the payments SDK')).toHaveCount(0);
+  await page.goto('/pull-requests?state=merged');
+  await expect(page.getByText('Docs: payment flow diagram')).toBeVisible();
+
+  // detail
+  await page.goto('/pull-requests');
+  await page.getByRole('link', { name: 'Add Stripe webhooks and the payments SDK' }).click();
+  await expect(page.getByRole('heading', { name: /Add Stripe webhooks/ })).toBeVisible();
+  await expect(page.getByText('Fix before merging — critical risk')).toBeVisible();
+  await expect(page.getByText('npm uninstall event-stream-lite')).toBeVisible();
+  await expect(page.getByText('SQL injection in /refunds', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'api/refunds.ts:42' })).toHaveAttribute('href', /github\.com\/acme\/payments-api\/blob\/a1b2c3d4e5f60718\/api\/refunds\.ts#L42/);
+  await expect(page.getByRole('link', { name: 'Open on GitHub' })).toHaveAttribute('href', 'https://github.com/acme/payments-api/pull/482');
+
+  // comment editor: preview, templates, post
+  const editor = page.getByLabel('Comment', { exact: true });
+  await page.getByRole('button', { name: 'Ask to upgrade' }).click();
+  await expect(editor).toHaveValue(/upgrade the vulnerable dependencies/);
+  await editor.fill('**Please** upgrade minimist.');
+  await page.getByRole('tab', { name: 'preview' }).click();
+  await expect(page.locator('strong', { hasText: 'Please' })).toBeVisible();
+  await page.getByRole('tab', { name: 'write' }).click();
+  await page.getByRole('button', { name: 'Post comment' }).click();
+  await expect(page.getByText('Comment queued for GitHub')).toBeVisible();
+  await expect(page.getByLabel('Activity').getByText('**Please** upgrade minimist.')).toBeVisible();
+  await page.getByRole('button', { name: 'Re-run AI review' }).click();
+  await expect(page.getByText('AI security review queued')).toBeVisible();
+
+  // project tab and dashboard card
+  await page.goto('/projects/01JB7Q3M1K8Z4XW2N5R6T9V0AA?tab=pull-requests');
+  await expect(page.getByText('Add Stripe webhooks and the payments SDK')).toBeVisible();
+  await expect(page.getByText('Bump next to 16.1')).toHaveCount(0); // another project
+  await page.goto('/dashboard');
+  await expect(page.getByLabel('Pull requests needing attention').getByText('Add Stripe webhooks and the payments SDK')).toBeVisible();
+
+  // settings
+  await page.goto('/settings/pull-requests');
+  await expect(page.getByText('AI model configured: eu-west-1/qwen.qwen3-coder-30b-a3b-v1:0.')).toBeVisible();
+  await page.getByLabel('Request changes on blocking issues').click();
+  await page.getByLabel('Header (Markdown)').fill('Security questions? Ask in **#appsec**.');
+  await expect(page.locator('strong', { hasText: '#appsec' })).toBeVisible(); // live preview
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Pull request settings saved')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Header (Markdown)')).toHaveValue('Security questions? Ask in **#appsec**.');
+  await expect(page.getByLabel('Request changes on blocking issues')).toBeChecked();
+});

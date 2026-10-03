@@ -7,6 +7,7 @@ Requires=postgresql.service
 User=depguard
 Group=depguard
 EnvironmentFile=/etc/depguard/depguard.env
+EnvironmentFile=-/etc/depguard/ai.env
 Environment=WORKER_HEALTH_ADDR=127.0.0.1:8081
 Environment=HOME=/var/lib/depguard
 Environment=PATH=/opt/depguard/guarddog/bin:/usr/bin:/bin

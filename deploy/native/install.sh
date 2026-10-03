@@ -106,7 +106,14 @@ CHECK_RUN_NAME=${CHECK_RUN_NAME:-depguard: Supply Chain Security}
 GUARDDOG_BIN=/opt/depguard/guarddog/bin/guarddog
 DEPGUARD_DATA_DIR=/var/lib/depguard
 LOG_LEVEL=info
+AI_REVIEW_CONFIGURED=$([ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ] && echo 1 || echo 0)
+DEPGUARD_AI_MODELS=${DEPGUARD_AI_MODELS:-}
 ENV
+# The Bedrock API key is read by the worker only (AI review of pull requests).
+cat > /etc/depguard/ai.env <<ENV
+AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK:-}
+ENV
+chown root:depguard /etc/depguard/ai.env; chmod 640 /etc/depguard/ai.env
 cat > /etc/depguard/web.env <<ENV
 DATABASE_URL_WEB=postgres://depguard_web:$WEB_DB_PASSWORD@$DB/depguard_web?sslmode=disable
 API_URL=http://127.0.0.1:8080

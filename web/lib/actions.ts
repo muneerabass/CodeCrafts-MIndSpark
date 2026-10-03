@@ -10,7 +10,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -168,6 +168,25 @@ export const saveSettings = async (patch: Partial<Pick<Settings, 'block_mode' | 
     await requireRole('admin');
     const current = await api<Settings>('/settings');
     return api<Settings>('/settings', { method: 'PUT', body: { ...current, ...patch } });
+  });
+
+export type PRActionKind = 'comment' | 'review' | 'rescan' | 'ai-review';
+
+/** Queues a pull request action; the worker performs it on GitHub. */
+export const prAction = async (projectId: string, number: number, action: PRActionKind, body?: string) =>
+  run(async () => {
+    await requireRole('admin');
+    if ((action === 'comment' || action === 'review') && !body?.trim()) throw new Error('Write a message first.');
+    return api<{ activity_id: string; status: string }>(`/projects/${encodeURIComponent(projectId)}/pull-requests/${number}/${action}`, {
+      method: 'POST',
+      body: body !== undefined ? { body } : {},
+    });
+  });
+
+export const savePRSettings = async (settings: PRSettings) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<PRSettingsResponse>('/settings/pr', { method: 'PUT', body: settings });
   });
 
 export const savePolicy = async (policy: Policy) =>

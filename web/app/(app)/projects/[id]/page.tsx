@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Bug, ExternalLink, FileChartLine, GitBranch, Hexagon, Route, ShieldCheck } from 'lucide-react';
 import { api, apiOr404, listQuery, one, type SearchParams } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
-import type { LicenseReport, List, PathGraph, ProjectDetail, ProjectSettings, VersionComponent, VersionScan, VersionSummary, Violation, VulnRow } from '@/lib/types';
+import type { LicenseReport, List, PathGraph, ProjectDetail, PullRequest, ProjectSettings, VersionComponent, VersionScan, VersionSummary, Violation, VulnRow } from '@/lib/types';
 import { canWrite, requireOrg } from '@/lib/session';
 import { DIRECT_OPTIONS, usageLabel } from '@/lib/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,12 +16,16 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { VersionComponentsTable, VersionScansTable, VersionSelect, VersionVulnsTable } from '../tables';
 import { ViolationsTable } from '../../policy/violations/table';
+import { PullRequestsTable } from '@/components/pull-requests';
+import { FilterBar } from '@/components/data-table';
+import { LEVELS, PR_STATE_OPTIONS, levelLabel } from '@/lib/pr';
 
 const TABS = [
   { key: 'components', label: 'Components' },
   { key: 'vulnerabilities', label: 'Vulnerabilities' },
   { key: 'violations', label: 'Violations' },
   { key: 'scans', label: 'Scans' },
+  { key: 'pull-requests', label: 'Pull Requests' },
   { key: 'paths', label: 'Attack Paths' },
   { key: 'licenses', label: 'Licenses' },
 ] as const;
@@ -63,7 +67,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
   const base = `/projects/${encodeURIComponent(id)}/versions/${encodeURIComponent(version.id)}`;
   const summary = await api<VersionSummary>(`${base}/summary`);
-  const q = listQuery(sp, ['has_vulns', 'has_violations', 'direct'], 10);
+  const q = listQuery(sp, ['has_vulns', 'has_violations', 'direct', 'state', 'level'], 10);
   const tabHref = (t: string) => `?${new URLSearchParams({ version: version.id, tab: t })}`;
 
   return (
@@ -112,6 +116,20 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 }
 
 async function TabBody({ tab, base, q, project }: { tab: string; base: string; q: Record<string, string>; project: ProjectDetail }) {
+  if (tab === 'pull-requests') {
+    const prs = await api<List<PullRequest>>(`/projects/${encodeURIComponent(project.id)}/pull-requests`, { query: q });
+    return (
+      <>
+        <FilterBar
+          filters={[
+            { type: 'select', key: 'state', label: 'State', options: PR_STATE_OPTIONS },
+            { type: 'select', key: 'level', label: 'Urgency', options: LEVELS.map((l) => ({ value: l, label: levelLabel[l] })) },
+          ]}
+        />
+        <PullRequestsTable data={prs.items} total={prs.total} showRepo={false} />
+      </>
+    );
+  }
   if (tab === 'paths') {
     const g = await api<PathGraph>(`${base}/paths`);
     if (!g.paths.length && !g.nodes.length)

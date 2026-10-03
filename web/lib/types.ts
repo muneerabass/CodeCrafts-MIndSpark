@@ -403,3 +403,65 @@ export type FailedJob = {
   errors: { error: string; at: string; attempt: number }[] | null;
   finalized_at: string | null;
 };
+
+// ---- pull requests ----
+export type UrgencyLevel = 'critical' | 'high' | 'medium' | 'low' | 'clean' | 'pending';
+export type PRReason = { kind: string; text: string; score: number };
+export type PRReviewFinding = { source: 'rules' | 'ai'; file: string; line: number; severity: Severity; category: string; title: string; explanation?: string; suggestion?: string };
+export type PullRequest = {
+  id: string;
+  repo_full_name: string;
+  number: number;
+  title: string;
+  author_login: string;
+  author_avatar: string;
+  html_url: string;
+  state: 'open' | 'closed' | 'merged';
+  draft: boolean;
+  base_ref: string;
+  head_ref: string;
+  head_sha: string;
+  latest_scan_id: string | null;
+  urgency: number;
+  urgency_level: UrgencyLevel;
+  reasons: PRReason[];
+  labels: string[];
+  gh_created_at: string | null;
+  gh_updated_at: string | null;
+  closed_at: string | null;
+  merged_at: string | null;
+  project: ProjectRef | null;
+  scan: { id: string; status: string; conclusion: string | null; vulns: number; violations: number; malicious: number; suspicious: number } | null;
+  review: { ai_status: string; findings: number; ai_risk: string } | null;
+};
+export type PRFix = { kind: string; severity: Severity; blocking: boolean; title: string; command?: string; note?: string; kev?: boolean; direct?: boolean };
+export type PRDetail = Omit<PullRequest, 'review'> & {
+  summary: { scan_id: string; no_changes: boolean; conclusion: string; checks: Record<string, string>; fixes: PRFix[] | null; packages: number; labels: string[] | null } | null;
+  review: {
+    head_sha: string;
+    findings: PRReviewFinding[];
+    labels: string[];
+    files_reviewed: number;
+    truncated: boolean;
+    ai_status: 'queued' | 'running' | 'done' | 'skipped' | 'rate_limited' | 'failed';
+    ai_note: string;
+    ai_model: string;
+    ai_summary: string;
+    ai_risk: string;
+    updated_at: string;
+  } | null;
+  history: { id: string; head_sha: string; status: string; conclusion: string | null; vulns: number; violations: number; malicious: number; created_at: string }[];
+  activity: { id: string; kind: string; body: string; status: 'queued' | 'posted' | 'failed'; actor: string; error: string; created_at: string }[];
+};
+export type PRSummaryCounts = { open: number; by_level: Record<UrgencyLevel, number>; merged_with_issues: number };
+export type PRSettings = {
+  comment_mode: 'always' | 'issues' | 'never';
+  sections: Record<string, boolean>;
+  request_changes_on_block: boolean;
+  mention_author_on_block: boolean;
+  header: string;
+  footer: string;
+  labels: { enabled: boolean; prefix: string };
+  ai_review: { enabled: boolean; max_diff_kb: number };
+};
+export type PRSettingsResponse = { settings: PRSettings; ai_configured: boolean; ai_models: string };

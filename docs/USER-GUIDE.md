@@ -78,6 +78,46 @@ Python (`requirements.txt`, `poetry.lock`, `uv.lock`, `Pipfile.lock`, `pdm.lock`
 Gradle lockfiles, `Cargo.lock`, `Gemfile.lock`, `composer.lock`, `pubspec.lock`, `mix.lock`, NuGet
 `packages.lock.json`, GitHub Actions workflows.
 
+### Pull Requests (review, urgency, labels, actions)
+
+Every pull request of a connected repository is recorded and reviewed on each push:
+
+- **Dependency review**: new or changed packages are checked for known vulnerabilities, malware (OSV feed, SafeDep
+  malware analysis, guarddog behaviour analysis), license problems, suspicious packages and your package rules.
+- **Code security review**: a rule-based review of the changed lines always runs (leaked secrets, SQL/command
+  injection, eval, unsafe deserialization, disabled TLS checks, unverified JWTs, raw HTML, CORS `*`, weak hashing,
+  risky GitHub Actions, `curl | sh`). When an AI model is configured, an **AI security review** of the diff adds
+  findings with file and line (it runs on Amazon Bedrock; the default model is Qwen3 Coder 30B).
+- **Urgency** (0–100, Critical/High/Medium/Low/Clean) ranks which PRs to fix first, with the top reasons.
+- **Labels** on GitHub: `depguard:blocked`, `depguard:urgent`, `depguard:malware`, `depguard:vulnerable`,
+  `depguard:security`, `depguard:secrets`, plus change type (`frontend`, `backend`, `ci`, `docs`, `tests`,
+  `dependencies`, `infra`, `database`, `config`, `size/XS…XL`, AI labels such as `feature`, `bug-fix`). Labels
+  without the prefix are never touched.
+- **The PR comment**: status badges (Malware · Vulnerability · License · Suspicious · Code review), urgency, a
+  *Review in depguard* button, *Fix before merging* with exact commands (`npm install lodash@4.17.21`, …), the code
+  review, collapsible details, and a **Re-run depguard review** checkbox. It is edited on every push and says
+  "All issues fixed" when the PR becomes clean.
+
+Where to see them:
+
+| Page | What it shows |
+|---|---|
+| **Pull Requests** (sidebar) | every open PR of the team, most urgent first; filter by urgency, state (open/merged/closed), project, author; search |
+| **Project → Pull Requests** tab | the same for one repository |
+| **PR page** | urgency and reasons, dependency checks, *Fix before merging* (copy commands), code review with links to the exact lines on GitHub, review history, activity |
+| **Dashboard** | *Pull requests needing attention* (top 5) |
+
+From the PR page, admins and owners can **post a comment** (Markdown with preview and templates), **request
+changes**, **rescan**, or **re-run the AI review**; actions are posted to GitHub by the depguard app with your name.
+To accept a risk, add a package exclusion (Settings → Package Exclusions) and rescan.
+
+**Settings → Pull Requests**: when to comment (every PR / only with findings / never), which sections to include,
+mention the author on blocking issues, request changes automatically on blocking issues (dismissed once fixed),
+header/footer text, labels on/off and prefix, AI review on/off and the largest diff to review.
+
+Existing open PRs are imported when a repository is connected, and everything is re-synced every 6 hours, so a
+missed webhook never leaves a PR stale.
+
 ---
 
 ## 4. Policy: what blocks and what warns
@@ -334,6 +374,8 @@ every install on every machine with the guard.
 | repositories missing after installing the GitHub App | the installation is *pending*: a super-admin links it under Admin → Installations |
 | attack paths marked *approximate* | the lockfile has no dependency graph; chains come from deps.dev. Rescan after updating the lockfile |
 | GitHub login loops back to sign-in | Supabase → Authentication → URL Configuration must list `<dashboard URL>/auth/callback` |
+| AI review shows "delayed" | the Bedrock account hit its daily token quota; it retries automatically, the rule-based review is complete. Ask AWS for a higher Bedrock quota |
+| "Request changes" or label actions fail | grant the GitHub App **Pull requests: Read and write** and accept the new permissions on each installation |
 | invitation email not received | send the sign-in link shown in the invite dialog; the invitee signs in with the invited email |
 
 ---

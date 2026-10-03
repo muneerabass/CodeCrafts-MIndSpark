@@ -25,3 +25,8 @@ SMTP_PORT=587
 SMTP_USER=
 SMTP_PASS=
 SMTP_FROM="depguard <no-reply@example.com>"
+
+# AI security review of pull requests (optional): an Amazon Bedrock API key. Only the worker reads it.
+# Without it the rule-based review still runs. Models are tried in order; default: Qwen3 Coder 30B in several regions.
+AWS_BEARER_TOKEN_BEDROCK=
+DEPGUARD_AI_MODELS=   # e.g. eu-west-1/qwen.qwen3-coder-30b-a3b-v1:0,us-east-1/qwen.qwen3-coder-30b-a3b-v1:0

@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { Bug, ChartColumnStacked, CheckCheck, FileChartLine, FolderGit2, GitFork, Hexagon, Route, Scale, ScanSearch, ShieldAlert, Skull, Trophy } from 'lucide-react';
+import { Bug, ChartColumnStacked, CheckCheck, FileChartLine, FolderGit2, GitFork, GitPullRequest, Hexagon, Route, Scale, ScanSearch, ShieldAlert, Skull, Trophy } from 'lucide-react';
 import { api, one, type SearchParams } from '@/lib/api';
 import { requireOrg } from '@/lib/session';
-import type { Dashboard } from '@/lib/types';
+import type { Dashboard, List, PullRequest } from '@/lib/types';
+import { UrgencyPill } from '@/components/pull-requests';
 import { PageHeader } from '@/components/page';
 import { Logo } from '@/components/icons';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +14,12 @@ export const metadata = { title: 'Dashboard' };
 export default async function DashboardPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
   const range = ['7d', '30d', '90d'].includes(one(sp.range) ?? '') ? one(sp.range)! : '30d';
-  const [{ user }, d] = await Promise.all([requireOrg(), api<Dashboard>('/dashboard', { query: { range } })]);
+  const [{ user }, d, prs] = await Promise.all([
+    requireOrg(),
+    api<Dashboard>('/dashboard', { query: { range } }),
+    api<List<PullRequest>>('/pull-requests', { query: { page_size: 10 } }),
+  ]);
+  const attention = prs.items.filter((p) => p.urgency_level !== 'clean' && p.urgency_level !== 'pending').slice(0, 5);
 
   const kpis = [
     { label: 'Projects', value: d.projects, icon: FolderGit2, href: '/projects', tone: 'text-primary' },
@@ -58,6 +64,41 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
             </Link>
           ))}
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3">
+              <span className="flex size-9 items-center justify-center rounded-lg border bg-background">
+                <GitPullRequest className="size-5 text-primary" aria-hidden />
+              </span>
+              Pull requests needing attention
+              <Link href="/pull-requests" className="ml-auto text-sm font-normal text-primary hover:underline">
+                All pull requests →
+              </Link>
+            </CardTitle>
+            <CardDescription>Open pull requests ranked by how urgently they need fixing</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {attention.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No open pull request needs attention right now.</p>
+            ) : (
+              <ul className="divide-y" aria-label="Pull requests needing attention">
+                {attention.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                    <UrgencyPill level={p.urgency_level} score={p.urgency} />
+                    <Link href={p.project ? `/pull-requests/${p.project.id}/${p.number}` : p.html_url} className="min-w-0 font-medium hover:text-primary hover:underline">
+                      {p.title}
+                    </Link>
+                    <span className="text-xs text-muted-foreground">
+                      {p.repo_full_name} #{p.number}
+                    </span>
+                    {p.reasons[0] && <span className="basis-full truncate text-xs text-muted-foreground sm:ml-auto sm:basis-auto sm:max-w-md">{p.reasons[0].text}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <ChartCard icon={FileChartLine} title="Policy Violations Count" description="How many violations your scans found each day">

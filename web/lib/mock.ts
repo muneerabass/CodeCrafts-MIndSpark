@@ -175,6 +175,78 @@ let policy: T.Policy = {
   },
   custom: [{ name: 'no-install-scripts', category: 'malware', summary: 'Block packages that run install scripts', expr: 'pkg.ecosystem == "npm" && pkg.name.startsWith("evil-")' }],
 };
+const pullRequests: T.PRDetail[] = [
+  {
+    id: 'pr-1', repo_full_name: 'acme/payments-api', number: 482, title: 'Add Stripe webhooks and the payments SDK', author_login: 'mallory', author_avatar: '',
+    html_url: 'https://github.com/acme/payments-api/pull/482', state: 'open', draft: false, base_ref: 'main', head_ref: 'feat/stripe', head_sha: 'a1b2c3d4e5f60718',
+    latest_scan_id: 'S01JB8A0000000000000000001', urgency: 100, urgency_level: 'critical', labels: ['malware', 'blocked', 'urgent', 'security', 'backend', 'dependencies', 'size/M'],
+    reasons: [
+      { kind: 'malware', text: 'Remove malicious package event-stream-lite@1.0.2', score: 100 },
+      { kind: 'code', text: 'AI: SQL injection in /refunds in api/refunds.ts:42', score: 70 },
+      { kind: 'vulnerability', text: 'minimist@1.2.0 has 1 known vulnerability (GHSA-xvch-5gv4-984h)', score: 65 },
+    ],
+    gh_created_at: iso(3), gh_updated_at: iso(0), closed_at: null, merged_at: null, project: { id: P1.id, name: P1.name },
+    scan: { id: 'S01JB8A0000000000000000001', status: 'success', conclusion: 'failure', vulns: 2, violations: 3, malicious: 1, suspicious: 1 },
+    summary: {
+      scan_id: 'S01JB8A0000000000000000001', no_changes: false, conclusion: 'failure', packages: 4, labels: ['dependencies', 'malware', 'vulnerable'],
+      checks: { malware: 'fail', vulnerability: 'fail', license: 'pass', suspicious: 'warn' },
+      fixes: [
+        { kind: 'malware', severity: 'critical', blocking: true, title: 'Remove malicious package `event-stream-lite@1.0.2`', command: 'npm uninstall event-stream-lite', note: 'Rotate any credentials the build environment had access to.' },
+        { kind: 'vulnerability', severity: 'high', blocking: true, title: '`minimist@1.2.0` has 1 known vulnerability (GHSA-xvch-5gv4-984h)', command: 'npm install minimist@1.2.6' },
+      ],
+    },
+    review: {
+      head_sha: 'a1b2c3d4e5f60718', files_reviewed: 6, truncated: false, ai_status: 'done', ai_note: '', ai_model: 'qwen.qwen3-coder-30b-a3b-v1:0', ai_risk: 'high',
+      ai_summary: 'Adds Stripe webhooks and a refunds endpoint; the refunds query is built from request input.', labels: ['feature', 'backend', 'security'], updated_at: iso(0),
+      findings: [
+        { source: 'ai', file: 'api/refunds.ts', line: 42, severity: 'high', category: 'injection', title: 'SQL injection in /refunds', explanation: 'req.query.order is concatenated into the SQL string.', suggestion: 'Use a parameterized query ($1).' },
+        { source: 'rules', file: 'api/stripe.ts', line: 7, severity: 'high', category: 'crypto', title: 'TLS certificate verification disabled', explanation: 'Turning off certificate checks allows man-in-the-middle attacks.', suggestion: 'Keep verification on.' },
+      ],
+    },
+    history: [
+      { id: 'S01JB8A0000000000000000001', head_sha: 'a1b2c3d4e5f60718', status: 'success', conclusion: 'failure', vulns: 2, violations: 3, malicious: 1, created_at: iso(0) },
+      { id: 'S01JB8A0000000000000000006', head_sha: '0f9e8d7c6b5a4321', status: 'success', conclusion: 'failure', vulns: 2, violations: 2, malicious: 1, created_at: iso(1) },
+    ],
+    activity: [{ id: 'act-1', kind: 'comment', body: 'Please replace event-stream-lite before merging.', status: 'posted', actor: 'ada@acme.dev', error: '', created_at: iso(0) }],
+  },
+  {
+    id: 'pr-2', repo_full_name: 'acme/web', number: 97, title: 'Bump next to 16.1', author_login: 'renovate[bot]', author_avatar: '', html_url: 'https://github.com/acme/web/pull/97',
+    state: 'open', draft: false, base_ref: 'main', head_ref: 'renovate/next', head_sha: 'ccddeeff00112233', latest_scan_id: 'S01JB8A0000000000000000002', urgency: 35,
+    urgency_level: 'medium', labels: ['dependencies', 'size/XS'], reasons: [{ kind: 'suspicious', text: 'busboy@1.6.0 looks unmaintained', score: 35 }],
+    gh_created_at: iso(1), gh_updated_at: iso(1), closed_at: null, merged_at: null, project: { id: P2.id, name: P2.name },
+    scan: { id: 'S01JB8A0000000000000000002', status: 'success', conclusion: 'neutral', vulns: 0, violations: 1, malicious: 0, suspicious: 1 },
+    summary: { scan_id: 'S01JB8A0000000000000000002', no_changes: false, conclusion: 'neutral', packages: 3, labels: ['dependencies'], checks: { malware: 'pass', vulnerability: 'pass', license: 'pass', suspicious: 'warn' }, fixes: [] },
+    review: { head_sha: 'ccddeeff00112233', findings: [], labels: ['chore'], files_reviewed: 1, truncated: false, ai_status: 'rate_limited', ai_note: 'all AI models are rate limited, retrying Oct 5 00:05 UTC', ai_model: '', ai_summary: '', ai_risk: '', updated_at: iso(1) },
+    history: [], activity: [],
+  },
+  {
+    id: 'pr-3', repo_full_name: 'acme/payments-api', number: 470, title: 'Docs: payment flow diagram', author_login: 'ada', author_avatar: '', html_url: 'https://github.com/acme/payments-api/pull/470',
+    state: 'merged', draft: false, base_ref: 'main', head_ref: 'docs/flow', head_sha: '9988776655443322', latest_scan_id: null, urgency: 0, urgency_level: 'clean', labels: ['docs', 'clean'],
+    reasons: [], gh_created_at: iso(9), gh_updated_at: iso(8), closed_at: iso(8), merged_at: iso(8), project: { id: P1.id, name: P1.name }, scan: null, summary: null, review: null, history: [], activity: [],
+  },
+];
+let prSettings: T.PRSettings = {
+  comment_mode: 'always', request_changes_on_block: false, mention_author_on_block: true, header: '', footer: '',
+  sections: { fix_commands: true, code_review: true, vulnerabilities: true, licenses: true, suspicious: true, run_config: true },
+  labels: { enabled: true, prefix: 'depguard:' }, ai_review: { enabled: true, max_diff_kb: 200 },
+};
+const prRow = (d: T.PRDetail): T.PullRequest => {
+  const r = { ...d } as Partial<T.PRDetail>;
+  delete r.summary;
+  delete r.history;
+  delete r.activity;
+  return { ...(r as T.PRDetail), review: d.review ? { ai_status: d.review.ai_status, findings: d.review.findings.length, ai_risk: d.review.ai_risk } : null };
+};
+function filterPRs(q: URLSearchParams, project?: string) {
+  const state = q.get('state') ?? 'open';
+  return pullRequests
+    .filter((p) => (state === 'all' || p.state === state) && (!project || p.project?.id === project))
+    .filter((p) => (!q.get('level') || p.urgency_level === q.get('level')) && has(p.title + p.repo_full_name, q.get('q')) && (!q.get('author') || p.author_login === q.get('author')))
+    .filter((p) => !q.get('project_id') || p.project?.id === q.get('project_id'))
+    .sort((a, b) => Number(a.state !== 'open') - Number(b.state !== 'open') || b.urgency - a.urgency)
+    .map(prRow);
+}
+
 let apiKeys: T.ApiKey[] = [{ id: 'k-1', name: 'GitHub Actions', prefix: 'dg_7Hq2aB9xK', created_at: iso(10), last_used_at: iso(1), expires_at: null }];
 let exclusions: T.Exclusion[] = [{ id: 'ex-1', ecosystem: 'npm', name: 'left-pad', version: '1.3.0', reason: 'Internal fork reviewed by security', status: 'active', expires_at: iso(-60), created_at: iso(5) }];
 let savedQueries: T.SavedQuery[] = [{ id: 'q-1', name: 'Critical vulns last 30 days', sql: "SELECT project_name, vuln_id, risk\nFROM q_findings\nWHERE risk = 'CRITICAL' AND created_at > now() - interval '30 days'\nLIMIT 100", created_at: iso(3) }];
@@ -270,6 +342,38 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       return paginate(components.filter((c) => has(c.name, q.get('name')) && has(c.version, q.get('version')) && (!q.get('ecosystem') || c.ecosystem === q.get('ecosystem')) && inRange(c.updated_at, q) && (!flag(q, 'has_vulns') || c.vulns > 0) && (!flag(q, 'has_violations') || c.violations > 0) && directOk(c, q)), q);
     case 'GET /scans':
       return paginate(scans.filter((s) => has(s.project.name, q.get('project')) && (!q.get('project_id') || s.project.id === q.get('project_id')) && has(s.version, q.get('version')) && (!q.get('trigger') || s.trigger === q.get('trigger')) && (!q.get('status') || s.status === q.get('status')) && inRange(s.created_at, q) && (!flag(q, 'has_vulns') || s.vulns > 0) && (!flag(q, 'has_violations') || s.violations > 0)), q);
+    case 'GET /pull-requests':
+      return paginate(filterPRs(q), q);
+    case 'GET /pull-requests/summary': {
+      const open = pullRequests.filter((p) => p.state === 'open' && (!q.get('project_id') || p.project?.id === q.get('project_id')));
+      const by = Object.fromEntries((['critical', 'high', 'medium', 'low', 'clean', 'pending'] as const).map((l) => [l, open.filter((p) => p.urgency_level === l).length]));
+      return { open: open.length, by_level: by, merged_with_issues: 0 } as T.PRSummaryCounts;
+    }
+    case 'GET /projects/:/pull-requests':
+      return paginate(filterPRs(q, seg[1]), q);
+    case 'GET /projects/:/pull-requests/:': {
+      const pr = pullRequests.find((p) => p.project?.id === seg[1] && String(p.number) === seg[3]);
+      if (!pr) throw new MockNotFound('pull request not found');
+      return pr;
+    }
+    case 'POST /projects/:/pull-requests/:/comment':
+    case 'POST /projects/:/pull-requests/:/review':
+    case 'POST /projects/:/pull-requests/:/rescan':
+    case 'POST /projects/:/pull-requests/:/ai-review': {
+      const pr = pullRequests.find((p) => p.project?.id === seg[1] && String(p.number) === seg[3]);
+      if (!pr) throw new MockNotFound('pull request not found');
+      const kind = ({ comment: 'comment', review: 'request_changes', rescan: 'rescan', 'ai-review': 'ai_review' } as Record<string, string>)[seg[4]];
+      const text = String((body as { body?: string } | undefined)?.body ?? '');
+      if ((kind === 'comment' || kind === 'request_changes') && !text.trim()) throw new Error('body is required (at most 60000 characters)');
+      const id = `act-${pr.activity.length + 2}`;
+      pr.activity.unshift({ id, kind, body: text, status: 'posted', actor: 'ada@acme.dev', error: '', created_at: new Date().toISOString() });
+      return { activity_id: id, status: 'queued' };
+    }
+    case 'GET /settings/pr':
+      return { settings: prSettings, ai_configured: true, ai_models: 'eu-west-1/qwen.qwen3-coder-30b-a3b-v1:0' } as T.PRSettingsResponse;
+    case 'PUT /settings/pr':
+      prSettings = { ...prSettings, ...(body as T.PRSettings) };
+      return { settings: prSettings, ai_configured: true, ai_models: 'eu-west-1/qwen.qwen3-coder-30b-a3b-v1:0' } as T.PRSettingsResponse;
     case 'GET /scans/:': {
       const s = scans.find((x) => x.id === id);
       if (!s) throw new MockNotFound();
@@ -488,8 +592,9 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
 
 // Path segments that are literal words (not ids) at a given position.
 function isStatic(root: string, i: number, s: string) {
-  const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report'];
+  const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review'];
   if (root === 'admin' && i === 1) return true;
+  if ((root === 'pull-requests' && s === 'summary') || (root === 'settings' && s === 'pr')) return true;
   if (root === 'policy' || root === 'query') return true;
   return words.includes(s) && i !== 1;
 }
