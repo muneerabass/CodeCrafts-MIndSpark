@@ -21,7 +21,14 @@ export default defineConfig({
       MOCK_API: '1',
       E2E_AUTH_BYPASS: '1',
       SERVICE_JWT_SECRET: 'e2e-not-a-secret',
-      BETTER_AUTH_SECRET: 'e2e-not-a-secret-e2e-not-a-secret-0123',
+      // Pin everything the app reads so a developer's web/.env.local can't leak in.
+      TENANT_DOMAIN_SUFFIX: 'depguard.dev',
+      PUBLIC_URL: `http://localhost:${PORT}`,
+      PUBLIC_API_URL: 'https://api.depguard.dev',
+      SUPERADMIN_EMAILS: 'ada@acme.dev',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://e2e.invalid.supabase.co',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'e2e-anon',
+      SUPABASE_SERVICE_ROLE_KEY: 'e2e-service-role',
     },
   },
 });

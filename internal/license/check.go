@@ -19,6 +19,7 @@ const (
 	RuleIncompatible        = "license-incompatible"
 	RuleConflict            = "license-conflict"
 	RuleDenied              = "license-denied"
+	RuleMultiple            = "license-multiple" // several license files found; confirm which applies
 )
 
 const maxConflicts = 50
@@ -97,8 +98,25 @@ func (c checker) Check(_ context.Context, in scan.CheckInput) ([]scan.Finding, e
 		if eco := string(p.Ecosystem); eco == "GitHubActions" || (eco == "" && p.Manifest != nil && p.Manifest.Ecosystem == "GitHubActions") {
 			continue // CI workflow actions are not distributed with the application
 		}
+		if p.GetName() == "stdlib" && (string(p.Ecosystem) == "Go" || (p.Manifest != nil && p.Manifest.Ecosystem == "Go")) {
+			continue // the Go standard library (BSD-3-Clause), not a third-party dependency
+		}
 		dev := in.Context[p].Dev
-		d := parseList(scan.Licenses(p))
+		ls := scan.Licenses(p)
+		d := parseList(ls)
+		// deps.dev lists every license file in a package without saying how they
+		// combine (code vs docs, or dual licensing). When one of them is permissive,
+		// treat the list as alternatives instead of all-at-once, and leave a
+		// non-blocking note so a human confirms which license applies.
+		if alts, ok := permissiveAmong(ls); ok {
+			d = alts
+			out = append(out, scan.Finding{Rule: RuleMultiple, Category: scan.CategoryLicense,
+				Severity: scan.SeverityLow, Package: p,
+				Summary: fmt.Sprintf("%s ships several licenses (%s); the permissive one was assumed. Confirm which applies to the code you use.",
+					p.GetName(), strings.Join(ls, ", ")),
+				Details: map[string]any{"licenses": ls, "license": strings.Join(ls, " OR "), "category": "multiple",
+					"project_license": projName, "usage_model": usage}})
+		}
 		a := pick(d, score)
 		if !dev {
 			shipped = append(shipped, chosen{p, a})
@@ -243,9 +261,27 @@ func conflictFindings(shipped []chosen, usage, projName string, block int) []sca
 		memo[k] = [2]term{}
 		return term{}, term{}, false
 	}
-	var out []scan.Finding
+	type hit struct {
+		p      *models.Package
+		t      term
+		others []string
+	}
+	byPkg := map[string]*hit{}
+	var order []string
 	seen := map[[2]string]bool{}
 	id := func(p *models.Package) string { return p.GetName() + "@" + p.GetVersion() }
+	// Attribute each clash to the side with the more restrictive license, so one
+	// GPL package conflicting with many permissive ones is reported once.
+	note := func(p *models.Package, t term, other string) {
+		k := id(p)
+		h, ok := byPkg[k]
+		if !ok {
+			h = &hit{p: p, t: t}
+			byPkg[k] = h
+			order = append(order, k)
+		}
+		h.others = append(h.others, other)
+	}
 	for i, x := range shipped {
 		for _, y := range shipped[i+1:] {
 			k := [2]string{id(x.p), id(y.p)}
@@ -257,16 +293,55 @@ func conflictFindings(shipped []chosen, usage, projName string, block int) []sca
 				continue
 			}
 			seen[k] = true
-			out = append(out, scan.Finding{Rule: RuleConflict, Category: scan.CategoryLicense,
-				Severity: scan.SeverityHigh, Blocking: sevRank[scan.SeverityHigh] >= block, Package: x.p,
-				Summary: fmt.Sprintf("%s (%s) and %s (%s) cannot be combined in one distributed work: their licenses are incompatible.",
-					x.p.GetName(), tx, y.p.GetName(), ty),
-				Details: map[string]any{"license": tx.String(), "category": tx.category(), "project_license": projName,
-					"usage_model": usage, "other": k[1], "other_license": ty.String()}})
-			if len(out) == maxConflicts {
-				return out
+			if rank[tx.category()] >= rank[ty.category()] {
+				note(x.p, tx, fmt.Sprintf("%s (%s)", k[1], ty))
+			} else {
+				note(y.p, ty, fmt.Sprintf("%s (%s)", k[0], tx))
 			}
 		}
 	}
+	var out []scan.Finding
+	for _, k := range order {
+		h := byPkg[k]
+		examples := h.others
+		if len(examples) > 5 {
+			examples = examples[:5]
+		}
+		out = append(out, scan.Finding{Rule: RuleConflict, Category: scan.CategoryLicense,
+			Severity: scan.SeverityHigh, Blocking: sevRank[scan.SeverityHigh] >= block, Package: h.p,
+			Summary: fmt.Sprintf("%s (%s) cannot be combined in one distributed work with %d other dependenc%s, e.g. %s.",
+				h.p.GetName(), h.t, len(h.others), map[bool]string{true: "y", false: "ies"}[len(h.others) == 1], strings.Join(examples, ", ")),
+			Details: map[string]any{"license": h.t.String(), "category": h.t.category(), "project_license": projName,
+				"usage_model": usage, "conflicts_with": h.others, "count": len(h.others)}})
+		if len(out) == maxConflicts {
+			break
+		}
+	}
 	return out
+}
+
+// permissiveAmong treats a multi-entry license list as alternatives when at least
+// one entry is permissive or unencumbered. Single entries and lists without a
+// permissive option keep the conservative all-apply reading.
+func permissiveAmong(ls []string) (dnf, bool) {
+	var entries []string
+	seen := map[string]bool{}
+	for _, l := range ls {
+		if l = strings.TrimSpace(l); l != "" && !seen[l] {
+			seen[l] = true
+			entries = append(entries, l)
+		}
+	}
+	if len(entries) < 2 {
+		return nil, false
+	}
+	permissive := false
+	var d dnf
+	for _, e := range entries {
+		if cat, _ := Explain(e); cat == CatPermissive || cat == CatUnencumbered {
+			permissive = true
+		}
+		d = append(d, parse(e)...)
+	}
+	return d, permissive
 }

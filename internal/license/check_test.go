@@ -171,15 +171,15 @@ func TestConflicts(t *testing.T) {
 		var s []string
 		for _, f := range fs {
 			if f.Rule == RuleConflict {
-				s = append(s, f.Package.GetName()+"~"+f.Details["other"].(string)+"("+f.Details["other_license"].(string)+")")
+				s = append(s, f.Package.GetName()+"~"+strings.Join(f.Details["conflicts_with"].([]string), "|"))
 			}
 		}
 		slices.Sort(s)
 		return s
 	}
 	got := conf(run(t, Config{}, "GPL-3.0-or-later", bin, nil, gpl2, apache, gpl3, nc, mit))
-	// Apache-2.0 vs GPL-3.0 is compatible (GPL-3.0 may lead); Apache vs NC is not a copyleft clash.
-	want := []string{"gpl2~apache@1.0.0(Apache-2.0)", "gpl2~gpl3@1.0.0(GPL-3.0-only)", "gpl2~nc@1.0.0(CC-BY-NC-4.0)", "gpl3~nc@1.0.0(CC-BY-NC-4.0)"}
+	// One finding per package holding the stricter license, listing what it clashes with.
+	want := []string{"gpl2~apache@1.0.0 (Apache-2.0)|gpl3@1.0.0 (GPL-3.0-only)", "nc~gpl2@1.0.0 (GPL-2.0-only)|gpl3@1.0.0 (GPL-3.0-only)"}
 	if !slices.Equal(got, want) {
 		t.Errorf("conflicts %v, want %v", got, want)
 	}
@@ -191,16 +191,36 @@ func TestConflicts(t *testing.T) {
 	if got := conf(run(t, Config{}, "MIT", bin, map[*models.Package]scan.PackageContext{gpl2: {Dev: true}}, gpl2, apache)); len(got) != 0 {
 		t.Errorf("dev conflicts: %v", got)
 	}
-	// once per pair, duplicates of the same name@version ignored, capped at 50
+	// one finding per GPL package however many permissive deps it clashes with
 	var many []*models.Package
 	for i := range 20 {
 		many = append(many, pkg("npm", fmt.Sprintf("g%02d", i), "GPL-2.0-only"), pkg("npm", fmt.Sprintf("a%02d", i), "Apache-2.0"))
 	}
 	many = append(many, pkg("npm", "g00", "GPL-2.0-only"))
-	if got := conf(run(t, Config{}, "GPL-2.0-only", bin, nil, many...)); len(got) != maxConflicts {
-		t.Errorf("cap: %d", len(got))
+	if got := conf(run(t, Config{}, "GPL-2.0-only", bin, nil, many...)); len(got) != 20 {
+		t.Errorf("aggregation: %d findings", len(got))
 	}
 	if got := conf(run(t, Config{}, "GPL-2.0-only", bin, nil, gpl2, apache, pkg("npm", "gpl2", "GPL-2.0-only"))); len(got) != 1 {
 		t.Errorf("dedup: %v", got)
+	}
+}
+
+func TestMultipleLicensesPreferPermissive(t *testing.T) {
+	// deps.dev lists every license file (code + docs, or dual licensing).
+	dual := pkg("Go", "github.com/spdx/tools-golang", "Apache-2.0", "GPL-2.0", "CC-BY-4.0")
+	docs := pkg("Go", "github.com/opencontainers/go-digest", "Apache-2.0", "CC-BY-SA-4.0")
+	strict := pkg("npm", "gpl-only", "GPL-3.0-only", "GPL-3.0-only")
+	fs := run(t, Config{}, "MIT", bin, nil, dual, docs, strict)
+	rules := map[string][]string{}
+	for _, f := range fs {
+		rules[f.Package.GetName()] = append(rules[f.Package.GetName()], f.Rule+":"+f.Severity)
+	}
+	for _, name := range []string{"github.com/spdx/tools-golang", "github.com/opencontainers/go-digest"} {
+		if !slices.Equal(rules[name], []string{"license-multiple:low"}) {
+			t.Errorf("%s: %v, want only a low review note", name, rules[name])
+		}
+	}
+	if !slices.Contains(rules["gpl-only"], "license-copyleft-distributed:high") {
+		t.Errorf("gpl-only: %v, want copyleft finding", rules["gpl-only"])
 	}
 }

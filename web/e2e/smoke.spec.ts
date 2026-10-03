@@ -165,7 +165,7 @@ test('suspicious findings and violation filters', async ({ page }) => {
   await expect(page).toHaveURL(/severity=low/);
   await expect(page.getByText('new-package')).toBeVisible();
   await page.goto('/policy/violations?category=license');
-  await expect(page.getByText('Other License')).toBeVisible();
+  await expect(page.getByText('Conflicts With')).toBeVisible();
 });
 
 test('setup integrations and guides', async ({ page }) => {
