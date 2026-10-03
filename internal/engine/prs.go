@@ -251,7 +251,11 @@ func (d Deps) refreshPR(ctx context.Context, gh *github.Client, tenant, prID str
 	skipCreate := ps.CommentMode == "never" || (quietClean && (ps.CommentMode == "issues" || st.SuppressClean))
 	if ps.CommentMode != "never" || commentID != 0 {
 		id, err := d.upsertComment(ctx, gh, owner, repo, pr.Number, commentID, body, skipCreate)
-		if err != nil {
+		var ge *github.ErrorResponse
+		if errors.As(err, &ge) && ge.Response != nil && ge.Response.StatusCode == 403 {
+			// The check run still reports the result; the comment needs Pull requests: write.
+			d.Logger.Warn("pr comment not allowed: grant the GitHub App Pull requests: Read and write", "pr", pr.RepoFull+"#"+fmt.Sprint(pr.Number))
+		} else if err != nil {
 			return fmt.Errorf("comment: %w", err)
 		}
 		if id != 0 && id != commentID {
@@ -389,6 +393,9 @@ func (d Deps) storeRulesReview(ctx context.Context, tenant, prID, scanID, head s
 	if aiOn {
 		rv.AIStatus, rv.AINote = "queued", ""
 	}
+	if findings == nil {
+		findings = []render.ReviewFinding{} // jsonb array, never null
+	}
 	fj, _ := json.Marshal(findings)
 	err := withTenant(ctx, d, tenant, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `INSERT INTO pr_reviews (id, tenant_id, pr_id, scan_id, head_sha, findings, labels, files_reviewed, ai_status, ai_note)
@@ -500,6 +507,9 @@ func (w *aiReviewWorker) Work(ctx context.Context, job *river.Job[jobs.ReviewPul
 		_ = setStatus("failed", firstTextLine(err.Error()))
 		_ = d.refreshPR(ctx, gh, a.TenantID, pr.ID)
 		return err // retried by River
+	}
+	if res.Findings == nil {
+		res.Findings = []render.ReviewFinding{}
 	}
 	fj, _ := json.Marshal(res.Findings)
 	if err := withTenant(ctx, d, a.TenantID, func(tx pgx.Tx) error {
