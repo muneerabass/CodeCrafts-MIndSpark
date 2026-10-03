@@ -32,9 +32,18 @@ export API_URL="${API_URL:-http://localhost:${DEV_API_PORT}}"
 export BETTER_AUTH_URL="${BETTER_AUTH_URL:-http://localhost:3000}"
 export TENANT_DOMAIN_SUFFIX="${TENANT_DOMAIN_SUFFIX:-localhost}"
 export SUPERADMIN_EMAILS="${SUPERADMIN_EMAILS:-admin@example.com}"
-export SMTP_HOST="${SMTP_HOST:-127.0.0.1}"
-export SMTP_PORT="${SMTP_PORT:-1025}"
-export SMTP_FROM="${SMTP_FROM:-depguard <no-reply@depguard.local>}"
+
+# Next.js loads web/.env.local itself. Do not override SMTP settings from
+# that file; use Mailpit defaults only when no SMTP settings were supplied.
+if [[ -z "${SMTP_HOST:-}" ]] && ! grep -q '^SMTP_HOST=' "$ROOT_DIR/web/.env.local" 2>/dev/null; then
+  export SMTP_HOST="127.0.0.1"
+fi
+if [[ -z "${SMTP_PORT:-}" ]] && ! grep -q '^SMTP_PORT=' "$ROOT_DIR/web/.env.local" 2>/dev/null; then
+  export SMTP_PORT="1025"
+fi
+if [[ -z "${SMTP_FROM:-}" ]] && ! grep -q '^SMTP_FROM=' "$ROOT_DIR/web/.env.local" 2>/dev/null; then
+  export SMTP_FROM="depguard <no-reply@depguard.local>"
+fi
 
 env_value() {
   awk -F= -v key="$1" '$1 == key { print substr($0, index($0, "=") + 1) }' "$ROOT_DIR/deploy/.env"
