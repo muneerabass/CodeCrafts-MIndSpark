@@ -9,7 +9,7 @@ One pure-Go binary (`cmd/depguard`, no cgo) for Linux, macOS and Windows.
 | Any machine | `curl -fsSL https://<app host>/install.sh \| sh` |
 | JavaScript project (dev dependency) | `npm install --save-dev https://<app host>/downloads/depguard-cli.tgz` then `npx depguard …` |
 | Python project | `pip install --find-links https://<app host>/downloads/pypi/ depguard-cli` |
-| Go toolchain | `go install github.com/depguard/depguard/cmd/depguard@latest` |
+| From source | `go build -o depguard ./cmd/depguard` in this repository |
 
 `packaging/build.sh` builds all of them into `dist/downloads/` (6 platform binaries, the npm tarball with a
 small launcher, one wheel per platform plus an `index.html` for `--find-links`, and `install.sh`).

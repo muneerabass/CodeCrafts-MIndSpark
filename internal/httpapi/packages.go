@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -60,8 +62,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) error {
 		summary["package_rules"] = len(pc.Presets.Packages)
 	}
 	p := principal(r)
+	// policy_version changes whenever the policy or block mode changes; the CLI
+	// uses it to invalidate cached install checks.
+	sum := sha256.Sum256(append(raw, map[bool]byte{true: 1, false: 0}[blockMode]))
 	return writeJSON(w, http.StatusOK, map[string]any{"tenant_id": p.TenantID, "domain": domain, "block_mode": blockMode,
-		"api_key_id": p.APIKeyID, "policy": json.RawMessage(mustJSON(summary))})
+		"api_key_id": p.APIKeyID, "policy": json.RawMessage(mustJSON(summary)), "policy_version": hex.EncodeToString(sum[:8])})
 }
 
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }

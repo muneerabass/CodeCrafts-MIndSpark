@@ -16,7 +16,7 @@ const targets = {
 const key = `${process.platform}-${process.arch}`;
 const target = targets[key];
 if (!target) {
-  console.error(`depguard: no prebuilt binary for ${key}; install with: go install github.com/depguard/depguard/cmd/depguard@latest`);
+  console.error(`depguard: no prebuilt binary for ${key}; build it from source with: go build ./cmd/depguard`);
   process.exit(1);
 }
 const bin = path.join(__dirname, '..', 'vendor', target, process.platform === 'win32' ? 'depguard.exe' : 'depguard');

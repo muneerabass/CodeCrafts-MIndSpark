@@ -12,7 +12,8 @@ import { guides, IconTile } from '../../catalog';
 
 type Step = { title: string; body?: React.ReactNode; code?: string; file?: string };
 
-const install = 'go install github.com/depguard/depguard/cmd/depguard@latest';
+// The CLI is served by this deployment (packaging/build.sh); install.sh picks the binary for the OS.
+const installCmd = (appUrl: string) => `curl -fsSL ${appUrl}/install.sh | sh`;
 
 function Code({ code, file }: { code: string; file?: string }) {
   return (
@@ -39,6 +40,7 @@ const keyNote = (
 );
 
 function stepsFor(slug: string, apiUrl: string, mcpUrl: string, s: Settings, installUrl: string, appUrl: string): Step[] {
+  const install = installCmd(appUrl);
   switch (slug) {
     case 'github-app':
       return [
@@ -66,10 +68,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.27'
-      - run: ${install}
+      - name: Install depguard
+        run: |
+          ${install}
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Scan dependencies
         env:
           DEPGUARD_API_URL: ${apiUrl}
@@ -91,10 +93,11 @@ jobs:
           file: '.gitlab-ci.yml',
           code: `depguard:
   stage: test
-  image: golang:1.27
+  image: alpine:3.20
   variables:
     DEPGUARD_API_URL: "${apiUrl}"
   script:
+    - apk add --no-cache curl
     - ${install}
     - depguard scan --source gitlab --project "$CI_PROJECT_PATH" --version "$CI_COMMIT_REF_NAME" --fail-on-violation
   rules:
@@ -113,9 +116,10 @@ jobs:
   steps:
     - step: &depguard
         name: depguard scan
-        image: golang:1.27
+        image: alpine:3.20
         script:
           - export DEPGUARD_API_URL="${apiUrl}"
+          - apk add --no-cache curl
           - ${install}
           - depguard scan --source bitbucket --project "$BITBUCKET_REPO_FULL_NAME" --version "$BITBUCKET_BRANCH" --fail-on-violation
 
@@ -134,7 +138,7 @@ pipelines:
         {
           title: 'Install the depguard CLI',
           body: 'One small binary for Linux, macOS and Windows. Pick whichever fits the project; all install the same CLI.',
-          code: `# any machine\ncurl -fsSL ${appUrl}/install.sh | sh\n\n# as a dev dependency of a JavaScript project\nnpm install --save-dev ${dl}/depguard-cli.tgz\n\n# Python projects\npip install --find-links ${dl}/pypi/ depguard-cli\n\n# Go toolchain\n${install}`,
+          code: `# any machine\ncurl -fsSL ${appUrl}/install.sh | sh\n\n# as a dev dependency of a JavaScript project\nnpm install --save-dev ${dl}/depguard-cli.tgz\n\n# Python projects\npip install --find-links ${dl}/pypi/ depguard-cli`,
         },
         { title: 'Log in', body: <>Connects this machine to <b>{s.domain}</b>. {keyNote}</>, code: `depguard login --api-url ${apiUrl} --api-key dg_your_key_here` },
         {
@@ -196,7 +200,7 @@ Description=depguard endpoint agent
 [Service]
 Environment=DEPGUARD_API_URL=${apiUrl}
 Environment=DEPGUARD_API_KEY=dg_your_key_here
-ExecStart=%h/go/bin/depguard agent
+ExecStart=%h/.local/bin/depguard agent
 Restart=on-failure
 
 [Install]
