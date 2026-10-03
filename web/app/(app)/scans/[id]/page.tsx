@@ -4,7 +4,7 @@ import { api, apiOr404 } from '@/lib/api';
 import { fmtDateTime, suspiciousReason, titleCase } from '@/lib/format';
 import type { Finding, PathItem, ScanDetail, ScanPackage } from '@/lib/types';
 import { Breadcrumbs } from '@/components/paths';
-import { Ecosystem } from '@/components/icons';
+import { EcosystemTile } from '@/components/icons';
 import { PageHeader } from '@/components/page';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Chip, RiskBadge, ScanStatus, triggerLabel } from '@/components/badges';
@@ -350,87 +350,109 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
           </TabsContent>
 
           <TabsContent value="vulns" forceMount className={tabCls}>
-            {/* ---- vulnerable packages */}
-            <Section
-              icon={Bug}
-              title="Vulnerable packages"
-              count={vulnerable.length}
-              desc="Sorted by worst severity. Transitive packages come in through another dependency."
-              empty="No known vulnerabilities in any installed package."
-            >
-              {vulnerable.length > 0 && (
-                <ShowMore
-                  as="table"
-                  className="w-full text-sm"
-                  shown={12}
-                  label="vulnerable packages"
-                  head={
-                    <thead className="text-left text-xs text-muted-foreground">
-                      <tr className="border-b">
-                        <th className="py-2 pr-3 font-medium">Package</th>
-                        <th className="pr-3 font-medium">Severity</th>
-                        <th className="pr-3 font-medium">Type</th>
-                        <th className="pr-3 font-medium">Advisories</th>
-                        <th className="font-medium">How to fix</th>
-                      </tr>
-                    </thead>
-                  }
-                  rows={vulnerable.map((p) => (
-                    <tr key={pkgKey(p)} className="break-inside-avoid border-b align-top last:border-0">
-                      <td className="py-2.5 pr-3">
-                        <span className="inline-flex items-center gap-1.5 font-medium">
-                          <Ecosystem name={p.component.ecosystem} /> {pkgKey(p)}
-                        </span>
-                        {p.direct === false && p.via.length > 1 && <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">via {p.via.slice(0, -1).join(' → ')}</div>}
-                      </td>
-                      <td className="pr-3">
-                        <RiskBadge risk={SEV_ORDER[worst(p)] ?? 'UNKNOWN'} />
-                      </td>
-                      <td className="pr-3 text-xs whitespace-nowrap">
-                        {p.direct ? 'Direct' : p.direct === false ? `Transitive · depth ${p.depth ?? '?'}` : 'Unknown'}
-                        {p.dev ? ' · dev' : ''}
-                      </td>
-                      <td className="pr-3">
-                        <AdvisoryCell vulns={p.vulns} />
-                      </td>
-                      <td className="text-xs text-muted-foreground">{fixFor.get(pkgKey(p)) ?? '—'}</td>
-                    </tr>
-                  ))}
-                />
-              )}
-            </Section>
-
-            {/* ---- attack paths */}
-            <Section
-              icon={Route}
-              title="Attack paths"
-              count={ranked.length}
-              desc="How each vulnerable package is reached from your app. Score 0–100 combines severity, exploit likelihood (EPSS/KEV), depth and whether your code imports the entry dependency."
-              empty="No attack paths: no vulnerable package is reachable from the app."
-            >
-              {ranked.length > 0 && (
-                <ShowMore
-                  className="divide-y"
-                  shown={10}
-                  label="attack paths"
-                  rows={ranked.map((p, i) => (
-                    <li key={i} className="flex break-inside-avoid items-start gap-3 py-2.5 text-sm">
-                      <ScoreBar score={p.score} />
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <RiskBadge risk={p.risk} />
-                          <Breadcrumbs p={p} />
-                          {p.imported === false && <Chip>not imported</Chip>}
-                          {p.dev && <Chip>dev only</Chip>}
-                          {p.approximate && <Chip>approximate</Chip>}
+            {/* ---- vulnerable packages, each with its attack paths */}
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold" data-slot="card-title">
+                  <Bug className="size-5 text-primary" aria-hidden /> Vulnerable packages <span className="text-sm font-normal text-muted-foreground">{vulnerable.length}</span>
+                </h2>
+                <p className="text-sm text-muted-foreground">Worst first. Each card shows the advisories, the fix and how the package reaches your app.</p>
+              </div>
+              <span className="text-sm text-muted-foreground">
+                {ranked.length} attack path{ranked.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {vulnerable.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed py-12 text-center text-sm text-muted-foreground">
+                <CheckCircle2 className="size-7 text-emerald-600 dark:text-emerald-400" aria-hidden /> No known vulnerabilities in any installed package.
+              </div>
+            ) : (
+              <ShowMore
+                className="space-y-3"
+                shown={10}
+                label="vulnerable packages"
+                rows={vulnerable.map((p) => {
+                  const k = pkgKey(p);
+                  const risk = SEV_ORDER[worst(p)] ?? 'UNKNOWN';
+                  const pp = ranked.filter((x) => `${x.target.name}@${x.target.version}` === k);
+                  const top = pp[0];
+                  const kev = pp.some((x) => x.advisories.some((a) => a.kev));
+                  const vulnsSorted = [...p.vulns].sort((a, b) => sevRank(a.risk) - sevRank(b.risk));
+                  return (
+                    <li key={k} className={cn('break-inside-avoid overflow-hidden rounded-xl border border-l-4 bg-card', sevEdge[risk] ?? 'border-l-border')}>
+                      <div className="flex flex-wrap items-center gap-3 p-4">
+                        <EcosystemTile name={p.component.ecosystem} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-baseline gap-x-2">
+                            <span className="font-semibold">{p.component.name}</span>
+                            <span className="font-mono text-sm text-muted-foreground">{p.component.version}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {p.direct ? 'Direct dependency' : p.direct === false ? `Transitive · depth ${p.depth ?? '?'}` : 'Dependency type unknown'}
+                            {p.dev ? ' · dev only' : ''}
+                            {p.direct === false && p.via.length > 1 && <span className="font-mono"> · via {p.via.slice(0, -1).join(' → ')}</span>}
+                          </div>
                         </div>
-                        {p.fix && <p className="text-xs text-muted-foreground">{p.fix}</p>}
+                        {kev && <span className="rounded-md bg-red-500/15 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-300">Actively exploited</span>}
+                        <RiskBadge risk={risk} />
+                        {top && (
+                          <span className="w-16 text-right" title="Risk score: severity, exploit likelihood, depth and whether your code imports it">
+                            <span className="block text-xl leading-none font-semibold tabular-nums">{top.score}</span>
+                            <span className="text-[10px] tracking-wide text-muted-foreground uppercase">risk score</span>
+                          </span>
+                        )}
                       </div>
+                      <div className="grid gap-4 border-t p-4 md:grid-cols-2">
+                        <div>
+                          <h4 className="mb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                            {p.vulns.length} advisor{p.vulns.length === 1 ? 'y' : 'ies'}
+                          </h4>
+                          <div className="flex flex-wrap gap-1.5">
+                            {vulnsSorted.map((x) => (
+                              <Link
+                                key={x.id}
+                                href={`/vulnerabilities/${encodeURIComponent(x.id)}`}
+                                title={x.summary}
+                                className={cn('rounded-md px-1.5 py-0.5 font-mono text-[11px] whitespace-nowrap hover:underline', sevPill(x.risk))}
+                              >
+                                {x.id}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="mb-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">How to fix</h4>
+                          <p className="flex items-start gap-2 text-sm">
+                            <Wrench className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+                            {fixFor.get(k) ?? 'No fixed version published yet. Consider replacing the package.'}
+                          </p>
+                        </div>
+                      </div>
+                      {top && (
+                        <div className="border-t bg-muted/30 px-4 py-3">
+                          <h4 className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+                            <Route className="size-3.5" aria-hidden /> How it reaches your app
+                          </h4>
+                          <PathLine p={top} />
+                          {pp.length > 1 && (
+                            <details className="group/p mt-1.5">
+                              <summary className="cursor-pointer list-none text-xs text-primary hover:underline [&::-webkit-details-marker]:hidden">
+                                {pp.length - 1} more path{pp.length === 2 ? '' : 's'}
+                              </summary>
+                              <div className="mt-1.5 space-y-1.5">
+                                {pp.slice(1).map((x, n) => (
+                                  <PathLine key={n} p={x} />
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      )}
                     </li>
-                  ))}
-                />
-              )}
-            </Section>
+                  );
+                })}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="findings" forceMount className={tabCls}>
@@ -471,6 +493,19 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
         </p>
       </div>
     </>
+  );
+}
+
+const sevEdge: Record<string, string> = { CRITICAL: 'border-l-red-500', HIGH: 'border-l-orange-500', MEDIUM: 'border-l-amber-500', LOW: 'border-l-sky-500' };
+
+function PathLine({ p }: { p: PathItem }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <Breadcrumbs p={p} />
+      {p.imported === false && <Chip>not imported</Chip>}
+      {p.dev && <Chip>dev only</Chip>}
+      {p.approximate && <Chip>approximate</Chip>}
+    </div>
   );
 }
 
@@ -554,18 +589,6 @@ function Section({ icon: Icon, title, count, desc, empty, children }: { icon: ty
   );
 }
 
-function ScoreBar({ score }: { score: number }) {
-  const tone = score >= 30 ? 'bg-red-600' : score >= 15 ? 'bg-orange-500' : 'bg-sky-600';
-  return (
-    <div className="w-14 shrink-0 pt-0.5" title="Path risk score (0–100)">
-      <div className="text-center text-sm font-semibold tabular-nums">{score}</div>
-      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn('h-full rounded-full', tone)} style={{ width: `${Math.min(100, Math.max(4, score))}%` }} />
-      </div>
-    </div>
-  );
-}
-
 function FixItem({ n, tone, title, body }: { n: number; tone: 'red' | 'amber'; title: string; body: React.ReactNode }) {
   return (
     <li className="flex break-inside-avoid gap-3">
@@ -635,35 +658,3 @@ function FindingList({ items }: { items: Finding[] }) {
   );
 }
 
-function AdvisoryCell({ vulns }: { vulns: ScanPackage['vulns'] }) {
-  const sorted = [...vulns].sort((a, b) => sevRank(a.risk) - sevRank(b.risk));
-  const tally = SEV_ORDER.map((r) => [r, vulns.filter((v) => v.risk.toUpperCase() === r).length] as const).filter(([, n]) => n);
-  return (
-    <div className="space-y-1">
-      <div className="text-xs whitespace-nowrap text-muted-foreground">{tally.map(([r, n]) => `${n} ${r.toLowerCase()}`).join(' · ')}</div>
-      <div className="flex flex-wrap gap-1">
-        {sorted.slice(0, 3).map((x) => (
-          <Link
-            key={x.id}
-            href={`/vulnerabilities/${encodeURIComponent(x.id)}`}
-            title={x.summary}
-            className={cn('rounded px-1.5 py-0.5 font-mono text-[11px] whitespace-nowrap hover:underline', sevPill(x.risk))}
-          >
-            {x.id}
-          </Link>
-        ))}
-        {sorted.length > 3 && (
-          <span
-            className="px-1 py-0.5 text-[11px] text-muted-foreground"
-            title={sorted
-              .slice(3)
-              .map((x) => x.id)
-              .join(', ')}
-          >
-            +{sorted.length - 3} more
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
