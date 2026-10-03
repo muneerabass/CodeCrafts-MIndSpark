@@ -126,6 +126,9 @@ chmod 750 /etc/depguard; chown root:depguard /etc/depguard
 setfacl -m u:caddy:x /etc/depguard 2>/dev/null || chmod 751 /etc/depguard
 
 log "Build Go binaries (cgo)"
+# Amazon Linux's Go package sets GOSUMDB=off; re-enable checksum verification (needed to fetch
+# the go1.27 toolchain and to verify every module download).
+export GOSUMDB=sum.golang.org GOPROXY=https://proxy.golang.org,direct
 export GOTOOLCHAIN=auto GOFLAGS=-mod=mod GOPATH=/var/cache/depguard/go GOCACHE=/var/cache/depguard/go/build
 mkdir -p "$GOPATH"
 (cd "$SRC" && CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /opt/depguard/bin/ \
