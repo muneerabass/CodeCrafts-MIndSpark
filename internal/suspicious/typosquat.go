@@ -82,19 +82,36 @@ func Typosquat(eco, name string) (similarTo, technique string) {
 		return "", ""
 	}
 	for _, p := range l.names {
-		if t := oneEdit(n, p); t != "" {
+		if t := oneEdit(n, p); t != "" && !sameOwner(eco, n, p) {
 			return p, t
 		}
 	}
-	if p, ok := l.reorder[partsKey(n)]; ok {
+	if p, ok := l.reorder[partsKey(n)]; ok && !sameOwner(eco, n, p) {
 		return p, TechniqueReorder
 	}
 	for _, f := range l.forms {
-		if oneEdit(n, f.form) != "" {
+		if oneEdit(n, f.form) != "" && !sameOwner(eco, n, f.popular) {
 			return f.popular, TechniqueConfusable
 		}
 	}
 	return "", ""
+}
+
+// sameOwner reports whether two names live under the same publisher namespace,
+// where only that publisher can release packages: Go modules under the same
+// host/owner (github.com/mholt/archives vs github.com/mholt/archiver) and npm
+// packages in the same @scope. A lookalike from the same owner is not a typosquat.
+func sameOwner(eco, a, b string) bool {
+	switch eco {
+	case "Go":
+		pa, pb := strings.Split(a, "/"), strings.Split(b, "/")
+		return len(pa) >= 3 && len(pb) >= 3 && pa[0] == pb[0] && pa[1] == pb[1]
+	case "npm":
+		sa, _, okA := strings.Cut(a, "/")
+		sb, _, okB := strings.Cut(b, "/")
+		return okA && okB && strings.HasPrefix(sa, "@") && sa == sb
+	}
+	return false
 }
 
 // IsPopular reports whether name is on the ecosystem's top-package list.

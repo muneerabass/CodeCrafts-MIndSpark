@@ -57,7 +57,7 @@ func TestTyposquat(t *testing.T) {
 		{"PyPI", "py-dateutil", "python-dateutil", TechniqueConfusable},
 		{"PyPI", "Python_Dateutil", "", ""}, // PEP 503 canonical form is popular
 		{"PyPI", "typing.extensions", "", ""},
-		{"Go", "github.com/stretchr/testfy", "github.com/stretchr/testify", TechniqueDistance1},
+		{"Go", "github.com/strechr/testify", "github.com/stretchr/testify", TechniqueDistance1},
 		{"Go", "gitlab.com/stretchr/testify", "github.com/stretchr/testify", TechniqueConfusable},
 		{"RubyGems", "ruby-on-rails", "rails", TechniqueConfusable},
 		{"Maven", "org.apache:commons", "", ""}, // no list
@@ -101,5 +101,31 @@ func TestPyPIDownloadFailureIsEmpty(t *testing.T) {
 	pypiURL = "http://127.0.0.1:1/unreachable"
 	if sim, _ := Typosquat("PyPI", "reqeusts"); sim != "" {
 		t.Fatalf("got %q without a list", sim)
+	}
+}
+
+func TestSameOwnerIsNotTyposquat(t *testing.T) {
+	cases := []struct {
+		eco, a, b string
+		same      bool
+	}{
+		{"Go", "github.com/mholt/archives", "github.com/mholt/archiver", true},
+		{"Go", "github.com/m0lt/archiver", "github.com/mholt/archiver", false},
+		{"Go", "golang.org/x/nett", "golang.org/x/net", true},
+		{"npm", "@types/lodash", "@types/lodahs", true},
+		{"npm", "@evil/lodash", "@types/lodash", false},
+		{"npm", "lodahs", "lodash", false},
+	}
+	for _, c := range cases {
+		if got := sameOwner(c.eco, c.a, c.b); got != c.same {
+			t.Errorf("sameOwner(%s, %s, %s)=%v want %v", c.eco, c.a, c.b, got, c.same)
+		}
+	}
+	// End to end: the real false positive seen on a production scan.
+	if sim, _ := Typosquat("Go", "github.com/mholt/archives"); sim != "" {
+		t.Errorf("mholt/archives flagged as lookalike of %s", sim)
+	}
+	if sim, _ := Typosquat("npm", "lodahs"); sim != "lodash" {
+		t.Errorf("lodahs should still be flagged, got %q", sim)
 	}
 }
