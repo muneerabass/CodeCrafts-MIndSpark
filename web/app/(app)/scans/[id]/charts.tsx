@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, Label, Pie, PieChart, XAxis, YAxis } from 'recharts';
 import { Printer } from 'lucide-react';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
@@ -117,8 +117,34 @@ function Empty({ text }: { text: string }) {
   return <div className="flex h-44 items-center justify-center text-sm text-muted-foreground">{text}</div>;
 }
 
+/** Prints in the light theme (dark themes waste ink and lose contrast), then restores the user's theme. */
+function usePrintLight() {
+  useEffect(() => {
+    const el = document.documentElement;
+    let saved: { theme?: string; dark: boolean } | null = null;
+    const before = () => {
+      saved = { theme: el.dataset.theme, dark: el.classList.contains('dark') };
+      el.dataset.theme = 'classic';
+      el.classList.remove('dark');
+    };
+    const after = () => {
+      if (!saved) return;
+      if (saved.theme) el.dataset.theme = saved.theme;
+      el.classList.toggle('dark', saved.dark);
+      saved = null;
+    };
+    window.addEventListener('beforeprint', before);
+    window.addEventListener('afterprint', after);
+    return () => {
+      window.removeEventListener('beforeprint', before);
+      window.removeEventListener('afterprint', after);
+    };
+  }, []);
+}
+
 /** Opens the browser print dialog; the page has print styles, so "Save as PDF" gives a clean report. */
 export function SavePdfButton() {
+  usePrintLight();
   return (
     <Button variant="outline" size="sm" onClick={() => window.print()}>
       <Printer /> Save as PDF
