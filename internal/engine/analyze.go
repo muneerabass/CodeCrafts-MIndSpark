@@ -392,12 +392,12 @@ func (d Deps) malwareAnalysis(ctx context.Context, fs []*finding, st settings) {
 		if !ok || !v.Malware {
 			continue
 		}
-		details := map[string]any{"report_url": v.ReportURL(), "verified": v.Verified, "source": "safedep-malysis"}
+		details := map[string]any{"verified": v.Verified, "source": "depguard malware analysis"}
 		if v.Verified {
 			f.malware = true
 			f.checks = append(f.checks, scan.Finding{Rule: "malware-analysis", Category: "malware", Severity: scan.SeverityCritical, Blocking: true,
 				Package: f.pkg, Details: details,
-				Summary: fmt.Sprintf("%s %s is confirmed malicious by SafeDep malware analysis.", f.pkg.GetName(), f.pkg.GetVersion())})
+				Summary: fmt.Sprintf("%s %s is confirmed malicious by depguard malware analysis.", f.pkg.GetName(), f.pkg.GetVersion())})
 			continue
 		}
 		if len(scan.ApplyExclusions([]scan.Violation{{Package: f.pkg}}, st.Exclusions, now)) == 0 {
@@ -405,6 +405,6 @@ func (d Deps) malwareAnalysis(ctx context.Context, fs []*finding, st settings) {
 		}
 		f.checks = append(f.checks, scan.Finding{Rule: "possible-malware", Category: scan.CategorySuspicious, Severity: scan.SeverityHigh, Blocking: true,
 			Package: f.pkg, Details: details,
-			Summary: fmt.Sprintf("%s %s was flagged as possibly malicious by SafeDep malware analysis (not yet confirmed).", f.pkg.GetName(), f.pkg.GetVersion())})
+			Summary: fmt.Sprintf("%s %s was flagged as possibly malicious by depguard malware analysis (not yet confirmed).", f.pkg.GetName(), f.pkg.GetVersion())})
 	}
 }

@@ -32,18 +32,10 @@ const (
 
 // Verdict is the service's answer for one package version.
 type Verdict struct {
-	Malware    bool   // flagged by analysis (may be unverified)
-	Verified   bool   // confirmed malicious by SafeDep
-	AnalysisID string // report: https://app.safedep.io/community/malysis/<id>
+	Malware    bool // flagged by analysis (may be unverified)
+	Verified   bool // confirmed malicious by SafeDep
+	AnalysisID string
 	Summary    string
-}
-
-// ReportURL links to the public analysis report.
-func (v Verdict) ReportURL() string {
-	if v.AnalysisID == "" {
-		return ""
-	}
-	return "https://app.safedep.io/community/malysis/" + v.AnalysisID
 }
 
 type Client struct {

@@ -106,6 +106,7 @@ type PRCommentInput struct {
 	Reasons      []string // top reasons
 	FixedNow     bool     // earlier review had blocking issues, this one has none
 	BlockingNote string   // e.g. "block mode is on"
+	AppSlug      string   // GitHub App slug, for the footer link
 }
 
 // Summarize builds the stored dependency summary of a PR scan.
@@ -332,7 +333,7 @@ func RemoveCommand(eco, name, manifest string) string {
 // writeDetails is the collapsible package and finding sections.
 func writeDetails(b *strings.Builder, r Report) {
 	if len(r.Packages) > 0 {
-		fmt.Fprintf(b, "<details>\n<summary>📦 Package details (%d)</summary>\n\n", len(r.Packages))
+		fmt.Fprintf(b, "<details>\n<summary>Package Details (%d)</summary>\n\n", len(r.Packages))
 		b.WriteString("| Package | Dependency | Malware | Vulnerability | Risky license |\n|---|---|:---:|:---:|:---:|\n")
 		for _, p := range r.Packages {
 			fmt.Fprintf(b, "| `%s @ %s`<br>%s | %s | %s | %s | %s |\n", codeSafe(p.Name), codeSafe(p.Version), Escape(p.ManifestPath),
@@ -341,7 +342,7 @@ func writeDetails(b *strings.Builder, r Report) {
 		b.WriteString("\n</details>\n\n")
 	}
 	if len(r.Violations) > 0 {
-		fmt.Fprintf(b, "<details>\n<summary>🚫 Policy violations (%d)</summary>\n\n", len(r.Violations))
+		fmt.Fprintf(b, "<details>\n<summary>Policy Violations (%d)</summary>\n\n", len(r.Violations))
 		for _, v := range r.Violations {
 			fmt.Fprintf(b, "- **%s** (%s) — `%s @ %s` in %s: %s\n", Escape(v.Rule), Escape(v.Category),
 				codeSafe(v.Package.Name), codeSafe(v.Package.Version), Escape(v.Package.ManifestPath), Escape(v.Summary))
@@ -354,20 +355,15 @@ func writeDetails(b *strings.Builder, r Report) {
 		}
 		b.WriteString("\n</details>\n\n")
 	}
-	writeFindingSection(b, r, "suspicious", "🕵️ Suspicious packages")
-	writeFindingSection(b, r, "license", "⚖️ License issues")
+	writeFindingSection(b, r, "suspicious", "Suspicious Packages")
+	writeFindingSection(b, r, "license", "License Issues")
 }
 
-var levelWords = map[string]string{
-	"critical": "Critical — fix before merging", "high": "High — fix before merging", "medium": "Medium — review before merging",
-	"low": "Low — minor findings", "clean": "Clean", "pending": "Review in progress",
-}
-
-// PRComment renders the sticky PR comment.
+// PRComment renders the sticky PR comment: title, status pills, collapsible
+// sections and a link to the PR in depguard.
 func PRComment(in PRCommentInput) string {
 	base := strings.TrimRight(in.PublicURL, "/")
 	prURL := fmt.Sprintf("%s/pull-requests/%s/%d", base, in.ProjectID, in.PRNumber)
-	scanURL := base + "/scans/" + in.Summary.ScanID
 	s, rv, set := in.Summary, in.Review, in.Settings
 	var b strings.Builder
 	b.WriteString(Marker + "\n")
@@ -376,7 +372,6 @@ func PRComment(in PRCommentInput) string {
 	}
 	b.WriteString("## depguard Report Summary\n\n")
 
-	// Status pills.
 	codeState := reviewState(rv)
 	for _, c := range PRChecks {
 		st := s.Checks[c]
@@ -391,7 +386,6 @@ func PRComment(in PRCommentInput) string {
 	}
 	b.WriteString("\n\n")
 
-	// One-line verdict.
 	blocking := 0
 	for _, f := range s.Fixes {
 		if f.Blocking {
@@ -407,48 +401,20 @@ func PRComment(in PRCommentInput) string {
 	case s.NoChanges && len(rv.Findings) == 0 && in.Level != "pending":
 		b.WriteString("No dependency changes detected. Nothing to scan.\n\n")
 	case in.FixedNow && in.Level == "clean":
-		b.WriteString("✅ **All issues fixed.** No blocking findings in the latest commit.\n\n")
-	default:
-		fmt.Fprintf(&b, "**Urgency: %s** (score %d/100)", levelWords[in.Level], in.Urgency)
-		if s.Packages > 0 {
-			fmt.Fprintf(&b, " · %s checked", plural(s.Packages, "new or changed package", "new or changed packages"))
-		}
-		b.WriteString("\n\n")
-	}
-	fmt.Fprintf(&b, `<a href="%s"><img src="%s/badges/review-button.svg" alt="Review in depguard" height="34"></a>`+"\n\n", prURL, base)
-
-	// Callouts.
-	if blocking > 0 && in.Level != "clean" {
-		b.WriteString("> [!CAUTION]\n")
-		fmt.Fprintf(&b, "> **%s must be fixed before merging.**", plural(blocking, "blocking issue", "blocking issues"))
+		b.WriteString("All issues fixed. No blocking findings in the latest commit.\n\n")
+	case blocking > 0 && in.Level != "clean":
+		fmt.Fprintf(&b, "**%s to fix before merging.**", plural(blocking, "blocking issue", "blocking issues"))
 		if in.BlockingNote != "" {
 			b.WriteString(" " + Escape(in.BlockingNote) + ".")
 		}
 		if set.MentionAuthor && in.Author != "" {
 			fmt.Fprintf(&b, " @%s", strings.TrimPrefix(in.Author, "@"))
 		}
-		b.WriteString("\n")
-		for _, r := range in.Reasons {
-			b.WriteString("> - " + r + "\n")
-		}
-		b.WriteString("\n")
-	} else if in.Level == "medium" || in.Level == "low" {
-		b.WriteString("> [!WARNING]\n> Findings to review; nothing here blocks the merge.\n")
-		for _, r := range in.Reasons {
-			b.WriteString("> - " + r + "\n")
-		}
-		b.WriteString("\n")
-	}
-	switch rv.AIStatus {
-	case "queued", "running":
-		b.WriteString("> [!NOTE]\n> The AI code review is running; this comment updates when it finishes.\n\n")
-	case "rate_limited", "failed":
-		fmt.Fprintf(&b, "> [!IMPORTANT]\n> AI code review delayed: %s. The rule-based review below is complete; the AI review is retried automatically.\n\n", Escape(rv.AINote))
+		b.WriteString("\n\n")
 	}
 
-	// Fix before merging.
 	if set.on("fix_commands") && len(s.Fixes) > 0 {
-		b.WriteString("### Fix before merging\n\n")
+		fmt.Fprintf(&b, "<details>\n<summary>Fix Before Merging (%d)</summary>\n\n", len(s.Fixes))
 		for i, f := range s.Fixes {
 			if i == 8 {
 				fmt.Fprintf(&b, "- … and %d more in the [full review](%s)\n", len(s.Fixes)-8, prURL)
@@ -466,12 +432,11 @@ func PRComment(in PRCommentInput) string {
 				b.WriteString("  " + f.Note + "\n")
 			}
 		}
-		b.WriteString("\n")
+		b.WriteString("\n</details>\n\n")
 	}
 
-	// Code review.
-	if set.on("code_review") && len(rv.Findings) > 0 {
-		fmt.Fprintf(&b, "<details open>\n<summary>🔍 Code review (%d)</summary>\n\n", len(rv.Findings))
+	if set.on("code_review") && (len(rv.Findings) > 0 || rv.AISum != "") {
+		fmt.Fprintf(&b, "<details>\n<summary>Code Review (%d)</summary>\n\n", len(rv.Findings))
 		if rv.AISum != "" {
 			b.WriteString(Escape(rv.AISum) + "\n\n")
 		}
@@ -505,18 +470,21 @@ func PRComment(in PRCommentInput) string {
 		b.WriteString(s.Details)
 	}
 	if len(s.AIUsage) > 0 {
-		b.WriteString("<details>\n<summary>🤖 AI/SaaS usage added</summary>\n\n")
+		b.WriteString("<details>\n<summary>AI/SaaS Usage Added</summary>\n\n")
 		for _, u := range s.AIUsage {
 			b.WriteString("- " + Escape(u) + "\n")
 		}
 		b.WriteString("\n</details>\n\n")
 	}
 	if set.on("run_config") {
-		b.WriteString("<details>\n<summary>⚙️ Run configuration</summary>\n\n")
+		b.WriteString("<details>\n<summary>Run Configuration</summary>\n\n")
 		if set.PolicyNote != "" {
 			b.WriteString("- Policy: " + Escape(set.PolicyNote) + "\n")
 		}
 		fmt.Fprintf(&b, "- Checks: malware, vulnerabilities, licenses, suspicious packages, package rules, code review (%s)\n", reviewEngines(rv))
+		if rv.AIStatus == "rate_limited" || rv.AIStatus == "failed" {
+			b.WriteString("- AI review delayed: " + Escape(rv.AINote) + " (retried automatically)\n")
+		}
 		if rv.Files > 0 {
 			fmt.Fprintf(&b, "- Files reviewed: %d", rv.Files)
 			if rv.Truncate {
@@ -524,24 +492,28 @@ func PRComment(in PRCommentInput) string {
 			}
 			b.WriteString("\n")
 		}
-		b.WriteString("\n</details>\n\n")
-	}
-	if len(in.Commits) > 0 {
-		b.WriteString("<details>\n<summary>📥 Commits reviewed</summary>\n\n")
-		for _, c := range in.Commits {
-			if len(c) > 12 {
-				c = c[:12]
+		if len(in.Commits) > 0 {
+			var cs []string
+			for _, c := range in.Commits {
+				if len(c) > 7 {
+					c = c[:7]
+				}
+				cs = append(cs, "`"+codeSafe(c)+"`")
 			}
-			b.WriteString("- `" + codeSafe(c) + "`\n")
+			b.WriteString("- Commits reviewed: " + strings.Join(cs, ", ") + "\n")
 		}
 		b.WriteString("\n</details>\n\n")
 	}
+	fmt.Fprintf(&b, "[View complete scan results →](%s)\n\n", prURL)
 	b.WriteString("- [ ] " + RerunMarker + " Re-run depguard review\n\n")
-	fmt.Fprintf(&b, "[View complete scan results →](%s)\n\n", scanURL)
 	if f := strings.TrimSpace(set.Footer); f != "" {
 		b.WriteString(f + "\n\n")
 	}
-	b.WriteString("<sub>This report is generated by the depguard GitHub App</sub>\n")
+	appURL := base
+	if in.AppSlug != "" {
+		appURL = "https://github.com/apps/" + in.AppSlug
+	}
+	fmt.Fprintf(&b, "<sub>This report is generated by [depguard GitHub App](%s)</sub>\n", appURL)
 	return Truncate(b.String(), prURL)
 }
 

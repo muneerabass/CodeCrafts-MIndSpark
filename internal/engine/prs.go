@@ -243,7 +243,7 @@ func (d Deps) refreshPR(ctx context.Context, gh *github.Client, tenant, prID str
 	body := render.PRComment(render.PRCommentInput{
 		PublicURL: d.PublicURL, ProjectID: pr.ProjectID, PRNumber: pr.Number, Author: pr.Author, HeadSHA: pr.HeadSHA, Commits: commits,
 		Summary: sum, Review: rv, Urgency: rank.Score, Level: rank.Level, Reasons: reasonText, FixedNow: fixedNow,
-		BlockingNote: map[bool]string{true: "Block mode is on", false: ""}[st.BlockMode && blocking],
+		BlockingNote: map[bool]string{true: "Block mode is on", false: ""}[st.BlockMode && blocking], AppSlug: d.GitHub.Slug,
 		Settings: render.CommentSettings{Sections: ps.Sections, MentionAuthor: ps.MentionAuthorOnBlock && blocking,
 			Header: ps.Header, Footer: ps.Footer, PolicyNote: policyNote(st)},
 	})

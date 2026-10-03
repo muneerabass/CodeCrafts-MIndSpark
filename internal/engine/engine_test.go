@@ -401,7 +401,7 @@ func TestPullRequestEndToEnd(t *testing.T) {
 		body = b
 	}
 	for _, want := range []string{"evil-pkg @ 1.0.0", `alt="MALWARE: fail"`, "Remove malicious package", "npm uninstall evil-pkg",
-		"Fix before merging", "[!CAUTION]", render.RerunMarker, "/pull-requests/"} {
+		"Fix Before Merging", "blocking issue", "depguard Report Summary", render.RerunMarker, "View complete scan results"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("comment body lacks %q:\n%s", want, body)
 		}
