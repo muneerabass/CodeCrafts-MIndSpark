@@ -97,7 +97,7 @@ SELECT x.component_id, c.ecosystem, c.name, c.version, x.advisory_id, COALESCE(a
 FROM component_vulnerabilities x JOIN components c ON c.id = x.component_id
 LEFT JOIN advisory a ON a.id = x.advisory_id
 LEFT JOIN LATERAL (SELECT max(epss)::float8 AS epss, bool_or(kev) AS kev FROM cve_score
-  WHERE cve = x.advisory_id OR cve IN (SELECT alias FROM advisory_alias WHERE advisory_id = x.advisory_id)) s ON true
+  WHERE cve = ANY(ARRAY(SELECT x.advisory_id UNION SELECT alias FROM advisory_alias WHERE advisory_id = x.advisory_id))) s ON true
 WHERE x.component_id = ANY($1)
 ORDER BY x.component_id, array_position(ARRAY['CRITICAL','HIGH','MEDIUM','LOW'], COALESCE(a.risk, x.risk)), x.advisory_id`, compIDs)
 	if err != nil {
