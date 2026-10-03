@@ -1,8 +1,36 @@
+# Dependencies & build output
 node_modules/
 .next/
+/bin/
+/dist/
+# Binaries from `go build ./cmd/...` in the repo root
+/api
+/worker
+/depguard
+/depguard-feeds
+/ghapp-setup
+*.test
+*.out
+coverage/
+
+# Secrets — never commit
 .env
 .env.*
 !.env.example
-/bin/
 *.pem
+*.key
 deploy/secrets/
+
+# Test artifacts
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/playwright/.cache/
+
+# Logs & OS/editor files
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
