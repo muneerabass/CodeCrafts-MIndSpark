@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { Check, ChevronDown, Download, GitBranch, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -92,8 +93,8 @@ const pkgCols: ColumnDef<ScanPackage, unknown>[] = [
             </Link>
           </li>
         ))}
-        {row.original.violations.map((v) => (
-          <li key={v.rule_name} className="text-xs whitespace-normal text-amber-700">
+        {row.original.violations.map((v, i) => (
+          <li key={`${v.rule_name}-${i}`} className="text-xs whitespace-normal text-amber-700">
             {v.rule_name}: {v.summary}
           </li>
         ))}
@@ -103,8 +104,30 @@ const pkgCols: ColumnDef<ScanPackage, unknown>[] = [
   },
 ];
 
+const PKG_PAGE = 50;
 export function ScanPackagesTable({ data }: { data: ScanPackage[] }) {
-  return <DataTable columns={pkgCols} data={data} empty="No package changes in this scan." />;
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(data.length / PKG_PAGE));
+  return (
+    <>
+      <DataTable columns={pkgCols} data={data.slice(page * PKG_PAGE, (page + 1) * PKG_PAGE)} empty="No package changes in this scan." />
+      {pages > 1 && (
+        <div className="flex items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
+          <span className="tabular-nums">
+            {page * PKG_PAGE + 1}–{Math.min(data.length, (page + 1) * PKG_PAGE)} of {data.length}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
+              Previous
+            </Button>
+            <Button variant="ghost" size="sm" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export function DownloadReport({ id }: { id: string }) {

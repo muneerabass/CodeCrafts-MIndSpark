@@ -135,3 +135,14 @@
 .prose-dg th, .prose-dg td { @apply border px-2 py-1; }
 .prose-dg details { @apply my-2; }
 .prose-dg summary { @apply cursor-pointer font-medium; }
+
+/* Printing / "Save as PDF": only the page content, in light colours, with backgrounds kept. */
+@media print {
+  @page { size: A4; margin: 12mm; }
+  :root { color-scheme: light; }
+  html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff !important; }
+  [data-slot='sidebar'], [data-slot='sidebar-gap'], [data-slot='sidebar-container'], [data-sonner-toaster] { display: none !important; }
+  [data-slot='sidebar-wrapper'], [data-slot='sidebar-inset'] { display: block !important; margin: 0 !important; box-shadow: none !important; border: 0 !important; min-height: 0 !important; }
+  .report [data-slot='card'] { box-shadow: none !important; break-inside: auto; }
+  .report a { color: inherit; text-decoration: none; }
+}

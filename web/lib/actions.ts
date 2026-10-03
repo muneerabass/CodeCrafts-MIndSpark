@@ -9,7 +9,6 @@ import { createClient } from './supabase/server';
 import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
-import { publicUrl } from './auth';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
 import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
 
