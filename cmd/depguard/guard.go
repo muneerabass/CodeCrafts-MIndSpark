@@ -127,6 +127,20 @@ func runGuard(o guardOpts, tool string, args []string) int {
 	if rerr != nil && notFound(rerr) {
 		sp.end()
 		fmt.Fprintf(out, "%s %s %s could not resolve this install:\n%s\n", brand(), red("✖"), tool, dim(indent(lastLines(rerr.Error(), 4))))
+		// Registries remove malicious versions: say so when depguard knows the exact version.
+		var req checkRequest
+		t := true
+		for _, sp := range inv.specs {
+			if n, v, ok := pinned(inv.tool, sp); ok {
+				req.Packages = append(req.Packages, checkPkg{Ecosystem: toolEcosystem[inv.tool], Name: n, Version: v, Direct: &t})
+			}
+		}
+		var result checkResult
+		if len(req.Packages) > 0 {
+			if _, err := c.do("POST", "/v1/packages/check", "", req, &result); err == nil && len(result.Packages) > 0 {
+				printReport(result, &resolution{note: "the registry no longer serves this version; here is what depguard knows about it"}, inv, time.Since(start))
+			}
+		}
 		return 1
 	}
 	if rerr != nil {
