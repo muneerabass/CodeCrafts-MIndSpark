@@ -6,6 +6,7 @@ import { MobileNav } from '@/components/landing/mobile-nav';
 import { ArrowRight, ArrowUpRight, Bot, Check, ChevronRight, Database, GitPullRequest, Laptop, Workflow } from 'lucide-react';
 import { Logo, GitHubIcon } from '@/components/icons';
 import { Layers } from '@/components/landing/layers';
+import { HeroFlow, HeroPRCard, HeroTerminal } from '@/components/landing/hero-flow';
 import { getCtx } from '@/lib/session';
 
 // Pulse timing: the sweep crosses the rail in 70% of the 5s loop, so each of the 4 gaps takes 0.875s.
@@ -22,6 +23,13 @@ const REPO = process.env.GITHUB_REPO_URL ?? 'https://github.com/Muneerabbas/Code
 const DOCS = `${REPO}/tree/master/docs`;
 
 const ECOSYSTEMS = ['npm', 'PyPI', 'Go', 'Maven', 'crates.io', 'RubyGems', 'NuGet', 'Packagist'];
+
+const STATS = [
+  ['8', 'package ecosystems'],
+  ['6', 'suspicious-package checks'],
+  ['0–100', 'risk score on every attack path'],
+  ['1', 'policy for PRs, CI and laptops'],
+] as const;
 
 const SIGNALS = [
   { kind: 'Malware', eco: 'npm', title: 'Install script reads cloud credentials', detail: 'A postinstall hook opens ~/.aws/credentials and posts it to a remote host.', action: 'Block install' },
@@ -60,9 +68,33 @@ const STEPS = [
 ];
 
 const FOOTER = [
-  { h: 'Product', links: [['Repositories', '#layers'], ['Malicious packages', '#layers'], ['Attack paths', '#layers'], ['Endpoints', '#layers'], ['Policy', '#layers']] },
-  { h: 'Platform', links: [['How it works', '#how'], ['What it catches', '#signals'], ['Sign in', SIGN_IN], ['Get started', SIGN_UP]] },
-  { h: 'Resources', links: [['Documentation', DOCS], ['Risk model', `${REPO}/blob/master/docs/RISK-MODEL.md`], ['GitHub', REPO]] },
+  {
+    h: 'Product',
+    links: [
+      ['Repositories', '#layers'],
+      ['Malicious packages', '#layers'],
+      ['Attack paths', '#layers'],
+      ['Endpoints', '#layers'],
+      ['Policy', '#layers'],
+    ],
+  },
+  {
+    h: 'Platform',
+    links: [
+      ['How it works', '#how'],
+      ['What it catches', '#signals'],
+      ['Sign in', SIGN_IN],
+      ['Get started', SIGN_UP],
+    ],
+  },
+  {
+    h: 'Resources',
+    links: [
+      ['Documentation', DOCS],
+      ['Risk model', `${REPO}/blob/master/docs/RISK-MODEL.md`],
+      ['GitHub', REPO],
+    ],
+  },
   { h: 'Legal', links: [['Attributions', '/attributions']] },
 ];
 
@@ -110,15 +142,29 @@ export default async function Home() {
             <span className="lp-display text-xl">depguard</span>
           </Link>
           <nav className="hidden items-center gap-8 text-[15px] text-[var(--lp-fg)] lg:flex">
-            <a href="#signals" className="hover:text-white">What it catches</a>
-            <a href="#problem" className="hover:text-white">The problem</a>
-            <a href="#layers" className="hover:text-white">Product</a>
-            <a href="#how" className="hover:text-white">How it works</a>
-            <a href={DOCS} className="hover:text-white">Docs</a>
+            <a href="#signals" className="hover:text-white">
+              What it catches
+            </a>
+            <a href="#problem" className="hover:text-white">
+              The problem
+            </a>
+            <a href="#layers" className="hover:text-white">
+              Product
+            </a>
+            <a href="#how" className="hover:text-white">
+              How it works
+            </a>
+            <a href={DOCS} className="hover:text-white">
+              Docs
+            </a>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-[15px]">
-            <Link href={SIGN_IN} className="hidden px-2 hover:text-white sm:block">Sign in</Link>
-            <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-3 py-2 text-sm">Get started</Link>
+            <Link href={SIGN_IN} className="hidden px-2 hover:text-white sm:block">
+              Sign in
+            </Link>
+            <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-3 py-2 text-sm">
+              Get started
+            </Link>
             <a href={REPO} aria-label="GitHub repository" className="lp-btn border border-[var(--lp-line-2)] px-3 py-2 text-sm hover:border-[var(--lp-dim)] max-sm:!hidden">
               <GitHubIcon /> GitHub
             </a>
@@ -141,47 +187,84 @@ export default async function Home() {
       <section className="relative overflow-hidden border-b border-[var(--lp-line)]">
         <div aria-hidden className="lp-streaks pointer-events-none absolute inset-0" />
         <div className="lp-frame relative bg-black">
-          <div aria-hidden className="lp-hero-bg pointer-events-none absolute inset-0" />
-          <div className="lp-pad relative flex min-h-[78vh] flex-col justify-end pb-20 pt-32">
-            <a href="#signals" className="inline-flex w-fit items-center gap-3 rounded-full border border-[var(--lp-line-2)] bg-white/[0.03] px-4 py-1.5 text-sm hover:border-[var(--lp-dim)]">
-              <span className="lp-eyebrow whitespace-nowrap text-[11px] text-[var(--lp-fg)]">Supply-chain scanning</span>
-              <span className="lp-eyebrow whitespace-nowrap text-[11px] text-[var(--lp-teal)] max-sm:hidden">See signals</span>
-              <ChevronRight className="size-3.5" />
-            </a>
-            <h1 className="lp-display mt-7 max-w-4xl text-[44px] leading-[1.06] md:text-[64px]">
-              Most of your code was written by strangers.
-            </h1>
-            <p className="mt-7 max-w-xl text-[18px] leading-relaxed text-[var(--lp-fg)]/90">
-              Every package you install runs with your permissions. depguard maps every direct and transitive dependency, catches the
-              malicious and vulnerable ones, and shows exactly how they got in.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center gap-6">
-              <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-6 py-3.5 text-[16px]">Start scanning</Link>
-              <a href="#how" className="lp-nudge inline-flex items-center gap-2 text-[16px] text-white/90 hover:text-white">
-                How it works <ArrowRight className="size-4" />
+          <div aria-hidden className="lp-aurora pointer-events-none absolute inset-0" />
+          <div aria-hidden className="lp-grid pointer-events-none absolute inset-0" />
+          <div className="lp-pad relative grid items-center gap-14 pt-16 pb-16 lg:min-h-[82vh] lg:grid-cols-[1fr_1.1fr] lg:pt-20">
+            <div>
+              <a
+                href="#signals"
+                className="inline-flex w-fit items-center gap-3 rounded-full border border-[var(--lp-line-2)] bg-white/[0.04] px-3.5 py-1.5 text-sm backdrop-blur hover:border-[var(--lp-dim)]"
+              >
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--lp-teal)] opacity-60" />
+                  <span className="relative inline-flex size-2 rounded-full bg-[var(--lp-teal)]" />
+                </span>
+                <span className="text-[13px] text-[var(--lp-fg)]">Now with AI security review on every pull request</span>
+                <ChevronRight className="size-3.5" />
               </a>
+              <h1 className="lp-display mt-7 text-[44px] leading-[1.04] md:text-[66px]">
+                Most of your code was written by <span className="lp-gradient-text">strangers.</span>
+              </h1>
+              <p className="mt-6 max-w-xl text-[18px] leading-relaxed text-[var(--lp-fg)]/90">
+                Every package you install runs with your permissions. depguard maps every direct and transitive dependency, stops the malicious and vulnerable ones before they run, and shows exactly
+                how they got in.
+              </p>
+              <ul className="mt-7 flex max-w-xl flex-wrap gap-2">
+                {['Malware', 'CVEs & attack paths', 'Typosquats', 'Licenses', 'AI code review'].map((c) => (
+                  <li key={c} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--lp-line-2)] bg-white/[0.03] px-3 py-1 text-[13px] text-[var(--lp-fg)]">
+                    <Check className="size-3.5 text-[var(--lp-teal)]" /> {c}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-9 flex flex-wrap items-center gap-4">
+                <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-6 py-3.5 text-[16px]">
+                  Start scanning <ArrowRight className="size-4" />
+                </Link>
+                <Link href={`${SIGN_IN}?provider=github`} className="lp-btn lp-btn-ghost px-5 py-3.5 text-[16px]">
+                  <GitHubIcon /> Sign in with GitHub
+                </Link>
+              </div>
+              <p className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--lp-dim)]">
+                <span>GitHub App + CLI</span>
+                <span aria-hidden>·</span>
+                <span>Private, invite-only workspaces</span>
+                <span aria-hidden>·</span>
+                <a href="#how" className="lp-nudge inline-flex items-center gap-1 text-[var(--lp-fg)] hover:text-white">
+                  How it works <ArrowRight className="size-3.5" />
+                </a>
+              </p>
             </div>
-            <p className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--lp-dim)]">
-              <span>GitHub App + CLI</span>
-              <span aria-hidden>·</span>
-              <span>Private, invite-only workspaces</span>
-              <span aria-hidden>·</span>
-              <Link href={`${SIGN_IN}?provider=github`} className="inline-flex items-center gap-1.5 text-[var(--lp-fg)] underline-offset-4 hover:text-white hover:underline"><GitHubIcon /> Sign in with GitHub</Link>
-            </p>
+
+            <div className="relative mx-auto w-full max-w-[640px] lg:mx-0 xl:pt-[4.75rem]">
+              <div className="absolute top-0 right-0 z-10 hidden xl:block">
+                <HeroPRCard />
+              </div>
+              <HeroFlow />
+              <div className="relative z-10 -mt-4 flex justify-center lg:justify-start">
+                <HeroTerminal />
+              </div>
+            </div>
           </div>
 
-          {/* Ecosystem strip */}
-          <div className="lp-pad relative pb-12">
-            <div className="flex items-center gap-6">
-              <span className="h-px flex-1 bg-[var(--lp-line)]" />
-              <Eyebrow tone="dim">Scans across</Eyebrow>
-              <span className="h-px flex-1 bg-[var(--lp-line)]" />
+          {/* Ecosystems + numbers */}
+          <div className="relative border-t border-[var(--lp-line)]">
+            <div className="lp-marquee-wrap overflow-hidden py-6">
+              <ul className="lp-marquee lp-mono gap-14 pr-14 text-lg text-[var(--lp-muted)]">
+                {[...ECOSYSTEMS, ...ECOSYSTEMS].map((e, i) => (
+                  <li key={i} className="flex items-center gap-14 whitespace-nowrap">
+                    {e} <span className="text-[var(--lp-line-2)]">/</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <ul className="lp-mono mt-8 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 text-lg text-[var(--lp-muted)]">
-              {ECOSYSTEMS.map((e) => (
-                <li key={e}>{e}</li>
+            <dl className="grid grid-cols-2 border-t border-[var(--lp-line)] md:grid-cols-4">
+              {STATS.map(([v, l], i) => (
+                <div key={l} className={`lp-stat px-6 py-7 md:px-8 ${i % 2 ? 'border-l' : ''} ${i > 1 ? 'max-md:border-t' : ''} border-[var(--lp-line)] md:border-l md:first:border-l-0`}>
+                  <dt className="lp-display text-[34px] text-white">{v}</dt>
+                  <dd className="mt-1 text-sm text-[var(--lp-muted)]">{l}</dd>
+                </div>
               ))}
-            </ul>
+            </dl>
           </div>
         </div>
       </section>
@@ -261,17 +344,11 @@ export default async function Home() {
               {STAGES.map((s, i) => (
                 <div key={s.n} className="relative flex flex-col items-center">
                   <span className="lp-mono text-sm text-[var(--lp-dim)]">{s.n}</span>
-                  <span
-                    className="lp-tile lp-hit relative mt-4 grid size-[72px] place-items-center border border-[var(--lp-line-2)] bg-[#0a0a0a]"
-                    style={{ animationDelay: `${i * STEP}s` }}
-                  >
+                  <span className="lp-tile lp-hit relative mt-4 grid size-[72px] place-items-center border border-[var(--lp-line-2)] bg-[#0a0a0a]" style={{ animationDelay: `${i * STEP}s` }}>
                     <s.icon className="size-5 text-white" strokeWidth={1.5} />
                   </span>
                   <span className="mt-4 text-center text-[17px] text-white">{s.name}</span>
-                  <div
-                    className="lp-hit-card mt-8 w-full flex-1 border border-[var(--lp-line-2)] bg-[var(--lp-panel)] p-5"
-                    style={{ animationDelay: `${i * STEP}s` }}
-                  >
+                  <div className="lp-hit-card mt-8 w-full flex-1 border border-[var(--lp-line-2)] bg-[var(--lp-panel)] p-5" style={{ animationDelay: `${i * STEP}s` }}>
                     <Eyebrow tone="dim">What gets in</Eyebrow>
                     <ul className="lp-mono mt-4 space-y-3 text-[15px] text-white">
                       {s.gets.map((g) => (
@@ -363,11 +440,11 @@ export default async function Home() {
           <svg aria-hidden viewBox="0 0 1200 640" className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice">
             <defs>
               <linearGradient id="lp-band" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#14b8a6" stopOpacity="0.55" />
-                <stop offset="1" stopColor="#0f766e" stopOpacity="0.15" />
+                <stop offset="0" stopColor="#8b5cf6" stopOpacity="0.55" />
+                <stop offset="1" stopColor="#6d28d9" stopOpacity="0.15" />
               </linearGradient>
             </defs>
-            <g fill="none" stroke="rgb(45 212 191 / 0.25)">
+            <g fill="none" stroke="rgb(167 139 250 / 0.25)">
               <path d="M180 120 L340 60 L340 600 L180 540 Z" />
               <path d="M860 160 L940 130 L940 560 L860 590 Z" />
             </g>
@@ -380,12 +457,14 @@ export default async function Home() {
               <br />
               Before it ships.
             </h2>
-            <p className="mx-auto mt-6 max-w-md text-[17px] leading-relaxed text-[var(--lp-fg)]/90">
-              Connect a repository and get your full dependency risk picture on the first scan.
-            </p>
+            <p className="mx-auto mt-6 max-w-md text-[17px] leading-relaxed text-[var(--lp-fg)]/90">Connect a repository and get your full dependency risk picture on the first scan.</p>
             <div className="mt-10 flex justify-center gap-4">
-              <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-6 py-3.5 text-[16px]">Start scanning</Link>
-              <a href={DOCS} className="lp-btn lp-btn-ghost bg-black px-6 py-3.5 text-[16px]">Read the docs</a>
+              <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-6 py-3.5 text-[16px]">
+                Start scanning
+              </Link>
+              <a href={DOCS} className="lp-btn lp-btn-ghost bg-black px-6 py-3.5 text-[16px]">
+                Read the docs
+              </a>
             </div>
           </div>
         </div>
@@ -399,9 +478,7 @@ export default async function Home() {
               <Logo className="size-6" />
               <span className="lp-display text-xl">depguard</span>
             </Link>
-            <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-[var(--lp-muted)]">
-              Supply-chain security for repositories, pipelines and developer machines.
-            </p>
+            <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-[var(--lp-muted)]">Supply-chain security for repositories, pipelines and developer machines.</p>
           </div>
           {FOOTER.map((col) => (
             <div key={col.h}>
@@ -409,7 +486,9 @@ export default async function Home() {
               <ul className="mt-5 space-y-3 text-[15px]">
                 {col.links.map(([label, href]) => (
                   <li key={label}>
-                    <a href={href} className="text-[var(--lp-fg)] hover:text-white">{label}</a>
+                    <a href={href} className="text-[var(--lp-fg)] hover:text-white">
+                      {label}
+                    </a>
                   </li>
                 ))}
               </ul>

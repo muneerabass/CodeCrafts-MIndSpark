@@ -8,18 +8,18 @@
   --lp-line: rgb(255 255 255 / 8%);
   --lp-line-2: rgb(255 255 255 / 12%);
   --lp-panel: rgb(255 255 255 / 2.5%);
-  --lp-teal: #2dd4bf;
-  --lp-teal-btn: #0d9488;
+  --lp-teal: #a78bfa;
+  --lp-teal-btn: #7c3aed;
   --lp-red: #f87171;
-  --logo-a: #5eead4;
-  --logo-b: #0f766e;
+  --logo-a: #c4b5fd;
+  --logo-b: #6d28d9;
   background: var(--lp-bg);
   color: var(--lp-fg);
   font-family: var(--lp-sans), ui-sans-serif, system-ui, sans-serif;
   letter-spacing: -0.4px;
   -webkit-font-smoothing: antialiased;
 }
-.lp ::selection { background: rgb(45 212 191 / 30%); }
+.lp ::selection { background: rgb(167 139 250 / 30%); }
 
 .lp .lp-display { font-family: var(--lp-display), var(--lp-sans), sans-serif; font-weight: 400; letter-spacing: -0.025em; color: var(--lp-white); }
 .lp .lp-mono { font-family: var(--lp-mono), ui-monospace, monospace; letter-spacing: 0; }
@@ -37,21 +37,21 @@
 }
 .lp .lp-btn-primary {
   background: var(--lp-teal-btn); color: #fff;
-  box-shadow: inset 0 -1px 0.4px rgb(0 0 0 / 20%), 0 1px 0.4px rgb(39 219 199);
+  box-shadow: inset 0 -1px 0.4px rgb(0 0 0 / 20%), 0 1px 0.4px rgb(196 181 253);
 }
-.lp .lp-btn-primary:hover { background: #0f766e; }
+.lp .lp-btn-primary:hover { background: #6d28d9; }
 .lp .lp-btn-ghost { border: 1px solid var(--lp-dim); color: #fff; }
 .lp .lp-btn-ghost:hover { border-color: var(--lp-muted); background: rgb(255 255 255 / 4%); }
 
 /* Hero: soft teal haze plus static light streaks outside the frame. */
 .lp .lp-hero-bg {
   background:
-    radial-gradient(55% 45% at 30% 55%, rgb(45 212 191 / 9%), transparent 70%),
-    radial-gradient(40% 35% at 80% 40%, rgb(16 185 129 / 6%), transparent 70%);
+    radial-gradient(55% 45% at 30% 55%, rgb(167 139 250 / 9%), transparent 70%),
+    radial-gradient(40% 35% at 80% 40%, rgb(139 92 246 / 6%), transparent 70%);
 }
 .lp .lp-streaks {
   background:
-    repeating-linear-gradient(176deg, transparent 0 22px, rgb(45 212 191 / 7%) 22px 23px, transparent 23px 61px),
+    repeating-linear-gradient(176deg, transparent 0 22px, rgb(167 139 250 / 7%) 22px 23px, transparent 23px 61px),
     repeating-linear-gradient(184deg, transparent 0 37px, rgb(255 255 255 / 4%) 37px 38px, transparent 38px 90px);
   mask-image: linear-gradient(90deg, black, transparent 18%, transparent 82%, black);
   -webkit-mask-image: linear-gradient(90deg, black, transparent 18%, transparent 82%, black);
@@ -62,8 +62,8 @@
 .lp .lp-row:hover { background: rgb(255 255 255 / 2%); }
 
 /* "Answer" glow line. */
-.lp .lp-beam { width: 1px; height: 140px; margin-inline: auto; background: linear-gradient(to bottom, transparent, var(--lp-teal)); box-shadow: 0 0 18px 1px rgb(45 212 191 / 35%); }
-.lp .lp-answer-card { border: 1px solid rgb(45 212 191 / 30%); background: linear-gradient(180deg, rgb(45 212 191 / 6%), transparent); }
+.lp .lp-beam { width: 1px; height: 140px; margin-inline: auto; background: linear-gradient(to bottom, transparent, var(--lp-teal)); box-shadow: 0 0 18px 1px rgb(167 139 250 / 35%); }
+.lp .lp-answer-card { border: 1px solid rgb(167 139 250 / 30%); background: linear-gradient(180deg, rgb(167 139 250 / 6%), transparent); }
 
 
 /* ---------- Pipeline: a risk pulse sweeps left→right through the five stages ---------- */
@@ -117,10 +117,10 @@
   animation: lp-drop 2.6s ease-in infinite;
 }
 @keyframes lp-drop { 0% { top: -40px; } 70%, 100% { top: 100%; } }
-.lp .lp-guard-rail { position: relative; height: 1px; overflow: hidden; background: linear-gradient(90deg, transparent, rgb(45 212 191 / 50%), transparent); }
+.lp .lp-guard-rail { position: relative; height: 1px; overflow: hidden; background: linear-gradient(90deg, transparent, rgb(167 139 250 / 50%), transparent); }
 .lp .lp-guard-rail::after {
   content: ""; position: absolute; top: 0; height: 100%; width: 18%; left: -18%;
-  background: linear-gradient(90deg, transparent, #5eead4, transparent);
+  background: linear-gradient(90deg, transparent, #c4b5fd, transparent);
   animation: lp-glide 3.2s ease-in-out infinite;
 }
 @keyframes lp-glide { 0% { left: -18%; } 100% { left: 100%; } }
@@ -138,10 +138,68 @@
   outline: none; transition: border-color .15s ease, box-shadow .15s ease;
 }
 .lp .lp-input::placeholder { color: var(--lp-dim); }
-.lp .lp-input:focus { border-color: rgb(45 212 191 / 60%); box-shadow: 0 0 0 3px rgb(45 212 191 / 15%); }
+.lp .lp-input:focus { border-color: rgb(167 139 250 / 60%); box-shadow: 0 0 0 3px rgb(167 139 250 / 15%); }
 .lp .lp-btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
 .lp :focus-visible { outline: 2px solid var(--lp-teal); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .lp *, .lp *::before, .lp *::after { transition: none !important; animation: none !important; }
+}
+
+/* ---------- Hero: grid, aurora, live flow, terminal, floating card, marquee ---------- */
+.lp .lp-grid {
+  background-image: linear-gradient(rgb(255 255 255 / 4%) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / 4%) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(70% 60% at 60% 40%, black, transparent 75%);
+  -webkit-mask-image: radial-gradient(70% 60% at 60% 40%, black, transparent 75%);
+}
+.lp .lp-aurora {
+  background:
+    radial-gradient(40% 35% at 70% 35%, rgb(139 92 246 / 22%), transparent 70%),
+    radial-gradient(35% 30% at 25% 70%, rgb(167 139 250 / 12%), transparent 70%),
+    radial-gradient(30% 25% at 90% 80%, rgb(236 72 153 / 8%), transparent 70%);
+  animation: lp-drift 14s ease-in-out infinite alternate;
+}
+@keyframes lp-drift { to { transform: translate3d(-3%, 2%, 0) scale(1.06); } }
+
+.lp .lp-gradient-text {
+  background: linear-gradient(92deg, #fff 10%, #c4b5fd 45%, #a78bfa 70%, #f0abfc 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: lp-shine 8s linear infinite;
+}
+@keyframes lp-shine { to { background-position: 200% center; } }
+
+.lp .lp-wire { stroke-dasharray: 6 8; animation: lp-dash 1.6s linear infinite; }
+@keyframes lp-dash { to { stroke-dashoffset: -28; } }
+.lp .lp-node { opacity: 0; animation: lp-rise 0.7s ease-out forwards; }
+@keyframes lp-rise { from { opacity: 0; transform-box: fill-box; translate: 0 8px; } to { opacity: 1; translate: 0 0; } }
+.lp .lp-core-glow { transform-box: fill-box; transform-origin: center; animation: lp-breathe 3.2s ease-in-out infinite; }
+@keyframes lp-breathe { 50% { opacity: 0.55; transform: scale(0.92); } }
+.lp .lp-orbit { transform-box: fill-box; transform-origin: center; animation: lp-spin 24s linear infinite; }
+.lp .lp-orbit-rev { animation-duration: 36s; animation-direction: reverse; }
+@keyframes lp-spin { to { transform: rotate(360deg); } }
+.lp .lp-ping { transform-box: fill-box; transform-origin: center; animation: lp-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes lp-ping { 0% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.7); } }
+
+.lp .lp-line { opacity: 0; animation: lp-type 9s steps(1, end) infinite, lp-type-fade 9s ease infinite; }
+@keyframes lp-type { 0% { opacity: 0; } 2% { opacity: 1; } 86% { opacity: 1; } 92%, 100% { opacity: 0; } }
+@keyframes lp-type-fade { 0% { translate: 0 3px; } 3%, 100% { translate: 0 0; } }
+.lp .lp-caret { display: inline-block; width: 7px; height: 14px; vertical-align: -2px; background: #a78bfa; animation: lp-blink 1s steps(2, start) infinite; }
+@keyframes lp-blink { to { visibility: hidden; } }
+
+.lp .lp-float { animation: lp-float 6s ease-in-out infinite; }
+@keyframes lp-float { 50% { translate: 0 -10px; } }
+
+.lp .lp-marquee { display: flex; width: max-content; animation: lp-marquee 28s linear infinite; }
+.lp .lp-marquee-wrap { mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent); }
+.lp .lp-marquee-wrap:hover .lp-marquee { animation-play-state: paused; }
+@keyframes lp-marquee { to { transform: translateX(-50%); } }
+
+.lp .lp-stat { background: linear-gradient(180deg, rgb(167 139 250 / 8%), transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp .lp-aurora, .lp .lp-gradient-text, .lp .lp-wire, .lp .lp-core-glow, .lp .lp-orbit, .lp .lp-ping, .lp .lp-float, .lp .lp-marquee, .lp .lp-caret { animation: none; }
+  .lp .lp-node, .lp .lp-line { opacity: 1; animation: none; }
+  .lp .lp-dot { display: none; }
 }
