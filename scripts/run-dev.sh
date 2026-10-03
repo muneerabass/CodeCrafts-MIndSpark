@@ -20,10 +20,37 @@ command -v npm >/dev/null 2>&1 || {
 export DEV_DB_PORT="${DEV_DB_PORT:-55432}"
 export DEV_API_PORT="${DEV_API_PORT:-8081}"
 export DEV_WORKER_HEALTH_PORT="${DEV_WORKER_HEALTH_PORT:-8082}"
-export DATABASE_URL="${DATABASE_URL:-postgres://depguard_app:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}"
-export DATABASE_OWNER_URL="${DATABASE_OWNER_URL:-postgres://depguard:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}"
-export DATABASE_QUERY_URL="${DATABASE_QUERY_URL:-postgres://depguard_query:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}"
-export DATABASE_URL_WEB="${DATABASE_URL_WEB:-postgres://depguard_web:dev@localhost:${DEV_DB_PORT}/depguard_web?sslmode=disable}"
+
+# Read server-side database URLs from web/.env.local when they are not already
+# present in the shell. The last matching entry wins, which also lets a local
+# override be appended without changing existing developer settings.
+env_value_file() {
+  local key="$1"
+  [[ -f "$ROOT_DIR/web/.env.local" ]] || return 0
+  awk -F= -v key="$key" '
+    {
+      k = $1
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", k)
+      if (k == key) {
+        v = substr($0, index($0, "=") + 1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+        value = v
+      }
+    }
+    END { if (value != "") print value }
+  ' "$ROOT_DIR/web/.env.local"
+}
+
+WEB_DATABASE_URL="$(env_value_file DATABASE_URL)"
+WEB_DATABASE_OWNER_URL="$(env_value_file DATABASE_OWNER_URL)"
+WEB_DATABASE_QUERY_URL="$(env_value_file DATABASE_QUERY_URL)"
+WEB_DATABASE_URL_WEB="$(env_value_file DATABASE_URL_WEB)"
+WEB_SUPERADMIN_EMAILS="$(env_value_file SUPERADMIN_EMAILS)"
+
+export DATABASE_URL="${DATABASE_URL:-${WEB_DATABASE_URL:-postgres://depguard_app:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}}"
+export DATABASE_OWNER_URL="${DATABASE_OWNER_URL:-${WEB_DATABASE_OWNER_URL:-postgres://depguard:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}}"
+export DATABASE_QUERY_URL="${DATABASE_QUERY_URL:-${WEB_DATABASE_QUERY_URL:-postgres://depguard_query:dev@localhost:${DEV_DB_PORT}/depguard?sslmode=disable}}"
+export DATABASE_URL_WEB="${DATABASE_URL_WEB:-${WEB_DATABASE_URL_WEB:-postgres://depguard_web:dev@localhost:${DEV_DB_PORT}/depguard_web?sslmode=disable}}"
 export SERVICE_JWT_SECRET="${SERVICE_JWT_SECRET:-dev-only-service-jwt-secret-0123456789abcdef}"
 export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET:-dev-only-better-auth-secret-0123456789abcdef}"
 export PUBLIC_URL="${PUBLIC_URL:-http://localhost:3000}"
@@ -31,7 +58,7 @@ export PUBLIC_API_URL="${PUBLIC_API_URL:-http://localhost:${DEV_API_PORT}}"
 export API_URL="${API_URL:-http://localhost:${DEV_API_PORT}}"
 export BETTER_AUTH_URL="${BETTER_AUTH_URL:-http://localhost:3000}"
 export TENANT_DOMAIN_SUFFIX="${TENANT_DOMAIN_SUFFIX:-localhost}"
-export SUPERADMIN_EMAILS="${SUPERADMIN_EMAILS:-admin@example.com}"
+export SUPERADMIN_EMAILS="${SUPERADMIN_EMAILS:-${WEB_SUPERADMIN_EMAILS:-admin@example.com}}"
 
 # Next.js loads web/.env.local itself. Do not override SMTP settings from
 # that file; use Mailpit defaults only when no SMTP settings were supplied.
@@ -73,13 +100,26 @@ fi
 
 pids=()
 
+stop_tree() {
+  local pid="$1"
+  local child
+
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    stop_tree "$child"
+  done
+
+  kill "$pid" 2>/dev/null || true
+}
+
 stop_services() {
   trap - EXIT INT TERM
 
   if ((${#pids[@]} > 0)); then
     echo
     echo "Stopping development servers..."
-    kill "${pids[@]}" 2>/dev/null || true
+    for pid in "${pids[@]}"; do
+      stop_tree "$pid"
+    done
     wait "${pids[@]}" 2>/dev/null || true
   fi
 }
@@ -93,7 +133,7 @@ trap stop_services EXIT
 trap stop_on_signal INT TERM
 
 echo "Starting API, worker, and web servers..."
-echo "Prerequisite: run 'make dev-db' once if Postgres and Mailpit are not running."
+echo "Prerequisite: local Postgres is only needed when no external DATABASE_URL is configured."
 echo ""
 
 echo "Applying web database migrations..."
