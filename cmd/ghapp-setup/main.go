@@ -70,7 +70,7 @@ func main() {
 		SetupURL:       *appURL + "/setup/integrations",
 		Public:         *public,
 		DefaultPermissions: map[string]string{
-			"contents":        "read",
+			"contents":        "write",
 			"pull_requests":   "write",
 			"checks":          "write",
 			"issues":          "write",

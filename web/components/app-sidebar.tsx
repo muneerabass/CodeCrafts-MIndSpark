@@ -36,6 +36,7 @@ import {
   UserPlus,
   Users,
   Video,
+  Wand2,
   Webhook,
 } from 'lucide-react';
 import {
@@ -106,6 +107,7 @@ const SETTINGS: Group[] = [
       { href: '/settings/billing', label: 'Billing', icon: CreditCard },
       { href: '/settings/preferences', label: 'Preferences', icon: SlidersHorizontal },
       { href: '/settings/pull-requests', label: 'Pull Requests', icon: GitPullRequest },
+      { href: '/settings/auto-fix', label: 'Auto-fix', icon: Wand2 },
     ],
   },
   { label: 'Personal', items: [{ href: '/settings/profile', label: 'Your Profile', icon: User }] },

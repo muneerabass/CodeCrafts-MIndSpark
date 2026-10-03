@@ -88,6 +88,7 @@ func AddWorkers(w *river.Workers, d Deps) {
 	river.AddWorker(w, &refreshWorker{d: d})
 	river.AddWorker(w, &prActionWorker{d: d})
 	river.AddWorker(w, &syncAllWorker{d: d})
+	river.AddWorker(w, &fixPRWorker{d: d})
 }
 
 // Size limits for anything fetched from repositories.

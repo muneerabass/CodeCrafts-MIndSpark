@@ -98,6 +98,9 @@ type fakeGitHub struct {
 	nextID    int64
 	tree      map[string]string // path -> blob sha of every commit's tree
 	license   string            // GET /license spdx_id; "" = 404
+	fixTree   []any             // entries of the last created tree
+	fixRef    string            // last created ref
+	fixPR     map[string]any    // last created pull request
 }
 
 func newFakeGitHub() *fakeGitHub {
@@ -251,6 +254,40 @@ func (g *fakeGitHub) handler() http.Handler {
 			tree = append(tree, map[string]any{"path": p, "type": "blob", "sha": sha, "size": len(g.blobs[sha])})
 		}
 		write(w, map[string]any{"sha": r.PathValue("sha"), "tree": tree})
+	})
+	mux.HandleFunc("GET /repos/o/r/branches/{b}", func(w http.ResponseWriter, r *http.Request) {
+		write(w, map[string]any{"name": r.PathValue("b"), "commit": map[string]any{"sha": "mainsha", "commit": map[string]any{"tree": map[string]any{"sha": "maintree"}}}})
+	})
+	mux.HandleFunc("POST /repos/o/r/git/trees", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		g.mu.Lock()
+		g.fixTree, _ = b["tree"].([]any)
+		g.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		write(w, map[string]any{"sha": "newtree"})
+	})
+	mux.HandleFunc("POST /repos/o/r/git/commits", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		write(w, map[string]any{"sha": "fixcommit"})
+	})
+	mux.HandleFunc("POST /repos/o/r/git/refs", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		g.mu.Lock()
+		g.fixRef, _ = b["ref"].(string)
+		g.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		write(w, b)
+	})
+	mux.HandleFunc("POST /repos/o/r/pulls", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		json.NewDecoder(r.Body).Decode(&b)
+		g.mu.Lock()
+		g.fixPR = b
+		g.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		write(w, map[string]any{"number": 77, "html_url": "https://github.com/o/r/pull/77"})
 	})
 	mux.HandleFunc("GET /repos/o/r/license", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()

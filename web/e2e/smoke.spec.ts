@@ -340,3 +340,23 @@ test('pull requests: inbox, detail, actions, settings', async ({ page }) => {
   await expect(page.getByLabel('Header (Markdown)')).toHaveValue('Security questions? Ask in **#appsec**.');
   await expect(page.getByLabel('Request changes on blocking issues')).toBeChecked();
 });
+
+test('auto-fix: create fix PR from a scan report, settings', async ({ page }) => {
+  await page.goto('/scans/S01JB8A0000000000000000002');
+  await page.getByRole('tab', { name: /Vulnerabilities/ }).click();
+  const vulns = page.getByRole('tabpanel', { name: /Vulnerabilities/ });
+  await expect(vulns.getByRole('link', { name: 'Fix PR #512 open' })).toBeVisible(); // minimist: existing auto fix
+  await vulns.getByRole('button', { name: 'Create fix PR' }).first().click();
+  await expect(page.getByText(/Opening a PR to upgrade qs to 6\.7\.3/)).toBeVisible();
+  await expect(vulns.getByText('Opening fix PR…')).toBeVisible();
+
+  await page.goto('/settings/auto-fix');
+  await expect(page.getByText('minimist').first()).toBeVisible();
+  await page.getByLabel('Open fix PRs automatically').click();
+  await page.getByRole('button', { name: 'high' }).click();
+  await page.getByRole('button', { name: 'Save changes' }).click();
+  await expect(page.getByText('Auto-fix settings saved')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Open fix PRs automatically')).toBeChecked();
+  await expect(page.getByRole('button', { name: 'high' })).toHaveAttribute('aria-pressed', 'true');
+});

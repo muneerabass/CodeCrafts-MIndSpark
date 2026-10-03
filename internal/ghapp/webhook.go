@@ -282,6 +282,17 @@ func (d Deps) onPullRequest(ctx context.Context, tx pgx.Tx, e *github.PullReques
 	if _, err := UpsertPR(ctx, tx, tenant, e.GetInstallation().GetID(), e.GetRepo(), pr); err != nil {
 		return "", err
 	}
+	// depguard fix PRs: track merge/close on the fix_prs row.
+	if strings.HasPrefix(pr.GetHead().GetRef(), "depguard/fix-") && (e.GetAction() == "closed" || e.GetAction() == "reopened") {
+		state := "open"
+		if e.GetAction() == "closed" {
+			state = map[bool]string{true: "merged", false: "closed"}[pr.GetMerged()]
+		}
+		if _, err := tx.Exec(ctx, `UPDATE fix_prs SET status=$1, updated_at=now() WHERE pr_url=$2 AND status IN ('open','merged','closed')`,
+			state, pr.GetHTMLURL()); err != nil {
+			return "", err
+		}
+	}
 	if !prActions[e.GetAction()] {
 		return StatusProcessed, nil
 	}

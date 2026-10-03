@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { AlertTriangle, Bug, CheckCircle2, FileChartLine, GitBranch, Hexagon, Layers, LayoutDashboard, Route, Scale, ShieldAlert, ShieldX, Skull, Wrench } from 'lucide-react';
 import { api, apiOr404 } from '@/lib/api';
 import { fmtDateTime, suspiciousReason, titleCase } from '@/lib/format';
-import type { Finding, PathItem, ScanDetail, ScanPackage } from '@/lib/types';
+import type { Finding, FixPR, List, PathItem, ScanDetail, ScanPackage } from '@/lib/types';
+import { canWrite, requireOrg } from '@/lib/session';
+import { FixButton } from '@/components/fix-button';
 import { Breadcrumbs } from '@/components/paths';
 import { EcosystemTile } from '@/components/icons';
 import { PageHeader } from '@/components/page';
@@ -125,6 +127,10 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const s = await apiOr404<ScanDetail>(`/scans/${encodeURIComponent(id)}`);
   const { paths } = await api<{ paths: PathItem[] }>(`/scans/${encodeURIComponent(id)}/paths`);
+  const { role } = await requireOrg();
+  const fixes = s.trigger === 'pull_request' ? [] : (await api<List<FixPR>>('/fixes', { query: { project_id: s.project.id, page_size: 50 } })).items;
+  const fixOf = (p: ScanPackage) =>
+    fixes.find((f) => f.name === p.component.name && f.from_version === p.component.version && f.manifest_path === p.manifest_path && f.status !== 'closed');
   const findings = s.findings ?? [];
 
   // ---- derived data (one package may appear in several manifests: count it once)
@@ -146,9 +152,11 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
 
   const ranked = [...paths].sort((a, b) => b.score - a.score);
   const fixFor = new Map<string, string>();
+  const fixable = new Set<string>(); // packages with a published fixed version
   for (const p of ranked) {
     const k = `${p.target.name}@${p.target.version}`;
     if (!fixFor.has(k) && p.fix) fixFor.set(k, p.fix);
+    if (p.advisories.some((a) => a.fixed_in && !a.id.startsWith('MAL-'))) fixable.add(k);
   }
 
   const depthBuckets = new Map<string, number>();
@@ -426,6 +434,15 @@ export default async function ScanReportPage({ params }: { params: Promise<{ id:
                             <Wrench className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
                             {fixFor.get(k) ?? 'No fixed version published yet. Consider replacing the package.'}
                           </p>
+                          {fixable.has(k) && !p.malware && s.trigger !== 'pull_request' && (
+                            <FixButton
+                              className="mt-2 print:hidden"
+                              projectId={s.project.id}
+                              pkg={{ ecosystem: p.component.ecosystem, name: p.component.name, version: p.component.version, manifest_path: p.manifest_path }}
+                              fix={fixOf(p)}
+                              canEdit={canWrite(role)}
+                            />
+                          )}
                         </div>
                       </div>
                       {top && (

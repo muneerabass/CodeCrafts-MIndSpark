@@ -170,6 +170,7 @@ func (w *repoWorker) Work(ctx context.Context, job *river.Job[jobs.ScanRepositor
 		d.finishScan(ctx, tenant, scanID, "failed", err)
 		return err
 	}
+	d.autoFix(ctx, tenant, projectID, versionID, a.Ref)
 	return nil
 }
 

@@ -10,7 +10,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -187,6 +187,18 @@ export const savePRSettings = async (settings: PRSettings) =>
   run(async () => {
     await requireRole('admin');
     return api<PRSettingsResponse>('/settings/pr', { method: 'PUT', body: settings });
+  });
+
+export const createFix = async (projectId: string, pkg: { ecosystem: string; name: string; version: string; manifest_path: string }) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<CreateFixResult>(`/projects/${encodeURIComponent(projectId)}/fixes`, { method: 'POST', body: pkg });
+  });
+
+export const saveFixSettings = async (settings: FixSettings) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<FixSettings>('/settings/fixes', { method: 'PUT', body: settings });
   });
 
 export const savePolicy = async (policy: Policy) =>

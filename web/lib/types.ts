@@ -465,3 +465,28 @@ export type PRSettings = {
   ai_review: { enabled: boolean; max_diff_kb: number };
 };
 export type PRSettingsResponse = { settings: PRSettings; ai_configured: boolean; ai_models: string };
+
+export type FixStatus = 'queued' | 'open' | 'merged' | 'closed' | 'failed' | 'unsupported';
+export type FixPR = {
+  id: string;
+  project_id: string;
+  project: string;
+  ecosystem: string;
+  name: string;
+  from_version: string;
+  to_version: string;
+  manifest_path: string;
+  direct: boolean;
+  advisories: string[];
+  branch: string;
+  pr_number: number | null;
+  pr_url: string;
+  status: FixStatus;
+  error: string;
+  trigger: 'manual' | 'auto';
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+export type CreateFixResult = { id?: string; status: 'queued' | 'exists' | 'unsupported'; to_version: string; command: string; error?: string };
+export type FixSettings = { auto: boolean; levels: string[]; kev: boolean; max_open: number };

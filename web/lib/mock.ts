@@ -247,6 +247,10 @@ function filterPRs(q: URLSearchParams, project?: string) {
     .map(prRow);
 }
 
+let fixSettings: T.FixSettings = { auto: false, levels: ['critical'], kev: true, max_open: 5 };
+const fixes: T.FixPR[] = [
+  { id: 'fx-1', project_id: P1.id, project: P1.name, ecosystem: 'npm', name: 'minimist', from_version: '1.2.5', to_version: '1.2.6', manifest_path: 'package-lock.json', direct: false, advisories: ['GHSA-3xgq-45jj-v275'], branch: 'depguard/fix-minimist-1.2.6', pr_number: 512, pr_url: 'https://github.com/acme/shop/pull/512', status: 'open', error: '', trigger: 'auto', created_by: 'depguard', created_at: iso(1), updated_at: iso(1) },
+];
 let apiKeys: T.ApiKey[] = [{ id: 'k-1', name: 'GitHub Actions', prefix: 'dg_7Hq2aB9xK', created_at: iso(10), last_used_at: iso(1), expires_at: null }];
 let exclusions: T.Exclusion[] = [{ id: 'ex-1', ecosystem: 'npm', name: 'left-pad', version: '1.3.0', reason: 'Internal fork reviewed by security', status: 'active', expires_at: iso(-60), created_at: iso(5) }];
 let savedQueries: T.SavedQuery[] = [{ id: 'q-1', name: 'Critical vulns last 30 days', sql: "SELECT project_name, vuln_id, risk\nFROM q_findings\nWHERE risk = 'CRITICAL' AND created_at > now() - interval '30 days'\nLIMIT 100", created_at: iso(3) }];
@@ -371,6 +375,25 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       pr.activity.unshift({ id, kind, body: text, status: 'posted', actor: 'ada@acme.dev', error: '', created_at: new Date().toISOString() });
       return { activity_id: id, status: 'queued' };
     }
+    case 'GET /fixes':
+      return paginate(fixes.filter((f) => (!q.get('project_id') || f.project_id === q.get('project_id')) && (!q.get('status') || f.status === q.get('status'))), q);
+    case 'POST /projects/:/fixes': {
+      const f = b as { ecosystem: string; name: string; version: string; manifest_path: string };
+      const to = ({ lodash: '4.17.21', minimist: '1.2.6', qs: '6.7.3', 'path-to-regexp': '0.1.10', axios: '1.6.0' } as Record<string, string>)[f.name] ?? '';
+      if (!to) throw new Error(`${f.name}@${f.version} has no known fixed version in this project`);
+      const command = `npm install ${f.name}@${to}`;
+      const open = fixes.find((x) => x.project_id === id && x.name === f.name && x.to_version === to && ['queued', 'open'].includes(x.status));
+      if (open) return { id: open.id, status: 'exists', to_version: to, command };
+      const p = projects.find((x) => x.id === id)!;
+      const nf: T.FixPR = { id: `fx-${fixes.length + 1}`, project_id: id, project: p.name, ecosystem: f.ecosystem, name: f.name, from_version: f.version, to_version: to, manifest_path: f.manifest_path, direct: true, advisories: [], branch: '', pr_number: null, pr_url: '', status: 'queued', error: '', trigger: 'manual', created_by: 'ada@acme.dev', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      fixes.unshift(nf);
+      return { id: nf.id, status: 'queued', to_version: to, command };
+    }
+    case 'GET /settings/fixes':
+      return fixSettings;
+    case 'PUT /settings/fixes':
+      fixSettings = { ...fixSettings, ...(body as T.FixSettings) };
+      return fixSettings;
     case 'GET /settings/pr':
       return { settings: prSettings, ai_configured: true, ai_models: 'eu-west-1/qwen.qwen3-coder-30b-a3b-v1:0' } as T.PRSettingsResponse;
     case 'PUT /settings/pr':
@@ -394,7 +417,7 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
     }
     case 'GET /scans/:/paths':
       if (!scans.some((x) => x.id === id)) throw new MockNotFound();
-      return { paths: id === S1 ? pathItems : [] };
+      return { paths: id === S1 || id === scans[1].id ? pathItems : [] };
     case 'GET /projects/:/versions/:/paths': {
       if (!projects.some((p) => p.id === id)) throw new MockNotFound();
       return id === P1.id ? pathGraph() : ({ source: 'none', nodes: [], edges: [], paths: [] } satisfies T.PathGraph);
@@ -594,9 +617,9 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
 
 // Path segments that are literal words (not ids) at a given position.
 function isStatic(root: string, i: number, s: string) {
-  const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review'];
+  const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review', 'fixes'];
   if (root === 'admin' && i === 1) return true;
-  if ((root === 'pull-requests' && s === 'summary') || (root === 'settings' && s === 'pr')) return true;
+  if ((root === 'pull-requests' && s === 'summary') || root === 'settings') return true;
   if (root === 'policy' || root === 'query') return true;
   return words.includes(s) && i !== 1;
 }

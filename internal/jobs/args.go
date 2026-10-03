@@ -101,3 +101,11 @@ func (PRAction) Kind() string { return "pr_action" }
 type SyncAllInstallations struct{}
 
 func (SyncAllInstallations) Kind() string { return "sync_all_installations" }
+
+// CreateFixPR opens a pull request upgrading one vulnerable package (fix_prs row).
+type CreateFixPR struct {
+	TenantID string `json:"tenant_id"`
+	FixID    string `json:"fix_id"`
+}
+
+func (CreateFixPR) Kind() string { return "create_fix_pr" }
