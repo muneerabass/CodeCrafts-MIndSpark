@@ -1,43 +1,23 @@
 import './globals.css';
-import type { Metadata, Viewport } from 'next';
-import { Manrope } from 'next/font/google';
-import { getUser, getTeamForUser } from '@/lib/db/queries';
-import { SWRConfig } from 'swr';
+import type { Metadata } from 'next';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 
 export const metadata: Metadata = {
-  title: 'Next.js SaaS Starter',
-  description: 'Get started quickly with Next.js, Postgres, and Stripe.'
+  title: { default: 'depguard', template: '%s · depguard' },
+  description: 'Software supply-chain security for your repositories, pipelines and developer machines.',
+  icons: { icon: '/icon.svg' },
 };
 
-export const viewport: Viewport = {
-  maximumScale: 1
-};
-
-const manrope = Manrope({ subsets: ['latin'] });
-
-export default function RootLayout({
-  children
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`bg-white dark:bg-gray-950 text-black dark:text-white ${manrope.className}`}
-    >
-      <body className="min-h-[100dvh] bg-gray-50">
-        <SWRConfig
-          value={{
-            fallback: {
-              // We do NOT await here
-              // Only components that read this data will suspend
-              '/api/user': getUser(),
-              '/api/team': getTeamForUser()
-            }
-          }}
-        >
-          {children}
-        </SWRConfig>
+    <html lang="en">
+      <body className="min-h-dvh font-sans">
+        <NuqsAdapter>
+          <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+        </NuqsAdapter>
+        <Toaster richColors position="top-right" />
       </body>
     </html>
   );
