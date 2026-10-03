@@ -6,9 +6,9 @@
 <details>
 <summary>Package Details (1)</summary>
 
-| Package | Malware | Vulnerability | Risky License | Report |
-|---|:---:|:---:|:---:|:---:|
-| `react @ 18.2.0`<br>package-lock.json | ✅ | ✅ | ✅ | [🔗](https://app.depguard.dev/scans/01CLEAN) |
+| Package | Dependency | Malware | Vulnerability | Risky License | Report |
+|---|---|:---:|:---:|:---:|:---:|
+| `react @ 18.2.0`<br>package-lock.json | unknown | ✅ | ✅ | ✅ | [🔗](https://app.depguard.dev/scans/01CLEAN) |
 
 </details>
 

@@ -23,9 +23,8 @@ type Presets struct {
 	Malware struct {
 		Enabled bool `json:"enabled"`
 	} `json:"malware"`
-	License struct {
-		Deny []string `json:"deny"` // SPDX id prefixes
-	} `json:"license"`
+	License    LicensePreset     `json:"license"`
+	Suspicious *SuspiciousPreset `json:"suspicious,omitempty"` // nil = DefaultSuspicious()
 	Popularity struct {
 		Enabled  bool `json:"enabled"`
 		MinStars int  `json:"min_stars"`
@@ -34,6 +33,59 @@ type Presets struct {
 		Enabled      bool    `json:"enabled"`
 		MinScorecard float64 `json:"min_scorecard"`
 	} `json:"maintenance"`
+}
+
+// LicensePreset configures license compliance. Fields absent from the JSON
+// default to Enabled=true, BlockingSeverity="high" (see Presets.UnmarshalJSON).
+type LicensePreset struct {
+	Deny             []string `json:"deny"`              // SPDX id prefixes (denied-license CEL rule)
+	Enabled          bool     `json:"enabled"`           // project/usage-aware license checks (internal/license)
+	BlockingSeverity string   `json:"blocking_severity"` // license findings at or above this severity block
+}
+
+// SuspiciousPreset toggles the suspicious-package rules (internal/suspicious
+// and guarddog). Fields absent from the JSON take DefaultSuspicious values.
+// A JSON "suspicious": null disables nothing: it means the defaults.
+type SuspiciousPreset struct {
+	Typosquat          bool     `json:"typosquat"`
+	Unmaintained       bool     `json:"unmaintained"`
+	UnmaintainedMonths int      `json:"unmaintained_months"`
+	Deprecated         bool     `json:"deprecated"`
+	NewPackage         bool     `json:"new_package"`
+	NoSourceRepo       bool     `json:"no_source_repo"`
+	UnusualBehaviour   bool     `json:"unusual_behaviour"`
+	Blocking           []string `json:"blocking"` // rule names that fail the check: typosquat, unusual-behaviour, ...
+}
+
+// DefaultSuspicious reports everything but no-source-repo; only typosquat
+// and unusual-behaviour (guarddog) block.
+func DefaultSuspicious() SuspiciousPreset {
+	return SuspiciousPreset{Typosquat: true, Unmaintained: true, UnmaintainedMonths: 24, Deprecated: true,
+		NewPackage: true, UnusualBehaviour: true, Blocking: []string{"typosquat", "unusual-behaviour"}}
+}
+
+// UnmarshalJSON fills defaults for the license and suspicious presets so
+// that keys missing from stored policies keep today's behaviour.
+func (p *Presets) UnmarshalJSON(b []byte) error {
+	type plain Presets
+	sus := DefaultSuspicious()
+	v := plain{License: LicensePreset{Enabled: true, BlockingSeverity: SeverityHigh}, Suspicious: &sus}
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	*p = Presets(v)
+	return nil
+}
+
+// ParsePolicy decodes tenant_settings.policy; empty input is the zero config.
+func ParsePolicy(raw []byte) (PolicyConfig, error) {
+	var pc PolicyConfig
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &pc); err != nil {
+			return pc, fmt.Errorf("policy json: %w", err)
+		}
+	}
+	return pc, nil
 }
 
 // CustomRule is a user-written CEL rule; Category is a lowercase name.
@@ -75,11 +127,9 @@ const notMal = `!v.id.startsWith("MAL-")`
 // RulesFromPolicy converts tenant_settings.policy JSON into rules. An empty
 // policy ({} or no presets and no custom rules) means DefaultRules().
 func RulesFromPolicy(raw []byte) ([]Rule, error) {
-	var pc PolicyConfig
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &pc); err != nil {
-			return nil, fmt.Errorf("policy json: %w", err)
-		}
+	pc, err := ParsePolicy(raw)
+	if err != nil {
+		return nil, err
 	}
 	if pc.Presets == nil && len(pc.Custom) == 0 {
 		return DefaultRules(), nil

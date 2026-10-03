@@ -88,6 +88,10 @@ INSERT INTO gh_installations (id, account_login, account_type, account_id, tenan
   (1,'acme','Organization',100,'ta','linked'), (2,'other','Organization',200,NULL,'pending');
 INSERT INTO gh_repositories (id, installation_id, full_name, default_branch) VALUES (10,1,'acme/web','main'), (20,2,'other/x','main');
 INSERT INTO webhook_deliveries (delivery_id, event, status) VALUES ('d1','pull_request','failed');`)
+	if err != nil {
+		return err
+	}
+	_, err = tdb.Owner.Exec(ctx, riskSeed)
 	return err
 }
 

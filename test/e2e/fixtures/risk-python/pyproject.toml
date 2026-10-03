@@ -1,0 +1,10 @@
+[tool.poetry]
+name = "risk-python-app"
+version = "0.1.0"
+description = "fixture"
+authors = ["depguard"]
+license = "Apache-2.0"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+requests = "2.19.0"

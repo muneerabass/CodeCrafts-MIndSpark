@@ -27,7 +27,12 @@ type Vuln struct {
 	ID      string
 	Summary string
 	Risk    string // CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN
+	FixedIn string // lowest fixed version above the installed one; "" if none
 }
+
+// fixedInPrefix mirrors enrich's encoding of FixedIn in PackageVulnerability.Related
+// (scan cannot import enrich).
+const fixedInPrefix = "depguard:fixed-in="
 
 // Vulns reads matched advisories from pkg.Insights (first CVSS v3/v2 risk).
 func Vulns(pkg *models.Package) []Vuln {
@@ -42,6 +47,13 @@ func Vulns(pkg *models.Package) []Vuln {
 		vu := Vuln{ID: *v.Id, Risk: "UNKNOWN"}
 		if v.Summary != nil {
 			vu.Summary = *v.Summary
+		}
+		if v.Related != nil {
+			for _, r := range *v.Related {
+				if strings.HasPrefix(r, fixedInPrefix) {
+					vu.FixedIn = strings.TrimPrefix(r, fixedInPrefix)
+				}
+			}
 		}
 		if v.Severities != nil {
 			for _, s := range *v.Severities {

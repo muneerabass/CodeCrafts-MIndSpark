@@ -167,3 +167,41 @@ func TestIsManifest(t *testing.T) {
 		}
 	}
 }
+
+func TestSuspiciousAndLicensePresetDefaults(t *testing.T) {
+	// Policies saved before these presets existed keep license checks on and
+	// get the default suspicious rules.
+	pc, err := ParsePolicy([]byte(`{"presets":{"vulnerability":{"min_risk":"HIGH"},"license":{"deny":["GPL-3.0"]}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := pc.Presets.License
+	if !l.Enabled || l.BlockingSeverity != SeverityHigh || !slices.Equal(l.Deny, []string{"GPL-3.0"}) {
+		t.Fatalf("license = %+v", l)
+	}
+	if s := pc.Presets.Suspicious; s == nil || !s.Typosquat || s.NoSourceRepo || s.UnmaintainedMonths != 24 ||
+		!slices.Equal(s.Blocking, []string{"typosquat", "unusual-behaviour"}) {
+		t.Fatalf("suspicious = %+v", s)
+	}
+
+	pc, err = ParsePolicy([]byte(`{"presets":{"license":{"enabled":false,"blocking_severity":"medium"},
+	  "suspicious":{"unmaintained":false,"no_source_repo":true,"blocking":[]}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := pc.Presets.License; l.Enabled || l.BlockingSeverity != "medium" {
+		t.Fatalf("license = %+v", l)
+	}
+	if s := pc.Presets.Suspicious; s.Unmaintained || !s.NoSourceRepo || !s.Typosquat || !s.Deprecated || len(s.Blocking) != 0 {
+		t.Fatalf("suspicious = %+v", s)
+	}
+
+	// The new presets add no CEL rules; denied-license still comes from deny.
+	rules, err := RulesFromPolicy([]byte(`{"presets":{"suspicious":{"typosquat":true},"license":{"enabled":true}}}`))
+	if err != nil || len(rules) != 0 {
+		t.Fatalf("rules = %v, %v", rules, err)
+	}
+	if _, err := ParsePolicy([]byte(`{"presets":`)); err == nil {
+		t.Fatal("bad JSON accepted")
+	}
+}

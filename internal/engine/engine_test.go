@@ -25,6 +25,8 @@ import (
 	"github.com/depguard/depguard/internal/ghapp"
 	"github.com/depguard/depguard/internal/jobs"
 	"github.com/depguard/depguard/internal/render"
+	"github.com/depguard/depguard/internal/scan"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/safedep/vet/gen/insightapi"
@@ -32,14 +34,28 @@ import (
 )
 
 // npmLock builds a minimal package-lock.json (v3) for "name@version" args.
+// "name@version:a,b" adds dependencies on packages a and b; a leading "~"
+// makes the package transitive-only (not a dependency of the app).
 func npmLock(pkgs ...string) []byte {
 	deps := map[string]string{}
 	packages := map[string]any{}
 	for _, p := range pkgs {
+		p, transitive := strings.CutPrefix(p, "~")
+		p, children, _ := strings.Cut(p, ":")
 		name, ver, _ := strings.Cut(p, "@")
-		deps[name] = ver
-		packages["node_modules/"+name] = map[string]any{"version": ver,
+		if !transitive {
+			deps[name] = ver
+		}
+		entry := map[string]any{"version": ver,
 			"resolved": fmt.Sprintf("https://registry.npmjs.org/%s/-/%s-%s.tgz", name, name, ver)}
+		if children != "" {
+			cd := map[string]string{}
+			for _, c := range strings.Split(children, ",") {
+				cd[c] = "*"
+			}
+			entry["dependencies"] = cd
+		}
+		packages["node_modules/"+name] = entry
 	}
 	packages[""] = map[string]any{"name": "app", "version": "1.0.0", "dependencies": deps}
 	return mustJSON(map[string]any{"name": "app", "version": "1.0.0", "lockfileVersion": 3, "requires": true, "packages": packages})
@@ -78,11 +94,14 @@ type fakeGitHub struct {
 	created   int              // comments created
 	updated   int              // comments edited
 	nextID    int64
+	tree      map[string]string // path -> blob sha of every commit's tree
+	license   string            // GET /license spdx_id; "" = 404
 }
 
 func newFakeGitHub() *fakeGitHub {
 	return &fakeGitHub{blobs: map[string][]byte{}, baseFiles: map[string]string{}, prFiles: map[int][]map[string]string{},
-		heads: map[int]string{}, checks: map[int64]map[string]any{}, comments: map[int64]string{}, nextID: 100}
+		heads: map[int]string{}, checks: map[int64]map[string]any{}, comments: map[int64]string{}, nextID: 100,
+		tree: map[string]string{"package-lock.json": "head1", "node_modules/dep/package-lock.json": "head1", "src/main.js": "x"}}
 }
 
 func (g *fakeGitHub) handler() http.Handler {
@@ -195,11 +214,21 @@ func (g *fakeGitHub) handler() http.Handler {
 	mux.HandleFunc("GET /repos/o/r/git/trees/{sha}", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
-		entry := func(p, sha string) map[string]any {
-			return map[string]any{"path": p, "type": "blob", "sha": sha, "size": len(g.blobs[sha])}
+		var tree []any
+		for p, sha := range g.tree {
+			tree = append(tree, map[string]any{"path": p, "type": "blob", "sha": sha, "size": len(g.blobs[sha])})
 		}
-		write(w, map[string]any{"sha": r.PathValue("sha"), "tree": []any{entry("package-lock.json", "head1"),
-			entry("node_modules/dep/package-lock.json", "head1"), entry("src/main.js", "x")}})
+		write(w, map[string]any{"sha": r.PathValue("sha"), "tree": tree})
+	})
+	mux.HandleFunc("GET /repos/o/r/license", func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		if g.license == "" {
+			w.WriteHeader(http.StatusNotFound)
+			write(w, map[string]any{"message": "Not Found"})
+			return
+		}
+		write(w, map[string]any{"name": "LICENSE", "license": map[string]any{"key": "x", "spdx_id": g.license}})
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
@@ -227,7 +256,18 @@ func testKey(t *testing.T) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})
 }
 
-func TestPullRequestEndToEnd(t *testing.T) {
+// harness runs the engine's workers against testpg and a fake GitHub.
+type harness struct {
+	pg     testpg.DB
+	gh     *fakeGitHub
+	rc     *river.Client[pgx.Tx]
+	events <-chan *river.Event
+}
+
+// newHarness seeds tenant t1 (block mode, suppressed clean comments) linked
+// to installation 10. guarddogOut is the fake guarddog's JSON output.
+func newHarness(t *testing.T, guarddogOut string, mod func(*Deps)) *harness {
+	t.Helper()
 	ctx := context.Background()
 	pg := testpg.Start(t)
 	_, err := pg.Owner.Exec(ctx, `
@@ -236,53 +276,64 @@ func TestPullRequestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	gh := newFakeGitHub()
 	srv := httptest.NewServer(gh.handler())
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 	cfg := ghapp.Config{AppID: 1, Slug: "depguard", PrivateKey: testKey(t), APIURL: srv.URL + "/"}
 	clients, err := ghapp.NewClientCreator(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// A fake guarddog flags everything it sees.
 	gd := filepath.Join(t.TempDir(), "guarddog")
-	os.WriteFile(gd, []byte("#!/bin/sh\necho '{\"issues\":1,\"errors\":{},\"results\":{\"npm-install-script\":\"curl | sh\"}}'\n"), 0o755)
+	os.WriteFile(gd, []byte("#!/bin/sh\necho '"+guarddogOut+"'\n"), 0o755)
 
 	workers := river.NewWorkers()
-	AddWorkers(workers, Deps{Pool: pg.App, Clients: clients, GitHub: cfg, PublicURL: "https://app.example",
+	d := Deps{Pool: pg.App, Clients: clients, GitHub: cfg, PublicURL: "https://app.example",
 		GuarddogBin: gd, DisableXBOM: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
-		Enricher: fakeEnricher{"evil-pkg": {"MAL-2025-1", "CRITICAL"}, "vuln-pkg": {"GHSA-aaaa", "HIGH"}}})
+		Enricher: fakeEnricher{"evil-pkg": {"MAL-2025-1", "CRITICAL"}, "vuln-pkg": {"GHSA-aaaa", "HIGH"}}}
+	if mod != nil {
+		mod(&d)
+	}
+	AddWorkers(workers, d)
 	rc, err := river.NewClient(riverpgxv5.New(pg.App), &river.Config{Queues: map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 4}}, Workers: workers})
 	if err != nil {
 		t.Fatal(err)
 	}
 	events, cancel := rc.Subscribe(river.EventKindJobCompleted, river.EventKindJobFailed, river.EventKindJobCancelled)
-	defer cancel()
+	t.Cleanup(cancel)
 	if err := rc.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
-	defer rc.Stop(ctx)
+	t.Cleanup(func() { rc.Stop(context.Background()) })
+	return &harness{pg: pg, gh: gh, rc: rc, events: events}
+}
 
-	await := func(kind string) *river.Event {
-		t.Helper()
-		timeout := time.After(2 * time.Minute)
-		for {
-			select {
-			case ev := <-events:
-				if ev.Job.Kind != kind {
-					continue
-				}
-				if ev.Kind != river.EventKindJobCompleted {
-					t.Fatalf("%s %s: %v", kind, ev.Kind, ev.Job.Errors)
-				}
-				return ev
-			case <-timeout:
-				t.Fatalf("timeout waiting for %s", kind)
+// await waits for the next completed job of kind.
+func (h *harness) await(t *testing.T, kind string) *river.Event {
+	t.Helper()
+	timeout := time.After(2 * time.Minute)
+	for {
+		select {
+		case ev := <-h.events:
+			if ev.Job.Kind != kind {
+				continue
 			}
+			if ev.Kind != river.EventKindJobCompleted {
+				t.Fatalf("%s %s: %v", kind, ev.Kind, ev.Job.Errors)
+			}
+			return ev
+		case <-timeout:
+			t.Fatalf("timeout waiting for %s", kind)
 		}
 	}
+}
+
+func TestPullRequestEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	// A fake guarddog flags everything it sees.
+	h := newHarness(t, `{"issues":1,"errors":{},"results":{"npm-install-script":"curl | sh"}}`, nil)
+	pg, gh, rc := h.pg, h.gh, h.rc
+	await := func(kind string) *river.Event { t.Helper(); return h.await(t, kind) }
 	runPR := func(pr int, head string) {
 		t.Helper()
 		if _, err := rc.Insert(ctx, jobs.ScanPullRequest{InstallationID: 10, RepoID: 7, RepoFullName: "o/r", PRNumber: pr,
@@ -323,10 +374,21 @@ func TestPullRequestEndToEnd(t *testing.T) {
 	var status, concl string
 	var mal, viol, comps int
 	var commentID *int64
-	err = pg.Owner.QueryRow(ctx, `SELECT status, conclusion, malicious_count, violations_count, components_count, comment_id FROM scans
+	err := pg.Owner.QueryRow(ctx, `SELECT status, conclusion, malicious_count, violations_count, components_count, comment_id FROM scans
 		WHERE pr_number=1 AND head_sha='h1'`).Scan(&status, &concl, &mal, &viol, &comps, &commentID)
 	if err != nil || status != "success" || concl != "failure" || mal != 1 || viol != 2 || comps != 2 || commentID == nil {
 		t.Fatalf("scan row: %v %s %s mal=%d viol=%d comps=%d", err, status, concl, mal, viol, comps)
+	}
+	// PR scans record graph context per package (here a direct dependency).
+	var direct *bool
+	var depth *int
+	var via []string
+	var source string
+	err = pg.Owner.QueryRow(ctx, `SELECT sp.direct, sp.depth, sp.via, sp.graph_source FROM scan_packages sp
+		JOIN components c ON c.id=sp.component_id JOIN scans s ON s.id=sp.scan_id
+		WHERE c.name='vuln-pkg' AND s.head_sha='h1'`).Scan(&direct, &depth, &via, &source)
+	if err != nil || direct == nil || !*direct || depth == nil || *depth != 1 || fmt.Sprint(via) != "[vuln-pkg@2.0.0]" || source != "lockfile" {
+		t.Fatalf("PR scan_packages: %v direct=%v depth=%v via=%v source=%s", err, direct, depth, via, source)
 	}
 	var pvc, malicious int
 	pg.Owner.QueryRow(ctx, `SELECT count(*) FROM project_version_components`).Scan(&pvc)
@@ -425,4 +487,174 @@ func (g *fakeGitHub) nextIDCheck() int64 {
 		}
 	}
 	return max
+}
+
+// fakeChecker flags typo-pkg (non-blocking) and records what it was given.
+type fakeChecker struct {
+	mu       sync.Mutex
+	projects []scan.Project
+	deep     scan.PackageContext // context passed for vuln-deep
+}
+
+func (c *fakeChecker) Name() string { return "fake" }
+
+func (c *fakeChecker) Check(_ context.Context, in scan.CheckInput) ([]scan.Finding, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.projects = append(c.projects, in.Project)
+	var out []scan.Finding
+	for _, p := range in.Packages {
+		if p.GetName() == "vuln-deep" {
+			c.deep = in.Context[p]
+		}
+		if p.GetName() == "typo-pkg" {
+			out = append(out, scan.Finding{Rule: "typosquat", Category: scan.CategorySuspicious, Severity: scan.SeverityMedium,
+				Summary: "typo-pkg looks like type-pkg", Details: map[string]any{"similar_to": "type-pkg"}, Package: p})
+		}
+	}
+	return out, nil
+}
+
+func TestRiskAnalysisEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	fc := &fakeChecker{}
+	h := newHarness(t, `{"issues":0,"errors":{},"results":{}}`, func(d *Deps) {
+		d.Enricher = fakeEnricher{"vuln-deep": {"GHSA-deep", "HIGH"}}
+		d.Checkers = func(scan.PolicyConfig, scan.Project) []scan.Checker { return []scan.Checker{fc} }
+		d.DetectLicense = func(files map[string][]byte, spdx string) (string, string) {
+			if _, ok := files["LICENSE"]; ok {
+				return "MIT", "license_file"
+			}
+			if spdx != "" {
+				return spdx, "github"
+			}
+			return "", "unknown"
+		}
+	})
+	pg, gh := h.pg, h.gh
+	lock := npmLock("app-dep@1.0.0:mid-pkg", "dev-tool@1.0.0", "typo-pkg@1.0.0", "~mid-pkg@1.0.0:vuln-deep", "~vuln-deep@1.0.0")
+	pkgJSON := []byte(`{"dependencies":{"app-dep":"^1","typo-pkg":"1"},"devDependencies":{"dev-tool":"1"}}`)
+	gh.mu.Lock()
+	gh.blobs = map[string][]byte{"lock": lock, "pj": pkgJSON, "lic": []byte("MIT License ..."),
+		"js": []byte("import dep from 'app-dep';\nconst x = require('./local');\n")}
+	gh.tree = map[string]string{"package-lock.json": "lock", "package.json": "pj", "LICENSE": "lic", "src/index.js": "js"}
+	gh.license = "Apache-2.0"
+	gh.mu.Unlock()
+
+	// 1) Full scan: graph context, edges, findings, detected license.
+	if _, err := h.rc.Insert(ctx, jobs.ScanRepository{TenantID: "t1", InstallationID: 10, RepoID: 7, RepoFullName: "o/r",
+		Ref: "main", SHA: "m1", Trigger: "push"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	h.await(t, "scan_repository")
+	type row struct {
+		direct, dev, imported *bool
+		depth                 *int
+		via                   []string
+		paths                 [][]string
+		source                string
+	}
+	pkgRow := func(scanCond, name string) row {
+		t.Helper()
+		var r row
+		err := pg.Owner.QueryRow(ctx, `SELECT sp.direct, sp.dev, sp.imported, sp.depth, sp.via, sp.paths, sp.graph_source
+			FROM scan_packages sp JOIN components c ON c.id=sp.component_id JOIN scans s ON s.id=sp.scan_id
+			WHERE `+scanCond+` AND c.name=$1`, name).Scan(&r.direct, &r.dev, &r.imported, &r.depth, &r.via, &r.paths, &r.source)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return r
+	}
+	b := func(p *bool) string { return fmt.Sprint(p != nil && *p, p == nil) } // "value isNil"
+	deep := pkgRow("s.trigger='push'", "vuln-deep")
+	if b(deep.direct) != "false false" || *deep.depth != 3 || b(deep.dev) != "false false" || b(deep.imported) != "true false" ||
+		fmt.Sprint(deep.via) != "[app-dep@1.0.0 mid-pkg@1.0.0 vuln-deep@1.0.0]" ||
+		fmt.Sprint(deep.paths) != "[[app-dep@1.0.0 mid-pkg@1.0.0 vuln-deep@1.0.0]]" || deep.source != "lockfile" {
+		t.Fatalf("vuln-deep row: %+v direct=%s dev=%s imported=%s", deep, b(deep.direct), b(deep.dev), b(deep.imported))
+	}
+	dev := pkgRow("s.trigger='push'", "dev-tool")
+	if b(dev.direct) != "true false" || *dev.depth != 1 || b(dev.dev) != "true false" || b(dev.imported) != "false false" {
+		t.Fatalf("dev-tool row: direct=%s dev=%s imported=%s", b(dev.direct), b(dev.dev), b(dev.imported))
+	}
+	if fc.deep.Depth != 3 || fc.deep.Direct == nil || *fc.deep.Direct || fc.deep.Imported == nil || !*fc.deep.Imported {
+		t.Fatalf("checker context for vuln-deep: %+v", fc.deep)
+	}
+	var edges []string
+	rows, err := pg.Owner.Query(ctx, `SELECT coalesce(p.name, 'app') || '>' || c.name FROM project_version_dependencies d
+		JOIN components c ON c.id=d.child_component_id LEFT JOIN components p ON p.id=d.parent_component_id ORDER BY 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var e string
+		rows.Scan(&e)
+		edges = append(edges, e)
+	}
+	rows.Close()
+	if fmt.Sprint(edges) != "[app-dep>mid-pkg app>app-dep app>dev-tool app>typo-pkg mid-pkg>vuln-deep]" {
+		t.Fatalf("edges %v", edges)
+	}
+	var pvcDirect, pvcDepth int
+	pg.Owner.QueryRow(ctx, `SELECT count(*) FILTER (WHERE direct), max(depth) FROM project_version_components`).Scan(&pvcDirect, &pvcDepth)
+	if pvcDirect != 3 || pvcDepth != 3 {
+		t.Fatalf("project_version_components direct=%d max depth=%d", pvcDirect, pvcDepth)
+	}
+	viol := func(scanCond string) []string {
+		t.Helper()
+		rows, err := pg.Owner.Query(ctx, `SELECT v.rule_name || ':' || v.category || ':' || v.severity || ':' || v.blocking || ':' || v.details::text
+			FROM policy_violations v JOIN scans s ON s.id=v.scan_id WHERE `+scanCond+` ORDER BY 1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var v string
+			rows.Scan(&v)
+			out = append(out, v)
+		}
+		return out
+	}
+	if v := viol("s.trigger='push'"); fmt.Sprint(v) != `[critical-or-high-vulnerability:vulnerability:high:true:{} typosquat:suspicious:medium:false:{"similar_to": "type-pkg"}]` {
+		t.Fatalf("push violations %q", v)
+	}
+	var concl, lic, licSrc string
+	pg.Owner.QueryRow(ctx, `SELECT conclusion FROM scans WHERE trigger='push'`).Scan(&concl)
+	pg.Owner.QueryRow(ctx, `SELECT license, license_source FROM projects WHERE name='o/r'`).Scan(&lic, &licSrc)
+	if concl != "failure" || lic != "MIT" || licSrc != "license_file" || fc.projects[0].License != "MIT" {
+		t.Fatalf("push conclusion=%s license=%s/%s checker project=%+v", concl, lic, licSrc, fc.projects)
+	}
+
+	// 2) Upload with only a non-blocking finding → neutral, not failure. The
+	// project's license override wins over detection and is not replaced.
+	_, err = pg.Owner.Exec(ctx, `
+		INSERT INTO projects (id, tenant_id, source, name, license, license_source, usage_model) VALUES ('P','t1','cli','acme/cli','Apache-2.0','override','saas');
+		INSERT INTO project_versions (id, tenant_id, project_id, name) VALUES ('V','t1','P','main');
+		INSERT INTO scans (id, tenant_id, project_id, project_version_id, trigger) VALUES ('S','t1','P','V','cli');`)
+	if err == nil {
+		_, err = pg.Owner.Exec(ctx, `INSERT INTO scan_uploads (tenant_id, scan_id, path, content) VALUES ('t1','S','LICENSE','MIT License'),
+		  ('t1','S','package.json',$1), ('t1','S','package-lock.json',$2)`, pkgJSON, npmLock("typo-pkg@1.0.0"))
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.rc.Insert(ctx, jobs.ScanUpload{TenantID: "t1", ScanID: "S"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	h.await(t, "scan_upload")
+	var status string
+	pg.Owner.QueryRow(ctx, `SELECT status, conclusion FROM scans WHERE id='S'`).Scan(&status, &concl)
+	pg.Owner.QueryRow(ctx, `SELECT license, license_source FROM projects WHERE id='P'`).Scan(&lic, &licSrc)
+	last := fc.projects[len(fc.projects)-1]
+	if status != "success" || concl != "neutral" || lic != "Apache-2.0" || licSrc != "override" ||
+		last.License != "Apache-2.0" || last.UsageModel != "saas" {
+		t.Fatalf("upload: %s %s license=%s/%s checker project=%+v", status, concl, lic, licSrc, last)
+	}
+	typo := pkgRow("s.id='S'", "typo-pkg")
+	if b(typo.direct) != "true false" || b(typo.imported) != "false true" {
+		t.Fatalf("upload typo-pkg: direct=%s imported=%s", b(typo.direct), b(typo.imported))
+	}
+	if v := viol("s.id='S'"); len(v) != 1 || !strings.HasPrefix(v[0], "typosquat:suspicious:medium:false") {
+		t.Fatalf("upload violations %q", v)
+	}
 }

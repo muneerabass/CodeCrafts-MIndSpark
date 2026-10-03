@@ -20,6 +20,10 @@ import (
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/feeds"
 	"github.com/depguard/depguard/internal/ghapp"
+	"github.com/depguard/depguard/internal/license"
+	"github.com/depguard/depguard/internal/scan"
+	"github.com/depguard/depguard/internal/suspicious"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
@@ -43,6 +47,22 @@ func envOr(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// checkers returns the per-scan risk checkers configured by the tenant policy.
+func checkers(pool *pgxpool.Pool, e *enrich.Enricher) func(scan.PolicyConfig, scan.Project) []scan.Checker {
+	return func(p scan.PolicyConfig, _ scan.Project) []scan.Checker {
+		out := []scan.Checker{suspicious.New(pool, e, suspicious.ConfigFromPolicy(p))}
+		lic := scan.LicensePreset{Enabled: true, BlockingSeverity: scan.SeverityHigh}
+		if p.Presets != nil {
+			lic = p.Presets.License
+		}
+		if lic.Enabled {
+			// Deny is enforced by the CEL denied-license rule; passing it here too would report twice.
+			out = append(out, license.New(license.Config{BlockingSeverity: lic.BlockingSeverity}))
+		}
+		return out
+	}
 }
 
 func run(log *slog.Logger) error {
@@ -72,21 +92,30 @@ func run(log *slog.Logger) error {
 		log.Warn("GITHUB_APP_ID not set: GitHub scans will be cancelled")
 	}
 
+	enricher := enrich.New(pool, enrich.Options{
+		DisableDepsDev:   envBool("DEPSDEV_DISABLED"),
+		DisableScorecard: envBool("SCORECARD_DISABLED"),
+		Logger:           log,
+	})
+	guarddogJobs, _ := strconv.Atoi(os.Getenv("GUARDDOG_MAX_JOBS")) // 0 = default 25
 	workers := river.NewWorkers()
 	engine.AddWorkers(workers, engine.Deps{
-		Pool:    pool,
-		Clients: clients,
-		GitHub:  ghcfg,
-		Enricher: enrich.New(pool, enrich.Options{
-			DisableDepsDev:   envBool("DEPSDEV_DISABLED"),
-			DisableScorecard: envBool("SCORECARD_DISABLED"),
-			Logger:           log,
-		}),
+		Pool:                   pool,
+		Clients:                clients,
+		GitHub:                 ghcfg,
+		Enricher:               enricher,
 		PublicURL:              os.Getenv("PUBLIC_URL"),
 		GuarddogBin:            envOr("GUARDDOG_BIN", "guarddog"),
 		GuarddogAllowNoSandbox: envBool("GUARDDOG_ALLOW_NO_SANDBOX"),
 		DisableXBOM:            envBool("XBOM_DISABLED"),
-		Logger:                 log,
+		Checkers:               checkers(pool, enricher),
+		DetectLicense: func(files map[string][]byte, githubSPDX string) (string, string) {
+			d := license.DetectProject(files, githubSPDX)
+			return d.Expr, d.Source
+		},
+		PrioritizeGuarddog: suspicious.Prioritize,
+		MaxGuarddogJobs:    guarddogJobs,
+		Logger:             log,
 	})
 	feeds.AddWorkers(workers, pool)
 	periodic := feeds.PeriodicJobs()

@@ -1,12 +1,17 @@
 import Link from 'next/link';
-import { Bug, ExternalLink, FileChartLine, GitBranch, Hexagon, ShieldCheck } from 'lucide-react';
+import { Bug, ExternalLink, FileChartLine, GitBranch, Hexagon, Route, ShieldCheck } from 'lucide-react';
 import { api, apiOr404, listQuery, one, type SearchParams } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
-import type { List, ProjectDetail, VersionComponent, VersionScan, VersionSummary, Violation, VulnRow } from '@/lib/types';
+import type { LicenseReport, List, PathGraph, ProjectDetail, ProjectSettings, VersionComponent, VersionScan, VersionSummary, Violation, VulnRow } from '@/lib/types';
+import { canWrite, requireOrg } from '@/lib/session';
+import { DIRECT_OPTIONS, usageLabel } from '@/lib/format';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AttackPaths } from './attack-paths';
+import { LicenseDistribution, LicenseFindingsTable, ProjectLicenseForm } from './licenses';
 import { EmptyState, PageHeader } from '@/components/page';
 import { Chip } from '@/components/badges';
 import { GitHubIcon, SourceIcon } from '@/components/icons';
-import { ToggleFilter } from '@/components/data-table';
+import { PopoverFilter, ToggleFilter } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { VersionComponentsTable, VersionScansTable, VersionSelect, VersionVulnsTable } from '../tables';
@@ -17,6 +22,8 @@ const TABS = [
   { key: 'vulnerabilities', label: 'Vulnerabilities' },
   { key: 'violations', label: 'Violations' },
   { key: 'scans', label: 'Scans' },
+  { key: 'paths', label: 'Attack Paths' },
+  { key: 'licenses', label: 'Licenses' },
 ] as const;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -56,7 +63,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 
   const base = `/projects/${encodeURIComponent(id)}/versions/${encodeURIComponent(version.id)}`;
   const summary = await api<VersionSummary>(`${base}/summary`);
-  const q = listQuery(sp, ['has_vulns', 'has_violations'], 10);
+  const q = listQuery(sp, ['has_vulns', 'has_violations', 'direct'], 10);
   const tabHref = (t: string) => `?${new URLSearchParams({ version: version.id, tab: t })}`;
 
   return (
@@ -95,15 +102,83 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           <div className="flex items-center">
             <ToggleFilter k="has_vulns" label="Has Vulnerabilities" />
             <ToggleFilter k="has_violations" label="Has Policy Violations" />
+            <PopoverFilter f={{ type: 'select', key: 'direct', label: 'Dependency', options: DIRECT_OPTIONS }} />
           </div>
         )}
       </div>
-      <TabBody tab={tab} base={base} q={q} />
+      <TabBody tab={tab} base={base} q={q} project={project} />
     </>
   );
 }
 
-async function TabBody({ tab, base, q }: { tab: string; base: string; q: Record<string, string> }) {
+async function TabBody({ tab, base, q, project }: { tab: string; base: string; q: Record<string, string>; project: ProjectDetail }) {
+  if (tab === 'paths') {
+    const g = await api<PathGraph>(`${base}/paths`);
+    if (!g.paths.length && !g.nodes.length)
+      return (
+        <EmptyState icon={Route} title="No attack paths">
+          No vulnerable, malicious or suspicious package is reachable from this version, or its lockfile has no dependency graph.
+        </EmptyState>
+      );
+    return <AttackPaths graph={g} appName={project.name} />;
+  }
+  if (tab === 'licenses') {
+    const [{ role }, settings, lic] = await Promise.all([requireOrg(), api<ProjectSettings>(`/projects/${encodeURIComponent(project.id)}/settings`), api<LicenseReport>(`${base}/licenses`)]);
+    const conflicts = lic.findings.filter((f) => f.rule === 'license-conflict' || f.rule === 'license-incompatible');
+    return (
+      <div className="grid gap-4 p-4 lg:grid-cols-[22rem_1fr]">
+        <Card className="self-start">
+          <CardHeader>
+            <CardTitle className="text-base">Project license</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ProjectLicenseForm key={`${settings.license}-${settings.usage_model}`} projectId={project.id} settings={settings} canEdit={canWrite(role)} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">License distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <LicenseDistribution data={lic.distribution} />
+          </CardContent>
+        </Card>
+        <Card className="gap-0 overflow-hidden py-0 lg:col-span-2">
+          <CardHeader className="border-b py-4">
+            <CardTitle>License findings ({lic.findings.length})</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Evaluated for a <span className="font-medium text-foreground">{lic.project_license ?? 'unknown'}</span> project used as <span className="font-medium text-foreground">{usageLabel(lic.usage_model).toLowerCase()}</span>.
+            </p>
+          </CardHeader>
+          <LicenseFindingsTable data={lic.findings} />
+        </Card>
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Conflicts ({conflicts.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {conflicts.length ? (
+              <ul className="space-y-2 text-sm">
+                {conflicts.map((f, i) => (
+                  <li key={i} className="rounded-md border p-3">
+                    <span className="font-medium">
+                      {f.component.name}@{f.component.version}
+                    </span>{' '}
+                    <span className="font-mono text-xs">({String(f.details.license ?? '?')})</span> conflicts with{' '}
+                    <span className="font-medium">{String(f.details.other ?? `your ${f.details.project_license ?? 'project'} license`)}</span>
+                    {f.details.other_license ? <span className="font-mono text-xs"> ({String(f.details.other_license)})</span> : null}
+                    <p className="mt-1 text-muted-foreground">{String(f.details.explanation ?? f.summary)}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No license conflicts.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   if (tab === 'vulnerabilities') {
     const d = await api<List<VulnRow>>(`${base}/vulnerabilities`, { query: q });
     return <VersionVulnsTable data={d.items} total={d.total} empty={<EmptyState icon={ShieldCheck} title="No known vulnerabilities" className="py-8">None of this version&apos;s components match a published advisory.</EmptyState>} />;

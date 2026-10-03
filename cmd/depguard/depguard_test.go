@@ -28,14 +28,17 @@ func write(t *testing.T, root, rel, content string) {
 func TestFindLockfiles(t *testing.T) {
 	root := t.TempDir()
 	for _, f := range []string{"package-lock.json", "web/yarn.lock", "node_modules/x/package-lock.json", "vendor/go.mod",
-		"svc/go.mod", ".github/workflows/ci.yml", ".hidden/poetry.lock", "README.md"} {
+		"svc/go.mod", ".github/workflows/ci.yml", ".hidden/poetry.lock", "README.md", "package.json", "web/package.json",
+		"node_modules/x/package.json", "LICENSE.md", "COPYING", "web/LICENSE", "crate/Cargo.toml", "pyproject.toml"} {
 		write(t, root, f, "x")
 	}
 	got, err := findLockfiles(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{".github/workflows/ci.yml", "package-lock.json", "svc/go.mod", "web/yarn.lock"}
+	// Lockfiles first, then manifests and root license files.
+	want := []string{".github/workflows/ci.yml", "package-lock.json", "svc/go.mod", "web/yarn.lock",
+		"COPYING", "LICENSE.md", "crate/Cargo.toml", "package.json", "pyproject.toml", "web/package.json"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("got %v want %v", got, want)
 	}
@@ -45,7 +48,12 @@ func TestScanCommand(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "app/package-lock.json", "{}")
 	var paths []string
+	fields := map[string]string{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/scans/S1/report" {
+			w.Write([]byte("report:" + r.URL.Query().Get("format")))
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer dg_test" || r.URL.Path != "/v1/scans" || r.URL.Query().Get("wait") != "true" {
 			http.Error(w, `{"error":"bad"}`, 400)
 			return
@@ -60,6 +68,9 @@ func TestScanCommand(t *testing.T) {
 			_, dp, _ := mime.ParseMediaType(p.Header.Get("Content-Disposition"))
 			if p.FormName() == "lockfile" {
 				paths = append(paths, dp["filename"])
+			} else {
+				b, _ := io.ReadAll(p)
+				fields[p.FormName()] = string(b)
 			}
 		}
 		json.NewEncoder(w).Encode(map[string]any{"scan_id": "S1", "status": "success", "conclusion": "failure", "report_md": "## bad", "url": "u"})
@@ -77,6 +88,35 @@ func TestScanCommand(t *testing.T) {
 	}
 	if code, err := runScan([]string{"--api-url", srv.URL, "--api-key", "dg_test", "--dir", root, "--project", "p", "--version", "v"}); err != nil || code != 0 {
 		t.Fatalf("without --fail-on-violation: code=%d err=%v", code, err)
+	}
+
+	// Report flags, manifests and project settings.
+	write(t, root, "app/package.json", "{}")
+	write(t, root, "LICENSE", "MIT License")
+	paths = nil
+	out := filepath.Join(t.TempDir(), "r.HTML")
+	base := []string{"--api-url", srv.URL, "--api-key", "dg_test", "--dir", root, "--project", "p", "--version", "v"}
+	code, err = runScan(append(base, "--format", "report", "--report-out", out, "--project-license", "MIT", "--usage-model", "saas"))
+	if err != nil || code != 0 {
+		t.Fatalf("report: code=%d err=%v", code, err)
+	}
+	if b, _ := os.ReadFile(out); string(b) != "report:html" {
+		t.Fatalf("report file: %q", b)
+	}
+	if !slices.Equal(paths, []string{"app/package-lock.json", "LICENSE", "app/package.json"}) ||
+		fields["project_license"] != "MIT" || fields["usage_model"] != "saas" {
+		t.Fatalf("uploaded %v fields %v", paths, fields)
+	}
+	for _, bad := range [][]string{{"--usage-model", "cloud"}, {"--report-out", "x.pdf"}, {"--format", "xml"}} {
+		if _, err := runScan(append(base, bad...)); err == nil {
+			t.Errorf("%v accepted", bad)
+		}
+	}
+	// Manifests alone are not enough.
+	only := t.TempDir()
+	write(t, only, "package.json", "{}")
+	if _, err := runScan([]string{"--api-url", srv.URL, "--api-key", "dg_test", "--dir", only, "--project", "p"}); err == nil {
+		t.Error("scan without lockfiles accepted")
 	}
 }
 

@@ -6,11 +6,11 @@
 <details>
 <summary>Package Details (3)</summary>
 
-| Package | Malware | Vulnerability | Risky License | Report |
-|---|:---:|:---:|:---:|:---:|
-| `evil-pkg @ 1.0.0`<br>package-lock.json | ❌ | ✅ | ✅ | [🔗](https://app.depguard.dev/scans/01SCAN) |
-| `@‍acme/lodash @ 4.17.0`<br>web/package-lock.json | ✅ | ❌ | ✅ | [🔗](https://app.depguard.dev/scans/01SCAN) |
-| `left_pad* @ 1.3.0`<br>package-lock.json | ✅ | ✅ | ✅ | [🔗](https://app.depguard.dev/scans/01SCAN) |
+| Package | Dependency | Malware | Vulnerability | Risky License | Report |
+|---|---|:---:|:---:|:---:|:---:|
+| `evil-pkg @ 1.0.0`<br>package-lock.json | unknown | ❌ | ✅ | ✅ | [🔗](https://app.depguard.dev/scans/01SCAN) |
+| `@‍acme/lodash @ 4.17.0`<br>web/package-lock.json | unknown | ✅ | ❌ | ✅ | [🔗](https://app.depguard.dev/scans/01SCAN) |
+| `left_pad* @ 1.3.0`<br>package-lock.json | unknown | ✅ | ✅ | ✅ | [🔗](https://app.depguard.dev/scans/01SCAN) |
 
 </details>
 

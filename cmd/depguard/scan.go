@@ -9,11 +9,13 @@ import (
 	"io/fs"
 	"mime/multipart"
 	"net/textproto"
+	"net/url"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -28,6 +30,18 @@ var lockfileNames = map[string]bool{
 	"packages.lock.json": true, "conan.lock": true, "renv.lock": true, ".terraform.lock.hcl": true,
 }
 
+// Manifests and root license files are uploaded too: the server reads direct
+// dependencies and the project license from them.
+var manifestNames = map[string]bool{"package.json": true, "go.mod": true, "pom.xml": true, "Cargo.toml": true,
+	"pyproject.toml": true, "Gemfile": true, "composer.json": true}
+
+func isRootLicense(rel string) bool {
+	u := strings.ToUpper(rel)
+	return !strings.Contains(rel, "/") && (strings.HasPrefix(u, "LICENSE") || strings.HasPrefix(u, "LICENCE") || strings.HasPrefix(u, "COPYING"))
+}
+
+var usageModels = map[string]bool{"internal": true, "saas": true, "distributed_binary": true, "distributed_source": true}
+
 var skipDirs = map[string]bool{"node_modules": true, "vendor": true, ".git": true, ".venv": true, "venv": true,
 	"__pycache__": true, ".tox": true, "target": true, "dist": true, "build": true}
 
@@ -39,9 +53,10 @@ const (
 	maxTotal     = 50 << 20
 )
 
-// findLockfiles returns repo-relative (slash) paths of supported lockfiles under root.
+// findLockfiles returns repo-relative (slash) paths of supported lockfiles under
+// root, then manifests and root LICENSE/COPYING files (so upload caps drop those first).
 func findLockfiles(root string) ([]string, error) {
-	var out []string
+	var out, extra []string
 	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -57,14 +72,20 @@ func findLockfiles(root string) ([]string, error) {
 		if !d.Type().IsRegular() {
 			return nil // skip symlinks
 		}
-		if lockfileNames[d.Name()] || workflowRe.MatchString(rel) {
+		switch {
+		case lockfileNames[d.Name()] || workflowRe.MatchString(rel):
 			out = append(out, rel)
+		case manifestNames[d.Name()] || isRootLicense(rel):
+			extra = append(extra, rel)
 		}
 		return nil
 	})
 	sort.Strings(out)
-	return out, err
+	sort.Strings(extra)
+	return append(out, extra...), err
 }
+
+func isLockfile(rel string) bool { return lockfileNames[path.Base(rel)] || workflowRe.MatchString(rel) }
 
 type scanResult struct {
 	ScanID     string  `json:"scan_id"`
@@ -82,11 +103,24 @@ func runScan(args []string) (int, error) {
 	source := fs.String("source", "", "cli|gitlab|bitbucket|github (default: detected from CI env)")
 	dir := fs.String("dir", ".", "directory to search for lockfiles")
 	failOn := fs.Bool("fail-on-violation", false, "exit 1 when the scan conclusion is failure")
-	format := fs.String("format", "md", "output format: md|json")
+	format := fs.String("format", "md", "output: md (PR-style summary) | json | report (full risk report)")
+	reportOut := fs.String("report-out", "", "also save the full report to this file (.md, .json or .html)")
+	projectLicense := fs.String("project-license", "", "project license SPDX expression (overrides detection)")
+	usage := fs.String("usage-model", "", "how the project is used: internal|saas|distributed_binary|distributed_source")
 	timeout := fs.Duration("timeout", 10*time.Minute, "maximum time to wait for the scan")
 	fs.Parse(args)
-	if *format != "md" && *format != "json" {
-		return 0, errors.New("--format must be md or json")
+	if *format != "md" && *format != "json" && *format != "report" {
+		return 0, errors.New("--format must be md, json or report")
+	}
+	if *usage != "" && !usageModels[*usage] {
+		return 0, errors.New("--usage-model must be internal, saas, distributed_binary or distributed_source")
+	}
+	outFormat := ""
+	if *reportOut != "" {
+		outFormat = map[string]string{".md": "md", ".json": "json", ".html": "html", ".htm": "html"}[strings.ToLower(filepath.Ext(*reportOut))]
+		if outFormat == "" {
+			return 0, errors.New("--report-out must end in .md, .json or .html")
+		}
 	}
 	c, err := newClient(*apiURL, *apiKey)
 	if err != nil {
@@ -110,14 +144,21 @@ func runScan(args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if len(files) == 0 {
+	if !slices.ContainsFunc(files, isLockfile) {
 		return 0, fmt.Errorf("no supported lockfiles found under %s", root)
 	}
-	body, ctype, n, err := buildUpload(root, files, map[string]string{"project": *project, "version": *ver, "source": *source})
+	fields := map[string]string{"project": *project, "version": *ver, "source": *source}
+	if *projectLicense != "" {
+		fields["project_license"] = *projectLicense
+	}
+	if *usage != "" {
+		fields["usage_model"] = *usage
+	}
+	body, ctype, n, err := buildUpload(root, files, fields)
 	if err != nil {
 		return 0, err
 	}
-	fmt.Fprintf(os.Stderr, "depguard: scanning %d lockfile(s) for %s@%s\n", n, *project, *ver)
+	fmt.Fprintf(os.Stderr, "depguard: scanning %d file(s) for %s@%s\n", n, *project, *ver)
 
 	var res scanResult
 	if _, err := c.do("POST", "/v1/scans?wait=true", ctype, body, &res); err != nil {
@@ -130,10 +171,34 @@ func runScan(args []string) (int, error) {
 			return 0, err
 		}
 	}
-	if *format == "json" {
+	finished := res.Status != "queued" && res.Status != "running" && res.Status != "failed"
+	report := func(f string) ([]byte, error) {
+		var b []byte
+		_, err := c.do("GET", "/v1/scans/"+url.PathEscape(res.ScanID)+"/report?format="+f, "", nil, &b)
+		return b, err
+	}
+	if outFormat != "" && finished {
+		b, err := report(outFormat)
+		if err != nil {
+			return 0, err
+		}
+		if err := os.WriteFile(*reportOut, b, 0o644); err != nil {
+			return 0, err
+		}
+		fmt.Fprintf(os.Stderr, "depguard: report saved to %s\n", *reportOut)
+	}
+	switch {
+	case *format == "json":
 		j, _ := json.MarshalIndent(res, "", "  ")
 		fmt.Println(string(j))
-	} else {
+	case *format == "report" && finished:
+		b, err := report("md")
+		if err != nil {
+			return 0, err
+		}
+		fmt.Println(string(b))
+		fmt.Printf("Scan %s: status=%s conclusion=%s\n%s\n", res.ScanID, res.Status, deref(res.Conclusion), res.URL)
+	default:
 		if res.ReportMD != nil && *res.ReportMD != "" {
 			fmt.Println(*res.ReportMD)
 		}

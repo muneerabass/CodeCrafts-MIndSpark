@@ -166,7 +166,7 @@ function TriggerButton({ label, display: value, onClear, ...props }: { label: st
   );
 }
 
-function PopoverFilter({ f }: { f: Extract<FilterDef, { type: 'text' | 'select' | 'date' }> }) {
+export function PopoverFilter({ f }: { f: Extract<FilterDef, { type: 'text' | 'select' | 'date' }> }) {
   const [v, set] = useParam(f.key);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(v ?? '');

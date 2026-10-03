@@ -93,3 +93,14 @@ export function Verification({ verified }: { verified: boolean }) {
 export function RoleBadge({ role }: { role: string }) {
   return <span className="inline-flex rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium">{titleCase(role)}</span>;
 }
+
+/** Direct / Transitive · depth n / Unknown (no dependency graph for this manifest). */
+export function DependencyBadge({ direct, depth, dev }: { direct: boolean | null; depth: number | null; dev?: boolean | null }) {
+  const label = direct === null ? 'Unknown' : direct ? 'Direct' : `Transitive · depth ${depth ?? '?'}`;
+  return (
+    <span className={cn(pill, direct === null ? 'text-muted-foreground ring-1 ring-border' : direct ? 'bg-accent text-accent-foreground' : 'bg-muted text-foreground/80')}>
+      {label}
+      {dev && <span className="text-muted-foreground">· dev</span>}
+    </span>
+  );
+}

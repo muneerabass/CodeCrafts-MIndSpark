@@ -95,3 +95,36 @@ func rangeContains(eco, version string, r osvRange) bool {
 	}
 	return affected
 }
+
+// fixedIn returns the lowest "fixed" event above version among the
+// SEMVER/ECOSYSTEM ranges that contain version ("" if none).
+func fixedIn(eco, version string, ranges []osvRange) string {
+	best := ""
+	var bestV semantic.Version
+	for _, r := range ranges {
+		if (r.Type != "SEMVER" && r.Type != "ECOSYSTEM") || !rangeContains(eco, version, r) {
+			continue
+		}
+		vp, err := parse(version, eco, r.Type)
+		if err != nil {
+			continue
+		}
+		for _, e := range r.Events {
+			if e.Fixed == "" {
+				continue
+			}
+			if c, err := vp.CompareStr(e.Fixed); err != nil || c >= 0 {
+				continue
+			}
+			if best == "" {
+				if fv, err := parse(e.Fixed, eco, r.Type); err == nil {
+					best, bestV = e.Fixed, fv
+				}
+			} else if c, err := bestV.CompareStr(e.Fixed); err == nil && c > 0 {
+				fv, _ := parse(e.Fixed, eco, r.Type)
+				best, bestV = e.Fixed, fv
+			}
+		}
+	}
+	return best
+}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>depguard report: acme/web</title>
+<style>:root{--fg:#1f2937;--muted:#6b7280;--line:#e5e7eb;--brand:#4f46e5}
+*{box-sizing:border-box}body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--fg);background:#fff;margin:0;padding:32px;max-width:1100px}
+h1{font-size:22px;color:var(--brand);margin:0 0 4px}h2{font-size:17px;margin:28px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--brand)}
+h3{font-size:14px;margin:16px 0 6px}p{margin:6px 0}.meta{color:var(--muted);font-size:12px}
+table{border-collapse:collapse;width:100%;margin:8px 0 12px;font-size:12px}th,td{border:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top;word-break:break-word}
+th{background:#eef2ff}.sev{display:inline-block;padding:0 6px;border-radius:8px;font-weight:600;font-size:11px;color:#fff}
+.sev-critical{background:#b91c1c}.sev-high{background:#ea580c}.sev-medium{background:#ca8a04}.sev-low{background:#2563eb}.sev-info,.sev-unknown{background:#6b7280}
+footer{margin-top:32px;color:var(--muted);font-size:11px}
+@media print{body{padding:0}h2{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
+<h1>depguard dependency risk report: acme/web</h1>
+<p class="meta">Version: main · Scanned: 2026-10-01 · Scan: https://app.depguard.dev/scans/01RISK</p>
+<h2>1. Summary</h2>
+<p>Verdict: FAIL: 3 blocking issue(s).</p>
+<table><thead><tr><th>Measure</th><th>Count</th></tr></thead><tbody>
+<tr><td>Packages scanned</td><td>5</td></tr>
+<tr><td>Direct / transitive</td><td>3 / 2</td></tr>
+<tr><td>Vulnerabilities (critical / high / medium / low)</td><td>2 (0 / 1 / 1 / 0)</td></tr>
+<tr><td>Transitive vulnerabilities</td><td>1</td></tr>
+<tr><td>Malicious packages</td><td>0</td></tr>
+<tr><td>Suspicious findings</td><td>2</td></tr>
+<tr><td>License issues</td><td>1</td></tr>
+<tr><td>Attack paths</td><td>4</td></tr>
+</tbody></table>
+<h2>2. Vulnerabilities by severity</h2>
+<h3>High (1)</h3>
+<table><thead><tr><th>Package</th><th>Version</th><th>Dependency</th><th>Advisory</th><th>Risk</th><th>EPSS</th><th>KEV</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>qs</td><td>6.7.0</td><td>transitive (depth 3)</td><td>GHSA-hrpp-h998-j3pp</td><td><span class="sev sev-high">HIGH</span></td><td>42.0%</td><td>yes</td><td>6.7.3</td></tr>
+</tbody></table>
+<h3>Medium (1)</h3>
+<table><thead><tr><th>Package</th><th>Version</th><th>Dependency</th><th>Advisory</th><th>Risk</th><th>EPSS</th><th>KEV</th><th>Fixed in</th></tr></thead><tbody>
+<tr><td>request</td><td>2.88.2</td><td>direct, dev</td><td>GHSA-p8p7-x288-28g6</td><td><span class="sev sev-medium">MEDIUM</span></td><td>1.0%</td><td>no</td><td>—</td></tr>
+</tbody></table>
+<h2>3. Transitive vulnerabilities</h2>
+<p>Vulnerable packages you do not depend on directly, with how they reach your app.</p>
+<table><thead><tr><th>Package</th><th>Depth</th><th>Advisories</th><th>Introduced via</th></tr></thead><tbody>
+<tr><td>qs@6.7.0</td><td>3</td><td>GHSA-hrpp-h998-j3pp (HIGH)</td><td>app → express@4.17.1 → body-parser@1.19.0 → qs@6.7.0</td></tr>
+</tbody></table>
+<h2>4. Suspicious packages</h2>
+<p>Known malware, lookalike (typosquat) names, unmaintained, deprecated or brand-new packages and unusual install-time behaviour.</p>
+<table><thead><tr><th>Rule</th><th>Severity</th><th>Package</th><th>Why</th></tr></thead><tbody>
+<tr><td>typosquat</td><td><span class="sev sev-high">high</span></td><td>lodahs@1.0.0</td><td>Name is one edit away from a popular package (looks like lodash)</td></tr>
+<tr><td>deprecated</td><td><span class="sev sev-medium">medium</span></td><td>request@2.88.2</td><td>Package is deprecated: request has been deprecated</td></tr>
+</tbody></table>
+<h2>5. License issues</h2>
+<p>Project license: MIT (manifest) · Usage model: distributed as a binary</p>
+<table><thead><tr><th>Rule</th><th>Severity</th><th>Package</th><th>License</th><th>Explanation</th></tr></thead><tbody>
+<tr><td>license-incompatible</td><td><span class="sev sev-high">high</span></td><td>gpl-lib@2.0.0</td><td>GPL-3.0-only</td><td>GPL-3.0-only is incompatible with MIT when distributed as a binary</td></tr>
+</tbody></table>
+<h3>Conflicts</h3>
+<ul><li>gpl-lib@2.0.0: GPL-3.0-only is incompatible with MIT when distributed as a binary</li></ul>
+<h2>6. Attack paths</h2>
+<p>Chains from your app to a risky package, highest score first. Score 0-100 combines severity, KEV, EPSS, whether your code imports the chain&#39;s direct dependency, dev-only use and depth.</p>
+<table><thead><tr><th>#</th><th>Score</th><th>Risk</th><th>Chain</th><th>Imported</th><th>Fix</th></tr></thead><tbody>
+<tr><td>1</td><td>55</td><td><span class="sev sev-high">HIGH</span></td><td>app → express@4.17.1 → qs@6.7.0</td><td>yes</td><td>Upgrade qs to ≥6.7.3 (via express: update express or pin qs with an override/resolution)</td></tr>
+<tr><td>2</td><td>53</td><td><span class="sev sev-high">HIGH</span></td><td>app → express@4.17.1 → body-parser@1.19.0 → qs@6.7.0</td><td>yes</td><td>Upgrade qs to ≥6.7.3 (via express: update express or pin qs with an override/resolution)</td></tr>
+<tr><td>3</td><td>18</td><td><span class="sev sev-high">HIGH</span></td><td>app → lodahs@1.0.0</td><td><span class="sev sev-unknown">unknown</span></td><td>Review lodahs: Name is one edit away from a popular package</td></tr>
+<tr><td>4</td><td>2</td><td><span class="sev sev-medium">MEDIUM</span></td><td>app → request@2.88.2</td><td>no</td><td>No fixed version of request yet: replace it or mitigate</td></tr>
+</tbody></table>
+<h2>7. Recommended next steps</h2>
+<ol><li>Upgrade qs to ≥6.7.3 (via express: update express or pin qs with an override/resolution).</li><li>No fixed version of request yet: replace it or mitigate.</li><li>Confirm lodahs@1.0.0 is intended; it looks like lodash. Remove it if it was a typo.</li><li>Plan a replacement for request@2.88.2 (deprecated).</li><li>Review the license issues with whoever approves licenses; set the project license and usage model in depguard if they are wrong.</li></ol>
+<footer>Generated by depguard</footer>
+</body></html>

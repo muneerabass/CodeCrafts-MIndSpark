@@ -55,3 +55,26 @@ func TestAffects(t *testing.T) {
 		}
 	}
 }
+
+func TestFixedIn(t *testing.T) {
+	ev := func(in, fix string) []osvEvent { return []osvEvent{{Introduced: in}, {Fixed: fix}} }
+	twoWindows := []osvRange{{Type: "SEMVER", Events: append(ev("1.0.0", "1.0.5"), ev("2.0.0", "2.1.0")...)}}
+	cases := []struct {
+		eco, ver string
+		ranges   []osvRange
+		want     string
+	}{
+		{"npm", "1.0.2", twoWindows, "1.0.5"},
+		{"npm", "2.0.1", twoWindows, "2.1.0"},
+		{"npm", "3.0.0", twoWindows, ""},
+		{"PyPI", "1.9", []osvRange{{Type: "ECOSYSTEM", Events: ev("0", "2.0.0rc1")}}, "2.0.0rc1"},
+		{"npm", "1.0.0", []osvRange{{Type: "ECOSYSTEM", Events: []osvEvent{{Introduced: "0"}, {LastAffected: "1.2.0"}}}}, ""},
+		// Two ranges containing the version: the lowest fix wins.
+		{"Maven", "2.14.0", []osvRange{{Type: "ECOSYSTEM", Events: ev("2.0-beta9", "2.16.0")}, {Type: "ECOSYSTEM", Events: ev("2.0", "2.15.0")}}, "2.15.0"},
+	}
+	for _, c := range cases {
+		if got := fixedIn(c.eco, c.ver, c.ranges); got != c.want {
+			t.Errorf("%s %s: got %q want %q", c.eco, c.ver, got, c.want)
+		}
+	}
+}

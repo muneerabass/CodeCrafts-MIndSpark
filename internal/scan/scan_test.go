@@ -56,7 +56,7 @@ func TestDefaultPolicy(t *testing.T) {
 		{"malware", mk([]insightapi.PackageVulnerability{vuln("MAL-2024-1", insightapi.PackageVulnerabilitySeveritiesRiskCRITICAL)}, nil), []string{"malicious-package"}},
 		{"high vuln", mk([]insightapi.PackageVulnerability{vuln("GHSA-x", insightapi.PackageVulnerabilitySeveritiesRiskHIGH)}, nil), []string{"critical-or-high-vulnerability"}},
 		{"medium vuln", mk([]insightapi.PackageVulnerability{vuln("GHSA-y", insightapi.PackageVulnerabilitySeveritiesRiskMEDIUM)}, nil), nil},
-		{"agpl", mk(nil, []insightapi.License{"AGPL-3.0-only"}), []string{"risky-license"}},
+		{"agpl not a CEL default (internal/license)", mk(nil, []insightapi.License{"AGPL-3.0-only"}), nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

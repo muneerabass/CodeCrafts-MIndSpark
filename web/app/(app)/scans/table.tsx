@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { Check, GitBranch, X } from 'lucide-react';
+import { Check, ChevronDown, Download, GitBranch, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { Chip, RiskBadge, ScanStatus, ViolationCount, VulnCount, triggerLabel } from '@/components/badges';
+import { Chip, DependencyBadge, RiskBadge, ScanStatus, ViolationCount, VulnCount, triggerLabel } from '@/components/badges';
 import { Ecosystem } from '@/components/icons';
 import { fmtDate } from '@/lib/format';
 import type { ScanPackage, ScanRow } from '@/lib/types';
@@ -61,6 +63,19 @@ const pkgCols: ColumnDef<ScanPackage, unknown>[] = [
       </div>
     ),
   },
+  {
+    header: 'Dependency',
+    cell: ({ row }) => (
+      <div className="flex flex-col gap-1">
+        <DependencyBadge {...row.original} />
+        {row.original.direct === false && row.original.via.length > 1 && (
+          <span className="max-w-56 font-mono text-[11px] text-muted-foreground" title="Introduced via">
+            via {row.original.via.slice(0, -1).join(' → ')}
+          </span>
+        )}
+      </div>
+    ),
+  },
   { header: 'Change', cell: ({ row }) => <Chip>{row.original.change}</Chip> },
   { header: 'Malware', cell: ({ row }) => yes(row.original.malware, 'Malware') },
   { header: 'Vulnerable', cell: ({ row }) => yes(row.original.vulnerable, 'Vulnerable') },
@@ -90,4 +105,30 @@ const pkgCols: ColumnDef<ScanPackage, unknown>[] = [
 
 export function ScanPackagesTable({ data }: { data: ScanPackage[] }) {
   return <DataTable columns={pkgCols} data={data} empty="No package changes in this scan." />;
+}
+
+export function DownloadReport({ id }: { id: string }) {
+  const href = (f: string) => `/api/scans/${encodeURIComponent(id)}/report?format=${f}`;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Download /> Download report <ChevronDown />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {[
+          ['md', 'Markdown (.md)'],
+          ['json', 'JSON (.json)'],
+          ['html', 'HTML (.html)'],
+        ].map(([f, label]) => (
+          <DropdownMenuItem key={f} asChild>
+            <a href={href(f)} download>
+              {label}
+            </a>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }

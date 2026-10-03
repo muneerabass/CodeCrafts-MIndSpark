@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Bug, FlaskConical, Info, Loader2, Plus, RotateCcw, Scale, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
+import { Bug, FlaskConical, Info, Loader2, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,14 +11,37 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAction } from '@/components/client';
 import { savePolicy, testPolicy } from '@/lib/actions';
-import type { CustomRule, Policy } from '@/lib/types';
+import type { CustomRule, Policy, Severity, SuspiciousPreset } from '@/lib/types';
 
 const Monaco = dynamic(() => import('@monaco-editor/react'), {
   ssr: false,
   loading: () => <div className="h-[120px] animate-pulse rounded-md bg-muted" />,
 });
 
-const DEFAULT_DENY = ['GPL-2.0', 'GPL-3.0', 'AGPL-3.0'];
+const DEFAULT_DENY: string[] = [];
+const DEFAULT_SUSPICIOUS: SuspiciousPreset = { typosquat: true, unmaintained: true, unmaintained_months: 24, deprecated: true, new_package: true, no_source_repo: false, unusual_behaviour: true, blocking: ['typosquat', 'unusual-behaviour'] };
+// Toggle key in the preset -> rule name used in findings and in `blocking`.
+const SUSPICIOUS_RULES: { key: keyof SuspiciousPreset; rule: string; label: string; hint: string }[] = [
+  { key: 'typosquat', rule: 'typosquat', label: 'Typosquats', hint: 'Names one edit away from a popular package (lodahs vs lodash).' },
+  { key: 'unmaintained', rule: 'unmaintained', label: 'Unmaintained', hint: 'No release for a long time and no sign of active maintenance.' },
+  { key: 'deprecated', rule: 'deprecated', label: 'Deprecated', hint: 'Marked deprecated by its maintainers.' },
+  { key: 'new_package', rule: 'new-package', label: 'Brand-new versions', hint: 'Version published less than 30 days ago.' },
+  { key: 'no_source_repo', rule: 'no-source-repo', label: 'No source repository', hint: 'No linked source repository to review.' },
+  { key: 'unusual_behaviour', rule: 'unusual-behaviour', label: 'Unusual behaviour', hint: 'Install scripts, obfuscation or exfiltration found by heuristic analysis.' },
+];
+const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
+
+/** Older stored policies lack the suspicious preset and the new license fields. */
+function withDefaults(p: Policy): Policy {
+  return {
+    ...p,
+    presets: {
+      ...p.presets,
+      license: { enabled: true, blocking_severity: 'high', ...p.presets.license },
+      suspicious: { ...DEFAULT_SUSPICIOUS, ...p.presets.suspicious },
+    },
+  };
+}
 const CATEGORIES = ['vulnerability', 'malware', 'license', 'popularity', 'maintenance'];
 const RISKS = [
   { v: 'CRITICAL', l: 'Critical only' },
@@ -52,7 +75,8 @@ function Preset({
   );
 }
 
-export function PolicyEditor({ initial, canEdit }: { initial: Policy; canEdit: boolean }) {
+export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEdit: boolean }) {
+  const [initial] = useState(() => withDefaults(raw));
   const [p, setP] = useState<Policy>(initial);
   const [license, setLicense] = useState('');
   const { pending, run } = useAction();
@@ -99,7 +123,29 @@ export function PolicyEditor({ initial, canEdit }: { initial: Policy; canEdit: b
         </div>
       </Preset>
 
-      <Preset icon={Scale} title="License" description="Flag packages whose SPDX license starts with one of these identifiers.">
+      <Preset icon={Scale} title="License" description="Check dependency licenses against your project license and usage model, plus a deny list of SPDX identifiers.">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch id="p-lic-on" checked={p.presets.license.enabled ?? true} onCheckedChange={(v) => set('license', { enabled: v })} disabled={ro} />
+            <Label htmlFor="p-lic-on">License compliance checks</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="p-lic-sev">Block at severity</Label>
+            <Select value={p.presets.license.blocking_severity ?? 'high'} onValueChange={(v) => set('license', { blocking_severity: v as Severity })} disabled={ro || p.presets.license.enabled === false}>
+              <SelectTrigger id="p-lic-sev" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SEVERITIES.map((s) => (
+                  <SelectItem key={s} value={s} className="capitalize">
+                    {s} and above
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <p className="text-sm font-medium">Denied licenses</p>
         <ul className="flex flex-wrap gap-2" aria-label="Denied licenses">
           {deny.length === 0 && <li className="text-sm text-muted-foreground">No licenses denied.</li>}
           {deny.map((l) => (
@@ -140,6 +186,8 @@ export function PolicyEditor({ initial, canEdit }: { initial: Policy; canEdit: b
           </div>
         )}
       </Preset>
+
+      <SuspiciousCard s={p.presets.suspicious ?? DEFAULT_SUSPICIOUS} ro={ro} onChange={(v) => set('suspicious', v)} />
 
       <Preset icon={Star} title="Popularity" description="Flag packages whose source repository has very few stars — a common trait of typosquats.">
         <div className="flex flex-wrap items-center gap-4">
@@ -207,6 +255,47 @@ export function PolicyEditor({ initial, canEdit }: { initial: Policy; canEdit: b
         </div>
       )}
     </div>
+  );
+}
+
+function SuspiciousCard({ s, ro, onChange }: { s: SuspiciousPreset; ro: boolean; onChange: (v: Partial<SuspiciousPreset>) => void }) {
+  return (
+    <Preset icon={ScanSearch} title="Suspicious" description="Flag lookalike, abandoned, deprecated, brand-new and oddly-behaving packages. Blocking rules fail the check; the rest are reported only.">
+      <div className="grid gap-2" role="group" aria-label="Suspicious package rules">
+        {SUSPICIOUS_RULES.map((r) => {
+          const on = s[r.key] as boolean;
+          const blocking = s.blocking.includes(r.rule);
+          return (
+            <div key={r.rule} className="flex flex-wrap items-center gap-3 rounded-md border p-2">
+              <Switch id={`p-s-${r.rule}`} checked={on} onCheckedChange={(v) => onChange({ [r.key]: v })} disabled={ro} />
+              <div className="min-w-48 flex-1">
+                <Label htmlFor={`p-s-${r.rule}`}>{r.label}</Label>
+                <p className="text-xs text-muted-foreground">{r.hint}</p>
+              </div>
+              {r.key === 'unmaintained' && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="p-s-months" className="text-xs">
+                    Months without release
+                  </Label>
+                  <Input id="p-s-months" type="number" min={1} max={120} className="h-8 w-20" value={s.unmaintained_months} onChange={(e) => onChange({ unmaintained_months: Number(e.target.value) })} disabled={ro || !on} />
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Switch
+                  id={`p-s-${r.rule}-block`}
+                  checked={blocking}
+                  onCheckedChange={(v) => onChange({ blocking: v ? [...s.blocking, r.rule] : s.blocking.filter((x) => x !== r.rule) })}
+                  disabled={ro || !on}
+                />
+                <Label htmlFor={`p-s-${r.rule}-block`} className="text-xs">
+                  Blocks
+                </Label>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Preset>
   );
 }
 

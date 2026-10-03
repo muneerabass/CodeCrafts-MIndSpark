@@ -12,7 +12,16 @@ const sources = [
   { name: 'OpenSSF Scorecard', url: 'https://github.com/ossf/scorecard', license: 'Apache-2.0', use: 'Project maintenance and security-practice scores.' },
   { name: 'OpenSSF malicious-packages', url: 'https://github.com/ossf/malicious-packages', license: 'Apache-2.0', use: 'Known malicious packages (MAL- advisories, delivered via OSV).' },
   { name: 'safedep/vet', url: 'https://github.com/safedep/vet', license: 'Apache-2.0', use: 'Lockfile parsing, scanning pipeline and CEL policy evaluation (used as a library).' },
-  { name: 'DataDog/guarddog', url: 'https://github.com/DataDog/guarddog', license: 'Apache-2.0', use: 'Heuristic malware analysis of newly added packages.' },
+  { name: 'DataDog/guarddog', url: 'https://github.com/DataDog/guarddog', license: 'Apache-2.0', use: 'Heuristic malware analysis of packages, and the top-package lists and lookalike-name (typosquat) heuristics.' },
+  { name: 'npm-rank', url: 'https://github.com/tristan-f-r/npm-rank', license: 'MIT', use: 'Top npm package list for lookalike-name (typosquat) detection.' },
+  { name: 'ecosyste.ms', url: 'https://ecosyste.ms', license: 'CC BY-SA 4.0', use: 'Top RubyGems package list for lookalike-name (typosquat) detection.' },
+  { name: 'Top PyPI Packages (hugovk/top-pypi-packages)', url: 'https://hugovk.dev/top-pypi-packages/', license: 'Downloaded at runtime', use: 'Top PyPI package list for lookalike-name (typosquat) detection.' },
+  {
+    name: 'OSADL Open Source License Checklists',
+    url: 'https://www.osadl.org/checklists',
+    license: 'CC BY 4.0',
+    use: 'License compatibility data: OSADL Open Source License Checklists — A project by the Open Source Automation Development Lab (OSADL) eG. For further information about the project see the description at www.osadl.org/checklists. Licensed under CC BY 4.0.',
+  },
 ];
 
 export default function AttributionsPage() {

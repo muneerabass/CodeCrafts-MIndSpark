@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { AnalysisStatus, Chip, Verification } from '@/components/badges';
-import { fmtDate } from '@/lib/format';
-import type { PackageAnalysis } from '@/lib/types';
+import { AnalysisStatus, Chip, RiskBadge, Verification } from '@/components/badges';
+import { Ecosystem } from '@/components/icons';
+import { fmtDate, suspiciousReason } from '@/lib/format';
+import type { PackageAnalysis, Violation } from '@/lib/types';
 
 const cols: ColumnDef<PackageAnalysis, unknown>[] = [
   { header: 'Component', cell: ({ row }) => <span className="font-medium">{row.original.component.name}</span> },
@@ -34,4 +35,36 @@ const cols: ColumnDef<PackageAnalysis, unknown>[] = [
 
 export function AnalysesTable({ data, total }: { data: PackageAnalysis[]; total: number }) {
   return <DataTable columns={cols} data={data} total={total} />;
+}
+
+const det = (v: Violation, k: string) => (v.details?.[k] == null ? '' : String(v.details[k]));
+const suspCols: ColumnDef<Violation, unknown>[] = [
+  {
+    header: 'Package',
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-2 font-medium">
+        <Ecosystem name={row.original.component.ecosystem} /> {row.original.component.name} <Chip>{row.original.component.version}</Chip>
+      </span>
+    ),
+  },
+  { header: 'Rule', cell: ({ row }) => <Chip>{row.original.rule_name}</Chip> },
+  { header: 'Severity', cell: ({ row }) => <RiskBadge risk={row.original.severity ?? 'high'} /> },
+  { header: 'Reason', cell: ({ row }) => <span className="block max-w-lg text-sm">{suspiciousReason(row.original.rule_name, row.original.details, row.original.summary)}</span> },
+  { header: 'Similar To', cell: ({ row }) => (det(row.original, 'similar_to') ? <span className="font-medium">{det(row.original, 'similar_to')}</span> : '—') },
+  {
+    header: 'Project',
+    cell: ({ row }) =>
+      row.original.project ? (
+        <Link href={`/projects/${row.original.project.id}`} className="hover:text-primary hover:underline">
+          {row.original.project.name}
+        </Link>
+      ) : (
+        '—'
+      ),
+  },
+  { header: 'Detected', cell: ({ row }) => fmtDate(row.original.created_at) },
+];
+
+export function SuspiciousTable({ data, total }: { data: Violation[]; total: number }) {
+  return <DataTable columns={suspCols} data={data} total={total} empty="No suspicious packages found." />;
 }

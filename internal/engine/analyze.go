@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/ids"
 	"github.com/depguard/depguard/internal/render"
 	"github.com/depguard/depguard/internal/scan"
@@ -25,12 +26,23 @@ type finding struct {
 	vulnerable  bool
 	risky       bool
 	componentID string
+
+	// Dependency-graph context (nil/0 = unknown).
+	direct, dev, imported *bool
+	depth                 int
+	via                   []string
+	paths                 [][]string
+	graphSource           string
+	approximate           bool
+	// checks are findings from risk checkers (suspicious, license).
+	checks []scan.Finding
 }
 
 func (f *finding) ecosystem() string { return f.pkg.Manifest.Ecosystem }
 
-// evaluate enriches packages and applies the tenant policy and exclusions.
-func (d Deps) evaluate(ctx context.Context, changes []scan.Change, st settings) ([]*finding, error) {
+// evaluate enriches packages, applies the tenant policy and exclusions,
+// fills graph context from rc and runs the risk checkers.
+func (d Deps) evaluate(ctx context.Context, changes []scan.Change, st settings, rc *riskCtx) ([]*finding, error) {
 	if len(changes) == 0 {
 		return nil, nil
 	}
@@ -66,27 +78,41 @@ func (d Deps) evaluate(ctx context.Context, changes []scan.Change, st settings) 
 				f.risky = true
 			}
 		}
+		rc.applyGraph(f)
 		out = append(out, f)
+	}
+	d.runCheckers(ctx, out, st, rc)
+	for _, f := range out {
+		for _, c := range f.checks {
+			f.risky = f.risky || c.Category == scan.CategoryLicense
+		}
 	}
 	return out, nil
 }
 
+// countViolations counts policy violations and checker findings.
 func countViolations(fs []*finding) (n int) {
 	for _, f := range fs {
-		n += len(f.violations)
+		n += len(f.violations) + len(f.checks)
 	}
 	return n
 }
 
-// conclusion: failure (block mode) / neutral (warn mode) on violations.
+// conclusion: failure when a blocking violation/finding exists in block
+// mode, neutral for any other violation or finding, else success. CEL
+// policy violations always block.
 func conclusion(fs []*finding, st settings) string {
+	blocking := false
+	for _, f := range fs {
+		blocking = blocking || len(f.violations) > 0 || slices.ContainsFunc(f.checks, func(c scan.Finding) bool { return c.Blocking })
+	}
 	switch {
-	case countViolations(fs) == 0:
-		return "success"
-	case st.BlockMode:
+	case blocking && st.BlockMode:
 		return "failure"
-	default:
+	case countViolations(fs) > 0:
 		return "neutral"
+	default:
+		return "success"
 	}
 }
 
@@ -99,18 +125,33 @@ func rank(r string) int {
 	return 4
 }
 
-func (d Deps) report(scanID string, fs []*finding, ai []string, noChanges bool) render.Report {
-	r := render.Report{PublicURL: d.PublicURL, ScanID: scanID, AIUsage: ai, NoChanges: noChanges}
+func (d Deps) report(scanID string, fs []*finding, ai []string, noChanges bool, project scan.Project) render.Report {
+	r := render.Report{PublicURL: d.PublicURL, ScanID: scanID, AIUsage: ai, NoChanges: noChanges,
+		Project: render.Project{Name: project.Name, License: project.License, LicenseSource: project.LicenseSource, UsageModel: project.UsageModel}}
 	for _, f := range fs {
-		rp := render.Package{Name: f.pkg.GetName(), Version: f.pkg.GetVersion(), Ecosystem: f.ecosystem(), ManifestPath: f.path,
-			Malware: f.malware, Vulnerable: f.vulnerable, RiskyLicense: f.risky}
+		fixed := map[string]string{}
+		for _, m := range enrich.Matches(f.pkg) {
+			fixed[m.AdvisoryID] = m.FixedIn
+		}
+		var vulns []render.Vuln
+		for _, vu := range f.vulns {
+			vulns = append(vulns, render.Vuln{ID: vu.ID, Risk: vu.Risk, Summary: vu.Summary, FixedIn: fixed[vu.ID]})
+		}
+		rp := render.Package{ID: f.componentID, Name: f.pkg.GetName(), Version: f.pkg.GetVersion(), Ecosystem: f.ecosystem(), ManifestPath: f.path,
+			Malware: f.malware, Vulnerable: f.vulnerable, RiskyLicense: f.risky,
+			Direct: f.direct, Depth: f.depth, Dev: f.dev != nil && *f.dev, Via: f.via, Paths: f.paths, Imported: f.imported,
+			GraphSource: f.graphSource, Licenses: scan.Licenses(f.pkg), Vulns: vulns}
 		r.Packages = append(r.Packages, rp)
+		for _, c := range f.checks {
+			r.Findings = append(r.Findings, render.Finding{Rule: c.Rule, Category: c.Category, Severity: c.Severity, Blocking: c.Blocking,
+				Summary: c.Summary, Package: rp.Name + "@" + rp.Version, ManifestPath: f.path, Details: c.Details})
+		}
 		for _, v := range f.violations {
 			cat := scan.CategoryName(v.Rule.Category)
 			var top []render.Vuln
-			for _, vu := range f.vulns {
+			for _, vu := range vulns {
 				if (cat == "malware") == strings.HasPrefix(vu.ID, "MAL-") {
-					top = append(top, render.Vuln{ID: vu.ID, Risk: vu.Risk})
+					top = append(top, vu)
 				}
 			}
 			slices.SortStableFunc(top, func(a, b render.Vuln) int { return rank(a.Risk) - rank(b.Risk) })
@@ -141,8 +182,9 @@ type persistIn struct {
 	tenant, projectID, versionID, scanID string
 	findings                             []*finding
 	osvCleanRows                         bool // PR scans: record a clean OSV analysis for new packages
-	replaceComponents                    bool // full scans: replace the version's component set
+	replaceComponents                    bool // full scans: replace the version's component set and edges
 	conclusion, reportMD                 string
+	risk                                 *riskCtx // graphs (edges) and detected project license
 }
 
 // persist stores components, matches, violations and analyses and marks the
@@ -184,24 +226,46 @@ func persist(ctx context.Context, tx pgx.Tx, in persistIn) error {
 	b.Queue(`DELETE FROM policy_violations WHERE scan_id=$1`, in.scanID)
 	if in.replaceComponents {
 		b.Queue(`DELETE FROM project_version_components WHERE project_version_id=$1`, in.versionID)
+		b.Queue(`DELETE FROM project_version_dependencies WHERE project_version_id=$1`, in.versionID)
 	}
 	var vulnCount, malCount int
 	for _, f := range in.findings {
 		f.componentID = compIDs[f.pkg.GetPackageUrl()]
 		for _, v := range f.vulns {
-			b.Queue(`INSERT INTO component_vulnerabilities (tenant_id, component_id, advisory_id, risk) VALUES ($1,$2,$3,$4)
-				ON CONFLICT (component_id, advisory_id) DO UPDATE SET risk=EXCLUDED.risk`, in.tenant, f.componentID, v.ID, v.Risk)
+			b.Queue(`INSERT INTO component_vulnerabilities (tenant_id, component_id, advisory_id, risk, fixed_in) VALUES ($1,$2,$3,$4,NULLIF($5,''))
+				ON CONFLICT (component_id, advisory_id) DO UPDATE SET risk=EXCLUDED.risk, fixed_in=EXCLUDED.fixed_in`, in.tenant, f.componentID, v.ID, v.Risk, v.FixedIn)
 			if !strings.HasPrefix(v.ID, "MAL-") {
 				vulnCount++
 			}
 		}
-		b.Queue(`INSERT INTO scan_packages (tenant_id, scan_id, component_id, manifest_path, change, malware, vulnerable, risky_license)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
-			in.tenant, in.scanID, f.componentID, f.path, f.change, f.malware, f.vulnerable, f.risky)
+		via, paths := f.via, f.paths
+		if via == nil {
+			via = []string{}
+		}
+		if paths == nil {
+			paths = [][]string{}
+		}
+		b.Queue(`INSERT INTO scan_packages (tenant_id, scan_id, component_id, manifest_path, change, malware, vulnerable, risky_license,
+				direct, depth, dev, via, paths, graph_source, imported)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULLIF($10,0),$11,$12,$13,$14,$15) ON CONFLICT DO NOTHING`,
+			in.tenant, in.scanID, f.componentID, f.path, f.change, f.malware, f.vulnerable, f.risky,
+			f.direct, f.depth, f.dev, via, mustJSON(paths), f.graphSource, f.imported)
 		for _, v := range f.violations {
-			b.Queue(`INSERT INTO policy_violations (id, tenant_id, scan_id, project_version_id, component_id, rule_name, category, summary)
-				VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, ids.New(), in.tenant, in.scanID, in.versionID, f.componentID,
-				v.Rule.Name, scan.CategoryName(v.Rule.Category), v.Rule.Summary)
+			cat := scan.CategoryName(v.Rule.Category)
+			b.Queue(`INSERT INTO policy_violations (id, tenant_id, scan_id, project_version_id, component_id, rule_name, category, summary,
+					severity, blocking, details)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,'{}')`, ids.New(), in.tenant, in.scanID, in.versionID, f.componentID,
+				v.Rule.Name, cat, v.Rule.Summary, violationSeverity(cat, f.vulns))
+		}
+		for _, c := range f.checks {
+			details := c.Details
+			if details == nil {
+				details = map[string]any{}
+			}
+			b.Queue(`INSERT INTO policy_violations (id, tenant_id, scan_id, project_version_id, component_id, rule_name, category, summary,
+					severity, blocking, details)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, ids.New(), in.tenant, in.scanID, in.versionID, f.componentID,
+				c.Rule, c.Category, c.Summary, c.Severity, c.Blocking, mustJSON(details))
 		}
 		status := ""
 		if f.malware {
@@ -216,17 +280,55 @@ func persist(ctx context.Context, tx pgx.Tx, in persistIn) error {
 				ids.New(), in.tenant, f.componentID, in.versionID, in.scanID, status, f.malware, mustJSON(map[string]any{"advisories": f.vulns}))
 		}
 		if in.replaceComponents {
-			b.Queue(`INSERT INTO project_version_components (tenant_id, project_version_id, component_id, manifest_path)
-				VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`, in.tenant, in.versionID, f.componentID, f.path)
+			b.Queue(`INSERT INTO project_version_components (tenant_id, project_version_id, component_id, manifest_path, direct, depth, dev)
+				VALUES ($1,$2,$3,$4,$5,NULLIF($6,0),$7) ON CONFLICT DO NOTHING`, in.tenant, in.versionID, f.componentID, f.path,
+				f.direct, f.depth, f.dev)
 		}
 	}
 	if in.replaceComponents {
 		b.Queue(`UPDATE project_versions SET last_scan_id=$2, updated_at=now() WHERE id=$1`, in.versionID, in.scanID)
+		queueEdges(b, in, compIDs)
+	}
+	if rc := in.risk; rc != nil && rc.detected != nil && in.replaceComponents {
+		b.Queue(`UPDATE projects SET license=$2, license_source=$3, updated_at=now()
+			WHERE id=$1 AND license_source IS DISTINCT FROM 'override'`, in.projectID, rc.detected[0], rc.detected[1])
 	}
 	b.Queue(`UPDATE scans SET status='success', error=NULL, finished_at=now(), components_count=$2, vulns_count=$3,
 		violations_count=$4, malicious_count=$5, conclusion=$6, report_md=$7 WHERE id=$1`,
 		in.scanID, len(in.findings), vulnCount, countViolations(in.findings), malCount, in.conclusion, in.reportMD)
 	return tx.SendBatch(ctx, b).Close()
+}
+
+// queueEdges writes the version's dependency edges (full scans).
+func queueEdges(b *pgx.Batch, in persistIn, compIDs map[string]string) {
+	if in.risk == nil {
+		return
+	}
+	paths := make([]string, 0, len(in.risk.graphs))
+	for p := range in.risk.graphs {
+		paths = append(paths, p)
+	}
+	slices.Sort(paths)
+	for _, mp := range paths {
+		g := in.risk.graphs[mp]
+		for _, e := range g.Edges() {
+			child := compIDs[e[1].GetPackageUrl()]
+			var parent *string
+			if e[0] != nil {
+				id, ok := compIDs[e[0].GetPackageUrl()]
+				if !ok {
+					continue
+				}
+				parent = &id
+			}
+			if child == "" {
+				continue
+			}
+			b.Queue(`INSERT INTO project_version_dependencies (tenant_id, project_version_id, manifest_path, parent_component_id,
+					child_component_id, graph_source) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+				in.tenant, in.versionID, mp, parent, child, g.Source())
+		}
+	}
 }
 
 // startScan marks a scan row running (attempt bookkeeping).

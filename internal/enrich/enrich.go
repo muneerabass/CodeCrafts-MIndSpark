@@ -82,7 +82,14 @@ type Match struct {
 	Summary    string
 	Aliases    []string
 	Malware    bool // MAL-* advisory
+	// FixedIn is the lowest OSV "fixed" version above the installed one in
+	// the matched affected range ("" if none).
+	FixedIn string
 }
+
+// fixedPrefix marks FixedIn inside PackageVulnerability.Related: insights
+// have no field for it and vet's policy evaluator ignores Related.
+const fixedPrefix = "depguard:fixed-in="
 
 // Matches returns the advisories Enrich attached to pkg.
 func Matches(pkg *models.Package) []Match {
@@ -99,6 +106,13 @@ func Matches(pkg *models.Package) []Match {
 			m.Risk = string(*(*v.Severities)[0].Risk)
 		}
 		m.Malware = strings.HasPrefix(m.AdvisoryID, "MAL-")
+		if v.Related != nil {
+			for _, r := range *v.Related {
+				if f, ok := strings.CutPrefix(r, fixedPrefix); ok {
+					m.FixedIn = f
+				}
+			}
+		}
 		out = append(out, m)
 	}
 	return out
@@ -246,7 +260,11 @@ func (e *Enricher) vulns(ctx context.Context, items []item) (map[*models.Package
 					seen[p] = map[string]bool{}
 				}
 				seen[p][id] = true
-				out[p] = append(out[p], toVuln(id, summary, risk, aliases, sev))
+				v := toVuln(id, summary, risk, aliases, sev)
+				if f := fixedIn(k.eco, p.GetVersion(), ranges); f != "" {
+					v.Related = &[]string{fixedPrefix + f}
+				}
+				out[p] = append(out[p], v)
 			}
 		}
 		rows.Close()

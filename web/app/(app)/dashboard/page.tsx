@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Bug, ChartColumnStacked, CheckCheck, FileChartLine, FolderGit2, Hexagon, ShieldAlert, Skull, Trophy } from 'lucide-react';
+import { Bug, ChartColumnStacked, CheckCheck, FileChartLine, FolderGit2, GitFork, Hexagon, Route, Scale, ScanSearch, ShieldAlert, Skull, Trophy } from 'lucide-react';
 import { api, one, type SearchParams } from '@/lib/api';
 import { requireOrg } from '@/lib/session';
 import type { Dashboard } from '@/lib/types';
@@ -22,6 +22,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
     { label: 'Malicious Packages', value: d.malicious, icon: Skull, href: '/package-analysis?status=malicious', tone: 'text-red-600' },
     { label: 'Policy Violations', value: d.violations, icon: FileChartLine, href: '/policy/violations', tone: 'text-amber-600' },
     { label: 'Total Vulnerabilities', value: d.vulnerabilities, icon: Bug, href: '/vulnerabilities', tone: 'text-red-600' },
+    { label: 'Transitive Vulnerabilities', value: d.transitive_vulnerabilities ?? 0, icon: GitFork, href: '/components?direct=false&has_vulns=true', tone: 'text-red-600' },
+    { label: 'Attack Paths', value: d.attack_paths ?? 0, icon: Route, href: '/projects', tone: 'text-red-600' },
+    { label: 'Suspicious Findings', value: d.suspicious_findings ?? 0, icon: ScanSearch, href: '/package-analysis?view=suspicious', tone: 'text-amber-600' },
+    { label: 'License Issues', value: d.license_issues ?? 0, icon: Scale, href: '/policy/violations?category=license', tone: 'text-amber-600' },
   ];
 
   return (

@@ -75,7 +75,7 @@ func (s *Server) uploadScan(w http.ResponseWriter, r *http.Request) error {
 			return badRequest("malformed multipart body")
 		}
 		switch name := part.FormName(); name {
-		case "project", "version", "source":
+		case "project", "version", "source", "project_license", "usage_model":
 			b, err := io.ReadAll(io.LimitReader(part, 513))
 			if err != nil {
 				return err
@@ -126,6 +126,13 @@ func (s *Server) uploadScan(w http.ResponseWriter, r *http.Request) error {
 	if len(files) == 0 {
 		return badRequest("at least one lockfile is required")
 	}
+	license, usage := fields["project_license"], fields["usage_model"]
+	if license != "" && !validLicense(license) {
+		return badRequest("project_license must be an SPDX expression such as MIT or Apache-2.0 OR MIT")
+	}
+	if usage != "" && !usageModels[usage] {
+		return badRequest("usage_model must be internal, saas, distributed_binary or distributed_source")
+	}
 	tid := principal(r).TenantID
 	scanID := ids.New()
 	err = s.tx(r, func(tx pgx.Tx) error {
@@ -133,6 +140,14 @@ func (s *Server) uploadScan(w http.ResponseWriter, r *http.Request) error {
 		projectID, versionID, err := upsertProjectVersion(ctx, tx, tid, source, project, "", nil, version)
 		if err != nil {
 			return err
+		}
+		if license != "" || usage != "" {
+			if _, err := tx.Exec(ctx, `UPDATE projects SET
+				license = COALESCE(NULLIF($2, ''), license),
+				license_source = CASE WHEN $2 <> '' THEN 'override' ELSE license_source END,
+				usage_model = COALESCE(NULLIF($3, ''), usage_model) WHERE id = $1`, projectID, license, usage); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO scans (id, tenant_id, project_id, project_version_id, trigger, status)
 			VALUES ($1,$2,$3,$4,'cli','queued')`, scanID, tid, projectID, versionID); err != nil {

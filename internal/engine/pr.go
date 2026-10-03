@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/google/go-github/v92/github"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
+	"github.com/safedep/vet/pkg/models"
 )
 
 type prWorker struct {
@@ -37,6 +37,7 @@ type prScan struct {
 	scanID                       string
 	checkRunID, prevCommentID    int64
 	settings                     settings
+	project                      scan.Project
 	gh                           *github.Client
 }
 
@@ -77,6 +78,9 @@ func (w *prWorker) Work(ctx context.Context, job *river.Job[jobs.ScanPullRequest
 			return err
 		}
 		if s.versionID, err = ensureVersion(ctx, tx, tenant, s.projectID, a.BaseRef); err != nil {
+			return err
+		}
+		if s.project, err = loadProject(ctx, tx, s.projectID); err != nil {
 			return err
 		}
 		// Idempotent per (repo, pr, head_sha): reuse the row of an earlier attempt.
@@ -187,6 +191,7 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 	noChanges := len(headFiles) == 0 && len(baseFiles) == 0
 
 	var findings []*finding
+	rc := &riskCtx{project: s.project}
 	if !noChanges {
 		base, _, err := parseFiles(baseFiles)
 		if err != nil {
@@ -197,7 +202,15 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 			return err
 		}
 		notes = append(notes, n2...)
-		if findings, err = d.evaluate(ctx, scan.Diff(base, head), s.settings); err != nil {
+		// Graph context comes from the head revision's tree: manifests next
+		// to the changed lockfiles, root license files and app source.
+		blobs, err := treeBlobs(ctx, gh, s.owner, s.repo, a.HeadSHA)
+		if err != nil {
+			d.Logger.Warn("list head tree; no manifests or source for graph context", "scan", s.scanID, "err", err)
+			blobs = nil
+		}
+		rc = d.buildRisk(ctx, head, d.repoInputs(ctx, gh, s.owner, s.repo, blobs, headFiles, s.project))
+		if findings, err = d.evaluate(ctx, scan.Diff(base, head), s.settings, rc); err != nil {
 			return err
 		}
 	}
@@ -220,14 +233,14 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 	}
 
 	concl := conclusion(findings, s.settings)
-	rep := d.report(s.scanID, findings, ai, noChanges)
+	rep := d.report(s.scanID, findings, ai, noChanges, rc.project)
 	body := render.Comment(rep)
 	if len(notes) > 0 {
 		d.Logger.Info("scan notes", "scan", s.scanID, "notes", notes)
 	}
 	err = withTenant(ctx, d, s.tenant, func(tx pgx.Tx) error {
 		return persist(ctx, tx, persistIn{tenant: s.tenant, projectID: s.projectID, versionID: s.versionID, scanID: s.scanID,
-			findings: findings, osvCleanRows: true, conclusion: concl, reportMD: body})
+			findings: findings, osvCleanRows: true, conclusion: concl, reportMD: body, risk: rc})
 	})
 	if err != nil {
 		return fmt.Errorf("persist: %w", err)
@@ -256,23 +269,43 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 	return nil
 }
 
-// enqueueGuarddog queues heuristic analysis for newly added packages that
-// have no MAL- verdict (capped per scan). Best effort.
+// enqueueGuarddog queues heuristic analysis for added (PR) or all (full
+// scan) packages that have no MAL- verdict, capped per scan and ordered by
+// PrioritizeGuarddog. Best effort.
 func (d Deps) enqueueGuarddog(ctx context.Context, tenant, scanID string, fs []*finding) {
 	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
 	if err != nil {
 		return
 	}
-	var params []river.InsertManyParams
+	byPkg := map[*models.Package]*finding{}
+	var pkgs []*models.Package
+	var checks []scan.Finding
 	for _, f := range fs {
-		if f.change != "added" || f.malware || guarddogEcosystem[f.ecosystem()] == "" || slices.ContainsFunc(params, func(p river.InsertManyParams) bool {
-			return p.Args.(jobs.GuarddogAnalyze).ComponentID == f.componentID
-		}) {
+		if (f.change != "added" && f.change != "full") || f.malware || guarddogEcosystem[f.ecosystem()] == "" {
 			continue
 		}
-		if len(params) == maxGuarddogJobs {
+		byPkg[f.pkg] = f
+		pkgs = append(pkgs, f.pkg)
+		checks = append(checks, f.checks...)
+	}
+	if d.PrioritizeGuarddog != nil {
+		pkgs = d.PrioritizeGuarddog(pkgs, checks)
+	}
+	limit := d.MaxGuarddogJobs
+	if limit <= 0 {
+		limit = defaultGuarddogJobs
+	}
+	var params []river.InsertManyParams
+	seen := map[string]bool{}
+	for _, p := range pkgs {
+		f := byPkg[p]
+		if f == nil || seen[f.componentID] {
+			continue
+		}
+		if len(params) == limit {
 			break
 		}
+		seen[f.componentID] = true
 		params = append(params, river.InsertManyParams{Args: jobs.GuarddogAnalyze{TenantID: tenant, ComponentID: f.componentID, ScanID: scanID,
 			Ecosystem: f.ecosystem(), Name: f.pkg.GetName(), Version: f.pkg.GetVersion()},
 			InsertOpts: &river.InsertOpts{MaxAttempts: 3, UniqueOpts: river.UniqueOpts{ByArgs: true}}})

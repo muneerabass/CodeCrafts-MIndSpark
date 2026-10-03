@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { api } from './api';
 import { auth } from './auth';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, ProjectSettings, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -162,6 +162,23 @@ export const savePolicy = async (policy: Policy) =>
   run(async () => {
     await requireRole('admin');
     return api<Policy>('/policy', { method: 'PUT', body: policy });
+  });
+
+const projectSettingsSchema = z.object({
+  license: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(/^[A-Za-z0-9.+\-() ]*$/, 'License must be an SPDX expression such as MIT or Apache-2.0 OR MIT')
+    .transform((v) => v || null)
+    .nullable(),
+  usage_model: z.enum(['internal', 'saas', 'distributed_binary', 'distributed_source']),
+});
+
+export const saveProjectSettings = async (projectId: string, data: z.input<typeof projectSettingsSchema>) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<ProjectSettings>(`/projects/${encodeURIComponent(projectId)}/settings`, { method: 'PUT', body: projectSettingsSchema.parse(data) });
   });
 
 export const testPolicy = async (input: { expr: string; ecosystem: string; name: string; version: string }) =>

@@ -2,7 +2,7 @@
 
 import { ExternalLink, FolderGit2, MoreHorizontal } from 'lucide-react';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { Chip, ViolationCount, VulnCount } from '@/components/badges';
+import { Chip, DependencyBadge, ViolationCount, VulnCount } from '@/components/badges';
 import { Ecosystem } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -17,6 +17,7 @@ const cols: ColumnDef<ComponentRow, unknown>[] = [
   { header: 'Version', cell: ({ row }) => <Chip>{row.original.version}</Chip> },
   { header: 'Ecosystem', cell: ({ row }) => <Ecosystem name={row.original.ecosystem} /> },
   { header: 'Type', cell: ({ row }) => row.original.type || 'Library' },
+  { header: 'Dependency', cell: ({ row }) => <DependencyBadge {...row.original} /> },
   { header: 'Policy Violations', cell: ({ row }) => <ViolationCount n={row.original.violations} /> },
   { header: 'Vulnerabilities', cell: ({ row }) => <VulnCount n={row.original.vulns} /> },
   { header: 'Last Updated', cell: ({ row }) => fmtDate(row.original.updated_at) },

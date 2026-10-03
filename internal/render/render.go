@@ -15,19 +15,63 @@ const Marker = "<!-- depguard:pr-report -->"
 const MaxLen = 65536
 
 type Vuln struct {
-	ID   string
-	Risk string
+	ID      string  `json:"id"`
+	Risk    string  `json:"risk"`
+	Summary string  `json:"summary,omitempty"`
+	EPSS    float64 `json:"epss"`
+	KEV     bool    `json:"kev"`
+	FixedIn string  `json:"fixed_in"`
 }
 
 type Package struct {
-	Name, Version, Ecosystem, ManifestPath string
-	Malware, Vulnerable, RiskyLicense      bool
+	ID           string `json:"component_id,omitempty"` // component id, when known
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	Ecosystem    string `json:"ecosystem"`
+	ManifestPath string `json:"manifest_path"`
+	Malware      bool   `json:"malware"`
+	Vulnerable   bool   `json:"vulnerable"`
+	RiskyLicense bool   `json:"risky_license"`
+
+	// Dependency-graph context (see docs/CONTRACTS.md "Risk analysis").
+	Direct      *bool      `json:"direct"` // nil = unknown
+	Depth       int        `json:"depth"`  // 1 = direct, 0 = unknown
+	Dev         bool       `json:"dev"`
+	Via         []string   `json:"via"`   // shortest chain root→pkg, "name@version", last = pkg
+	Paths       [][]string `json:"paths"` // ≤3 chains like Via
+	Imported    *bool      `json:"imported"`
+	GraphSource string     `json:"graph_source"` // lockfile | depsdev | none
+	Licenses    []string   `json:"licenses"`
+	Vulns       []Vuln     `json:"vulns"` // all advisories (for the full report)
 }
 
 type Violation struct {
-	Rule, Category, Summary string
-	Package                 Package
-	Vulns                   []Vuln // top few, highest risk first
+	Rule     string  `json:"rule"`
+	Category string  `json:"category"`
+	Summary  string  `json:"summary"`
+	Package  Package `json:"package"`
+	Vulns    []Vuln  `json:"vulns"` // top few, highest risk first
+}
+
+// Finding is a suspicious-package or license finding (policy_violations row
+// with category suspicious|license).
+type Finding struct {
+	Rule         string         `json:"rule"`
+	Category     string         `json:"category"`
+	Severity     string         `json:"severity"`
+	Blocking     bool           `json:"blocking"`
+	Summary      string         `json:"summary"`
+	Package      string         `json:"package"` // name@version
+	ManifestPath string         `json:"manifest_path"`
+	Details      map[string]any `json:"details"`
+}
+
+// Project is the scanned project's license context.
+type Project struct {
+	Name          string `json:"name"`
+	License       string `json:"license"`
+	LicenseSource string `json:"license_source"`
+	UsageModel    string `json:"usage_model"`
 }
 
 // Report is everything the renderers need.
@@ -36,6 +80,10 @@ type Report struct {
 	ScanID     string
 	Packages   []Package
 	Violations []Violation
+	Findings   []Finding
+	Project    Project
+	Version    string   // branch/version name (full report header)
+	Date       string   // preformatted scan date (full report header)
 	AIUsage    []string // e.g. "Anthropic API - AI client in app.py:8"
 	NoChanges  bool     // PR touched no dependency manifests
 }
@@ -55,7 +103,7 @@ func (r Report) any(f func(Package) bool) bool {
 
 // Clean reports no violations and no flagged packages.
 func (r Report) Clean() bool {
-	return len(r.Violations) == 0 && !r.any(func(p Package) bool { return p.Malware || p.Vulnerable || p.RiskyLicense })
+	return len(r.Violations) == 0 && len(r.Findings) == 0 && !r.any(func(p Package) bool { return p.Malware || p.Vulnerable || p.RiskyLicense })
 }
 
 var mdEscaper = strings.NewReplacer(
@@ -119,16 +167,16 @@ func Comment(r Report) string {
 func writeFindings(b *strings.Builder, r Report) {
 	b.WriteString(badge("Malware", r.any(func(p Package) bool { return p.Malware })) + " ")
 	b.WriteString(badge("Vulnerability", r.any(func(p Package) bool { return p.Vulnerable })) + " ")
-	b.WriteString(badge("License", r.any(func(p Package) bool { return p.RiskyLicense })) + "\n\n")
+	b.WriteString(badge("License", r.any(func(p Package) bool { return p.RiskyLicense }) || r.hasFindings("license")) + "\n\n")
 
 	if len(r.Packages) == 0 {
 		b.WriteString("No new or changed packages to evaluate.\n")
 	} else {
 		fmt.Fprintf(b, "<details>\n<summary>Package Details (%d)</summary>\n\n", len(r.Packages))
-		b.WriteString("| Package | Malware | Vulnerability | Risky License | Report |\n|---|:---:|:---:|:---:|:---:|\n")
+		b.WriteString("| Package | Dependency | Malware | Vulnerability | Risky License | Report |\n|---|---|:---:|:---:|:---:|:---:|\n")
 		for _, p := range r.Packages {
-			fmt.Fprintf(b, "| `%s @ %s`<br>%s | %s | %s | %s | [🔗](%s) |\n",
-				codeSafe(p.Name), codeSafe(p.Version), Escape(p.ManifestPath),
+			fmt.Fprintf(b, "| `%s @ %s`<br>%s | %s | %s | %s | %s | [🔗](%s) |\n",
+				codeSafe(p.Name), codeSafe(p.Version), Escape(p.ManifestPath), depLabel(p),
 				mark(p.Malware), mark(p.Vulnerable), mark(p.RiskyLicense), r.scanURL())
 		}
 		b.WriteString("\n</details>\n\n")
@@ -142,10 +190,98 @@ func writeFindings(b *strings.Builder, r Report) {
 			for _, vu := range v.Vulns {
 				fmt.Fprintf(b, "  - %s (%s)\n", Escape(vu.ID), Escape(vu.Risk))
 			}
+			if via := viaText(v.Package.Via); via != "" {
+				b.WriteString("  - " + via + "\n")
+			}
 			fmt.Fprintf(b, "  - Fix: %s\n", fixHint(v.Category))
 		}
 		b.WriteString("\n</details>\n\n")
 	}
+	writeFindingSection(b, r, "suspicious", "Suspicious packages")
+	writeFindingSection(b, r, "license", "License issues")
+}
+
+func (r Report) hasFindings(category string) bool {
+	for _, f := range r.Findings {
+		if f.Category == category {
+			return true
+		}
+	}
+	return false
+}
+
+// pkg finds the package a finding is about (name@version, same manifest preferred).
+func (r Report) pkg(nameVersion, manifest string) (Package, bool) {
+	var found Package
+	ok := false
+	for _, p := range r.Packages {
+		if p.Name+"@"+p.Version == nameVersion {
+			if p.ManifestPath == manifest {
+				return p, true
+			}
+			if !ok {
+				found, ok = p, true
+			}
+		}
+	}
+	return found, ok
+}
+
+func writeFindingSection(b *strings.Builder, r Report, category, title string) {
+	var fs []Finding
+	for _, f := range r.Findings {
+		if f.Category == category {
+			fs = append(fs, f)
+		}
+	}
+	if len(fs) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "<details>\n<summary>%s (%d)</summary>\n\n", title, len(fs))
+	for _, f := range fs {
+		block := ""
+		if f.Blocking {
+			block = ", blocking"
+		}
+		fmt.Fprintf(b, "- **%s** (%s%s) — `%s` in %s: %s\n", Escape(f.Rule), Escape(f.Severity), block,
+			codeSafe(f.Package), Escape(f.ManifestPath), Escape(f.Summary))
+		if p, ok := r.pkg(f.Package, f.ManifestPath); ok {
+			if via := viaText(p.Via); via != "" {
+				b.WriteString("  - " + via + "\n")
+			}
+		}
+	}
+	b.WriteString("\n</details>\n\n")
+}
+
+// depLabel is "direct", "transitive (depth n)" or "unknown", plus ", dev".
+func depLabel(p Package) string {
+	l := "unknown"
+	switch {
+	case p.Direct == nil:
+	case *p.Direct:
+		l = "direct"
+	case p.Depth > 1:
+		l = fmt.Sprintf("transitive (depth %d)", p.Depth)
+	default:
+		l = "transitive"
+	}
+	if p.Dev {
+		l += ", dev"
+	}
+	return l
+}
+
+// viaText is "Introduced via a@1 → b@2 → pkg@3" (escaped) for transitive chains.
+func viaText(via []string) string {
+	if len(via) < 2 {
+		return ""
+	}
+	parts := make([]string, len(via))
+	for i, v := range via {
+		parts[i] = Escape(v)
+	}
+	return "Introduced via " + strings.Join(parts, " → ")
 }
 
 func finish(b *strings.Builder, r Report) string {

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ExternalLink, GitBranch, GitPullRequest, Hexagon, MoreHorizontal, FolderOpen } from 'lucide-react';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { Chip, RiskBadge, ScanStatus, ViolationCount, VulnCount, triggerLabel } from '@/components/badges';
+import { Chip, DependencyBadge, RiskBadge, ScanStatus, ViolationCount, VulnCount, triggerLabel } from '@/components/badges';
 import { Ecosystem, GitHubIcon, SourceIcon } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -66,6 +66,7 @@ const componentCols: ColumnDef<VersionComponent, unknown>[] = [
   { header: 'Name', cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
   { header: 'Version', cell: ({ row }) => <Chip>{row.original.version}</Chip> },
   { header: 'Classification', cell: ({ row }) => row.original.type || 'Library' },
+  { header: 'Dependency', cell: ({ row }) => <DependencyBadge {...row.original} /> },
   { header: 'Ecosystem', cell: ({ row }) => <Ecosystem name={row.original.ecosystem} /> },
   { header: 'Policy Violations', cell: ({ row }) => <ViolationCount n={row.original.violations} /> },
   { header: 'Vulnerabilities', cell: ({ row }) => <VulnCount n={row.original.vulns} /> },

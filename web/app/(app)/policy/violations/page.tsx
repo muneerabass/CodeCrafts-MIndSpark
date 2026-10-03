@@ -6,10 +6,11 @@ import { EmptyState, PageHeader } from '@/components/page';
 import { FilterBar } from '@/components/data-table';
 import { Button } from '@/components/ui/button';
 import { ViolationsTable } from './table';
+import { SEVERITY_OPTIONS } from '@/lib/format';
 
 export const metadata = { title: 'Policy Violations' };
 
-const KEYS = ['rule', 'category', 'project_id', 'version'];
+const KEYS = ['rule', 'category', 'severity', 'project_id', 'version'];
 
 export default async function ViolationsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -71,7 +72,8 @@ export default async function ViolationsPage({ searchParams }: { searchParams: S
       <FilterBar
         filters={[
           { type: 'text', key: 'rule', label: 'Rule' },
-          { type: 'select', key: 'category', label: 'Category', options: ['vulnerability', 'malware', 'license', 'popularity', 'maintenance', 'custom'].map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) })) },
+          { type: 'select', key: 'category', label: 'Category', options: ['vulnerability', 'malware', 'license', 'suspicious', 'popularity', 'maintenance', 'custom'].map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) })) },
+          { type: 'select', key: 'severity', label: 'Severity', options: SEVERITY_OPTIONS },
           { type: 'select', key: 'project_id', label: 'Project', options: projects.items.map((p) => ({ value: p.id, label: p.name })) },
           { type: 'text', key: 'version', label: 'Version', placeholder: 'Branch' },
         ]}

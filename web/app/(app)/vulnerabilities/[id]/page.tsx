@@ -1,7 +1,9 @@
 import { ExternalLink, Siren } from 'lucide-react';
 import { api, apiOr404, listQuery, type SearchParams } from '@/lib/api';
 import { fmtDate } from '@/lib/format';
-import type { AffectedComponent, List, VulnerabilityDetail } from '@/lib/types';
+import type { AffectedComponent, List, VulnPaths, VulnerabilityDetail } from '@/lib/types';
+import Link from 'next/link';
+import { Breadcrumbs } from '@/components/paths';
 import { PageHeader } from '@/components/page';
 import { Chip, RiskBadge } from '@/components/badges';
 import { Markdown } from '@/components/markdown';
@@ -16,7 +18,7 @@ export default async function VulnerabilityPage({ params, searchParams }: { para
   const id = decodeURIComponent((await params).id);
   const sp = await searchParams;
   const path = `/vulnerabilities/${encodeURIComponent(id)}`;
-  const [v, affected] = await Promise.all([apiOr404<VulnerabilityDetail>(path), api<List<AffectedComponent>>(`${path}/components`, { query: listQuery(sp, [], 10) })]);
+  const [v, affected, reach] = await Promise.all([apiOr404<VulnerabilityDetail>(path), api<List<AffectedComponent>>(`${path}/components`, { query: listQuery(sp, [], 10) }), api<VulnPaths>(`${path}/paths`)]);
 
   return (
     <>
@@ -79,6 +81,41 @@ export default async function VulnerabilityPage({ params, searchParams }: { para
             </CardContent>
           </Card>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>How it reaches your app</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {reach.items.length ? (
+              <ul className="space-y-4">
+                {reach.items.map((it) => (
+                  <li key={`${it.project.id}-${it.version}`}>
+                    <div className="mb-1 flex items-center gap-2 text-sm">
+                      <Link href={`/projects/${it.project.id}?tab=paths`} className="font-medium hover:text-primary hover:underline">
+                        {it.project.name}
+                      </Link>
+                      <Chip>{it.version}</Chip>
+                    </div>
+                    <ul className="space-y-1.5 border-l pl-3">
+                      {it.paths.map((p, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-2 text-sm">
+                          <Breadcrumbs p={p} />
+                          <span className="text-xs text-muted-foreground">
+                            {p.depth === 1 ? 'direct' : `depth ${p.depth}`} · score {p.score}
+                            {p.approximate && ' · approximate'} · {p.fix}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No dependency path to any project is known for this advisory.</p>
+            )}
+          </CardContent>
+        </Card>
 
         <Card className="gap-0 overflow-hidden py-0">
           <CardHeader className="border-b py-4">

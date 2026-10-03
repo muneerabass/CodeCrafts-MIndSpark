@@ -78,7 +78,8 @@ func newClient(base, key string) (*client, error) {
 	return &client{base: strings.TrimRight(base, "/"), key: key, http: &http.Client{Timeout: 3 * time.Minute}}, nil
 }
 
-// do sends body (JSON-encoded unless it is an io.Reader) and decodes a JSON reply into out.
+// do sends body (JSON-encoded unless it is an io.Reader) and decodes a JSON reply into out
+// (a *[]byte out receives the raw body).
 func (c *client) do(method, path, contentType string, body any, out any) (int, error) {
 	var rd io.Reader
 	switch b := body.(type) {
@@ -116,6 +117,10 @@ func (c *client) do(method, path, contentType string, body any, out any) (int, e
 			e.Error = strings.TrimSpace(string(raw))
 		}
 		return res.StatusCode, fmt.Errorf("%s %s: %d %s", method, path, res.StatusCode, e.Error)
+	}
+	if b, ok := out.(*[]byte); ok {
+		*b = raw
+		return res.StatusCode, nil
 	}
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {

@@ -16,9 +16,21 @@ import (
 )
 
 // fullScan evaluates every package in files and persists the result,
-// replacing the version's component set. It owns the scan status update.
-func (d Deps) fullScan(ctx context.Context, tenant, projectID, versionID, scanID string, st settings, files []file, notes []string) error {
-	manifests, n2, err := parseFiles(files)
+// replacing the version's component set and dependency edges. Files that
+// are not lockfiles (manifests, LICENSE) only feed graph and license
+// context. It owns the scan status update.
+func (d Deps) fullScan(ctx context.Context, tenant, projectID, versionID, scanID string, st settings, files []file, notes []string, in riskInput) error {
+	var lockfiles []file
+	if in.aux == nil {
+		in.aux = map[string][]byte{}
+	}
+	for _, f := range files {
+		in.aux[f.Path] = f.Data
+		if scan.IsManifest(f.Path) {
+			lockfiles = append(lockfiles, f)
+		}
+	}
+	manifests, n2, err := parseFiles(lockfiles)
 	if err != nil {
 		return err
 	}
@@ -27,18 +39,23 @@ func (d Deps) fullScan(ctx context.Context, tenant, projectID, versionID, scanID
 	for i := range changes {
 		changes[i].Kind = "full"
 	}
-	findings, err := d.evaluate(ctx, changes, st)
+	rc := d.buildRisk(ctx, manifests, in)
+	findings, err := d.evaluate(ctx, changes, st, rc)
 	if err != nil {
 		return err
 	}
-	body := render.Comment(d.report(scanID, findings, nil, false))
+	body := render.Comment(d.report(scanID, findings, nil, false, rc.project))
 	if len(notes) > 0 {
 		d.Logger.Info("scan notes", "scan", scanID, "notes", notes)
 	}
-	return withTenant(ctx, d, tenant, func(tx pgx.Tx) error {
+	err = withTenant(ctx, d, tenant, func(tx pgx.Tx) error {
 		return persist(ctx, tx, persistIn{tenant: tenant, projectID: projectID, versionID: versionID, scanID: scanID,
-			findings: findings, replaceComponents: true, conclusion: conclusion(findings, st), reportMD: body})
+			findings: findings, replaceComponents: true, conclusion: conclusion(findings, st), reportMD: body, risk: rc})
 	})
+	if err == nil {
+		d.enqueueGuarddog(ctx, tenant, scanID, findings)
+	}
+	return err
 }
 
 type repoWorker struct {
@@ -82,6 +99,7 @@ func (w *repoWorker) Work(ctx context.Context, job *river.Job[jobs.ScanRepositor
 	}
 
 	var st settings
+	var project scan.Project
 	var projectID, versionID, scanID string
 	done := false
 	err = withTenant(ctx, d, tenant, func(tx pgx.Tx) error {
@@ -92,6 +110,9 @@ func (w *repoWorker) Work(ctx context.Context, job *river.Job[jobs.ScanRepositor
 			return err
 		}
 		if versionID, err = ensureVersion(ctx, tx, tenant, projectID, a.Ref); err != nil {
+			return err
+		}
+		if project, err = loadProject(ctx, tx, projectID); err != nil {
 			return err
 		}
 		scanID = a.ScanID
@@ -143,7 +164,7 @@ func (w *repoWorker) Work(ctx context.Context, job *river.Job[jobs.ScanRepositor
 			}
 			files = append(files, file{Path: e.GetPath(), Data: b})
 		}
-		return d.fullScan(ctx, tenant, projectID, versionID, scanID, st, files, notes)
+		return d.fullScan(ctx, tenant, projectID, versionID, scanID, st, files, notes, d.repoInputs(ctx, gh, owner, repo, blobs, files, project))
 	}()
 	if err != nil {
 		d.finishScan(ctx, tenant, scanID, "failed", err)
@@ -162,6 +183,7 @@ func (w *uploadWorker) Timeout(*river.Job[jobs.ScanUpload]) time.Duration { retu
 func (w *uploadWorker) Work(ctx context.Context, job *river.Job[jobs.ScanUpload]) error {
 	d, a := w.d, job.Args
 	var st settings
+	var project scan.Project
 	var projectID, versionID, status string
 	var files []file
 	err := withTenant(ctx, d, a.TenantID, func(tx pgx.Tx) error {
@@ -171,6 +193,9 @@ func (w *uploadWorker) Work(ctx context.Context, job *river.Job[jobs.ScanUpload]
 			return err
 		}
 		if st, err = loadSettings(ctx, tx); err != nil {
+			return err
+		}
+		if project, err = loadProject(ctx, tx, projectID); err != nil {
 			return err
 		}
 		rows, err := tx.Query(ctx, `SELECT path, content FROM scan_uploads WHERE scan_id=$1 ORDER BY path`, a.ScanID)
@@ -196,10 +221,18 @@ func (w *uploadWorker) Work(ctx context.Context, job *river.Job[jobs.ScanUpload]
 	if err != nil || status == "success" {
 		return err
 	}
-	if len(files) > maxManifests {
-		files = files[:maxManifests]
+	// Uploads carry lockfiles plus manifests and LICENSE files; cap lockfiles only.
+	var kept []file
+	n := 0
+	for _, f := range files {
+		if scan.IsManifest(f.Path) {
+			if n++; n > maxManifests {
+				continue
+			}
+		}
+		kept = append(kept, f)
 	}
-	if err := d.fullScan(ctx, a.TenantID, projectID, versionID, a.ScanID, st, files, nil); err != nil {
+	if err := d.fullScan(ctx, a.TenantID, projectID, versionID, a.ScanID, st, kept, nil, riskInput{project: project}); err != nil {
 		d.finishScan(ctx, a.TenantID, a.ScanID, "failed", err)
 		return err
 	}

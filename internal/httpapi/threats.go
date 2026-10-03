@@ -43,6 +43,14 @@ SELECT jsonb_build_object(
       OR EXISTS (SELECT 1 FROM component_vulnerabilities x WHERE x.component_id = inv.component_id AND x.advisory_id LIKE 'MAL-%')),
   'violations', (SELECT count(*) FROM curv),
   'vulnerabilities', (SELECT count(DISTINCT x.advisory_id) FROM component_vulnerabilities x JOIN inv USING (component_id) WHERE x.`+notMal+`),
+  'transitive_vulnerabilities', (SELECT count(DISTINCT (x.component_id, x.advisory_id)) FROM component_vulnerabilities x
+      WHERE x.`+notMal+` AND EXISTS (SELECT 1 FROM project_version_components pvc WHERE pvc.component_id = x.component_id AND pvc.direct = false)),
+  'attack_paths', (SELECT count(*) FROM (SELECT DISTINCT pvc.project_version_id, pvc.component_id FROM project_version_components pvc
+      WHERE EXISTS (SELECT 1 FROM component_vulnerabilities x WHERE x.component_id = pvc.component_id)
+         OR EXISTS (SELECT 1 FROM curv WHERE curv.component_id = pvc.component_id
+                    AND curv.project_version_id = pvc.project_version_id AND curv.category = 'suspicious')) z),
+  'suspicious_findings', (SELECT count(*) FROM curv WHERE category = 'suspicious'),
+  'license_issues', (SELECT count(*) FROM curv WHERE category = 'license'),
   'violations_over_time', (SELECT jsonb_agg(jsonb_build_object('date', days.d, 'count', COALESCE(pvd.n, 0)) ORDER BY days.d)
       FROM days LEFT JOIN pvd USING (d)),
   'violations_by_check', COALESCE((SELECT jsonb_agg(jsonb_build_object('check', category, 'count', n) ORDER BY n DESC, category)
@@ -185,9 +193,8 @@ type PolicyDoc struct {
 		Malware struct {
 			Enabled bool `json:"enabled"`
 		} `json:"malware"`
-		License struct {
-			Deny []string `json:"deny"`
-		} `json:"license"`
+		License    scan.LicensePreset    `json:"license"`
+		Suspicious scan.SuspiciousPreset `json:"suspicious"`
 		Popularity struct {
 			Enabled  bool `json:"enabled"`
 			MinStars int  `json:"min_stars"`
@@ -208,17 +215,22 @@ type CustomRule struct {
 	Expr     string `json:"expr"`
 }
 
-// DefaultPolicy mirrors scan.DefaultRules: malware, critical/high vulns, strong copyleft.
+// DefaultPolicy mirrors scan.DefaultRules: malware, critical/high vulns; license and suspicious presets on.
 func DefaultPolicy() PolicyDoc {
 	var p PolicyDoc
 	p.Presets.Vulnerability.MinRisk = "HIGH"
 	p.Presets.Malware.Enabled = true
-	p.Presets.License.Deny = []string{"GPL-2.0", "GPL-3.0", "AGPL-3.0"}
+	// License risk comes from internal/license rules; a default deny list would double-report.
+	p.Presets.License = scan.LicensePreset{Deny: []string{}, Enabled: true, BlockingSeverity: scan.SeverityHigh}
+	p.Presets.Suspicious = scan.DefaultSuspicious()
 	p.Presets.Popularity.MinStars = 10
 	p.Presets.Maintenance.MinScorecard = 3
 	p.Custom = []CustomRule{}
 	return p
 }
+
+var suspiciousRules = map[string]bool{"typosquat": true, "unmaintained": true, "deprecated": true, "new-package": true,
+	"no-source-repo": true, "unusual-behaviour": true}
 
 var categories = map[string]checks.CheckType{
 	"vulnerability": checks.CheckType_CheckTypeVulnerability,
@@ -258,6 +270,22 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) error {
 	}
 	if p.Presets.Popularity.MinStars < 0 || p.Presets.Maintenance.MinScorecard < 0 || p.Presets.Maintenance.MinScorecard > 10 {
 		return badRequest("invalid preset thresholds")
+	}
+	switch p.Presets.License.BlockingSeverity {
+	case "critical", "high", "medium", "low", "info":
+	default:
+		return badRequest("presets.license.blocking_severity must be critical, high, medium, low or info")
+	}
+	if m := p.Presets.Suspicious.UnmaintainedMonths; m < 1 || m > 240 {
+		return badRequest("presets.suspicious.unmaintained_months must be between 1 and 240")
+	}
+	if p.Presets.Suspicious.Blocking == nil {
+		p.Presets.Suspicious.Blocking = []string{}
+	}
+	for _, b := range p.Presets.Suspicious.Blocking {
+		if !suspiciousRules[b] {
+			return badRequest("presets.suspicious.blocking: unknown rule %q", b)
+		}
 	}
 	if len(p.Custom) > 100 {
 		return badRequest("at most 100 custom rules")

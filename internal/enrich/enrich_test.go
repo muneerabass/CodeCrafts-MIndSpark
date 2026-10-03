@@ -2,6 +2,7 @@ package enrich_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -49,6 +50,10 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			{"projectKey":{"id":"github.com/lodash/lodash"},"relationType":"SOURCE_REPO"}]}`))
 	case "/v3/systems/pypi/packages/Requests/versions/2.30.0":
 		w.Write([]byte(`{"licenses":["GPL-3.0-only"]}`))
+	case "/v3/systems/npm/packages/@scope%2Fapp/versions/1.0.0:dependencies", "/v3/systems/npm/packages/@scope/app/versions/1.0.0:dependencies":
+		w.Write([]byte(`{"nodes":[{"versionKey":{"system":"NPM","name":"@scope/app","version":"1.0.0"},"relation":"SELF"},
+			{"versionKey":{"system":"NPM","name":"qs","version":"6.5.0"},"relation":"DIRECT"}],
+			"edges":[{"fromNode":0,"toNode":1,"requirement":"^6"},{"fromNode":0,"toNode":9}]}`))
 	case "/v3/projects/github.com/lodash/lodash":
 		w.Write([]byte(`{"starsCount":100,"forksCount":10}`))
 	case "/projects/github.com/lodash/lodash":
@@ -114,6 +119,33 @@ func TestEnrich(t *testing.T) {
 	if m := enrich.Matches(evil); !m[0].Malware {
 		t.Errorf("MAL match not flagged as malware")
 	}
+	if m := enrich.Matches(lodash); m[0].FixedIn != "4.17.21" {
+		t.Errorf("lodash FixedIn = %q", m[0].FixedIn)
+	}
+
+	// deps.dev dependency graph, cached (including not-found).
+	e := enrich.New(pool, opts)
+	graph := func() string {
+		t.Helper()
+		nodes, edges, err := e.DepsDevGraph(ctx, models.EcosystemNpm, "@scope/app", "1.0.0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprint(nodes, edges)
+	}
+	if g := graph(); g != "[{@scope/app 1.0.0 SELF} {qs 6.5.0 DIRECT}] [[0 1]]" {
+		t.Errorf("deps.dev graph = %s", g)
+	}
+	if nodes, _, err := e.DepsDevGraph(ctx, "npm", "nope", "1.0.0"); err != nil || nodes != nil {
+		t.Errorf("not found: %v %v", nodes, err)
+	}
+	gh := api.hits
+	if g := graph(); g != "[{@scope/app 1.0.0 SELF} {qs 6.5.0 DIRECT}] [[0 1]]" || api.hits != gh {
+		t.Errorf("cached graph = %s (%d new calls)", g, api.hits-gh)
+	}
+	if _, _, _ = e.DepsDevGraph(ctx, "npm", "nope", "1.0.0"); api.hits != gh {
+		t.Errorf("not-found not cached")
+	}
 
 	v := (*lodash.Insights.Vulnerabilities)[0]
 	if s := (*v.Severities)[0]; *s.Score != "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H" || *v.Summary != "ReDoS in lodash" ||
@@ -154,7 +186,7 @@ func TestEnrich(t *testing.T) {
 		lodash:      {"critical-or-high-vulnerability"},
 		lodashFixed: nil,
 		evil:        {"malicious-package"},
-		requests:    {"risky-license"},
+		requests:    nil, // licenses are checked by internal/license, not CEL
 		log4j:       {"critical-or-high-vulnerability"},
 		crate:       nil,
 	} {

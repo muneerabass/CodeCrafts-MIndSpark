@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { Chip } from '@/components/badges';
+import { Chip, RiskBadge } from '@/components/badges';
 import { Ecosystem } from '@/components/icons';
 import { fmtDate, titleCase } from '@/lib/format';
 import type { Violation } from '@/lib/types';
@@ -10,6 +10,15 @@ import type { Violation } from '@/lib/types';
 const cols = (hideProject: boolean): ColumnDef<Violation, unknown>[] => [
   { header: 'Rule', cell: ({ row }) => <span className="font-medium">{row.original.rule_name}</span> },
   { header: 'Category', cell: ({ row }) => <Chip>{titleCase(row.original.category)}</Chip> },
+  {
+    header: 'Severity',
+    cell: ({ row }) => (
+      <span className="inline-flex flex-col items-start gap-1">
+        {row.original.severity ? <RiskBadge risk={row.original.severity} /> : '—'}
+        {row.original.blocking === false && <span className="text-[11px] text-muted-foreground">report only</span>}
+      </span>
+    ),
+  },
   {
     header: 'Component',
     cell: ({ row }) => (
@@ -20,7 +29,28 @@ const cols = (hideProject: boolean): ColumnDef<Violation, unknown>[] => [
       </span>
     ),
   },
-  { header: 'Summary', cell: ({ row }) => <span className="line-clamp-2 max-w-md text-sm">{row.original.summary}</span> },
+  {
+    header: 'Summary',
+    cell: ({ row }) => {
+      const d = Object.entries(row.original.details ?? {}).filter(([, v]) => v != null && v !== '' && typeof v !== 'object');
+      const list = Object.entries(row.original.details ?? {}).filter(([, v]) => Array.isArray(v));
+      return (
+        <div className="max-w-md text-sm">
+          <span className="line-clamp-2">{row.original.summary}</span>
+          {(d.length > 0 || list.length > 0) && (
+            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 text-xs text-muted-foreground">
+              {[...d, ...list.map(([k, v]) => [k, (v as unknown[]).join(', ')] as const)].map(([k, v]) => (
+                <div key={k} className="contents">
+                  <dt>{titleCase(k)}</dt>
+                  <dd className="line-clamp-2 text-foreground/80">{String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      );
+    },
+  },
   ...(hideProject
     ? []
     : ([

@@ -17,8 +17,9 @@ type Rule struct {
 	Expr     string           `json:"expr"`
 }
 
-// DefaultRules gate on malware, critical/high vulnerabilities and strong
-// copyleft licenses, matching the product's default policy.
+// DefaultRules gate on malware and critical/high vulnerabilities, matching
+// the product's default policy. License compliance is checked by
+// internal/license (project- and usage-aware), not by a CEL rule.
 func DefaultRules() []Rule {
 	return []Rule{
 		{
@@ -32,12 +33,6 @@ func DefaultRules() []Rule {
 			Category: checks.CheckType_CheckTypeVulnerability,
 			Summary:  "Critical or high severity vulnerability",
 			Expr:     `vulns.critical.exists(v, !v.id.startsWith("MAL-")) || vulns.high.exists(v, !v.id.startsWith("MAL-"))`,
-		},
-		{
-			Name:     "risky-license",
-			Category: checks.CheckType_CheckTypeLicense,
-			Summary:  "Strong copyleft license (GPL-2.0, GPL-3.0, AGPL-3.0)",
-			Expr:     `licenses.exists(l, l.startsWith("GPL-2.0") || l.startsWith("GPL-3.0") || l.startsWith("AGPL-3.0"))`,
 		},
 	}
 }

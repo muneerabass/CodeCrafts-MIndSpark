@@ -44,7 +44,18 @@ type Deps struct {
 	GuarddogAllowNoSandbox bool
 	// DisableXBOM turns off AI/SaaS usage detection on changed source files.
 	DisableXBOM bool
-	Logger      *slog.Logger
+	// Checkers returns the risk checkers (suspicious packages, licenses) for
+	// a scan; nil runs none.
+	Checkers func(policy scan.PolicyConfig, project scan.Project) []scan.Checker
+	// DetectLicense detects the project license from root files (path →
+	// content) and the GitHub license API's SPDX id; nil detects nothing.
+	DetectLicense func(files map[string][]byte, githubSPDX string) (expr, source string)
+	// PrioritizeGuarddog orders guarddog candidates (suspicious.Prioritize);
+	// nil keeps scan order.
+	PrioritizeGuarddog func(pkgs []*models.Package, findings []scan.Finding) []*models.Package
+	// MaxGuarddogJobs caps guarddog analyses per scan (default 25).
+	MaxGuarddogJobs int
+	Logger          *slog.Logger
 }
 
 // AddWorkers registers ScanPullRequest, ScanRepository, ScanUpload,
@@ -59,6 +70,9 @@ func AddWorkers(w *river.Workers, d Deps) {
 	if d.GuarddogBin == "" {
 		d.GuarddogBin = "guarddog"
 	}
+	if d.MaxGuarddogJobs <= 0 {
+		d.MaxGuarddogJobs = defaultGuarddogJobs
+	}
 	river.AddWorker(w, &prWorker{d: d})
 	river.AddWorker(w, &repoWorker{d: d})
 	river.AddWorker(w, &uploadWorker{d: d})
@@ -72,7 +86,10 @@ const (
 	maxManifests     = 50
 	maxSourceBytes   = 1 << 20
 	maxSourceTotal   = 20 << 20
-	maxGuarddogJobs  = 25
+	// Source fetched for import detection (repo and PR scans).
+	maxImportTotal      = 30 << 20
+	maxImportFiles      = 3000
+	defaultGuarddogJobs = 25
 )
 
 var errNoGitHub = errors.New("engine: GitHub App not configured")
@@ -83,6 +100,7 @@ type settings struct {
 	SuppressClean bool
 	Disabled      bool
 	Rules         []scan.Rule
+	Policy        scan.PolicyConfig
 	Exclusions    []scan.Exclusion
 }
 
@@ -97,6 +115,7 @@ func loadSettings(ctx context.Context, tx pgx.Tx) (settings, error) {
 	if st.Rules, err = scan.RulesFromPolicy(policy); err != nil {
 		return st, err
 	}
+	st.Policy, _ = scan.ParsePolicy(policy) // RulesFromPolicy already rejected bad JSON
 	if _, err := scan.NewPolicy(st.Rules); err != nil {
 		slog.Warn("tenant policy invalid, using defaults", "err", err)
 		st.Rules = scan.DefaultRules()
@@ -136,6 +155,21 @@ func ensureProject(ctx context.Context, tx pgx.Tx, tenant, source, name, url str
 		  gh_repo_id=COALESCE(EXCLUDED.gh_repo_id, projects.gh_repo_id), updated_at=now()
 		RETURNING id`, ids.New(), tenant, source, name, url, ghRepoID).Scan(&id)
 	return id, err
+}
+
+// loadProject reads the project's license and usage model.
+func loadProject(ctx context.Context, tx pgx.Tx, projectID string) (scan.Project, error) {
+	var p scan.Project
+	var lic, src *string
+	err := tx.QueryRow(ctx, `SELECT name, license, license_source, usage_model FROM projects WHERE id=$1`, projectID).
+		Scan(&p.Name, &lic, &src, &p.UsageModel)
+	if lic != nil {
+		p.License = *lic
+	}
+	if src != nil {
+		p.LicenseSource = *src
+	}
+	return p, err
 }
 
 func ensureVersion(ctx context.Context, tx pgx.Tx, tenant, projectID, name string) (string, error) {
