@@ -24,7 +24,7 @@ export function RiskBadge({ risk }: { risk: Risk | string }) {
 
 export function ViolationCount({ n }: { n: number }) {
   return (
-    <span className={cn(pill, 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200')} title="Policy violations">
+    <span className={cn(pill, n ? 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200' : 'bg-muted text-muted-foreground')} title="Policy violations">
       <FileChartLine aria-hidden />
       {n}
     </span>
@@ -33,7 +33,7 @@ export function ViolationCount({ n }: { n: number }) {
 
 export function VulnCount({ n }: { n: number }) {
   return (
-    <span className={cn(pill, 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200')} title="Vulnerabilities">
+    <span className={cn(pill, n ? 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-200' : 'bg-muted text-muted-foreground')} title="Vulnerabilities">
       <Bug aria-hidden />
       {n}
     </span>
@@ -57,8 +57,7 @@ export function ScanStatus({ status }: { status: string }) {
   return <span className={cn('text-sm font-medium', cls)}>{titleCase(status)}</span>;
 }
 
-export const triggerLabel = (t: string) =>
-  ({ pull_request: 'Pull request', push: 'Push', manual: 'Manual', cli: 'CLI', ci: 'CI' })[t] ?? titleCase(t);
+export const triggerLabel = (t: string) => ({ pull_request: 'Pull request', push: 'Push', manual: 'Manual', cli: 'CLI', ci: 'CI' })[t] ?? titleCase(t);
 
 export function AnalysisStatus({ status }: { status: string }) {
   if (status === 'malicious')

@@ -38,7 +38,19 @@ import {
   Video,
   Webhook,
 } from 'lucide-react';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
+} from '@/components/ui/sidebar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { GitHubIcon, Logo } from '@/components/icons';
 import { RoleBadge } from '@/components/badges';
@@ -118,6 +130,8 @@ export type SidebarCtx = {
   org: { id: string; name: string; domain: string } | null;
   orgs: { id: string; name: string; domain: string }[];
   links: { docs: string; github: string; video?: string; support: string };
+  /** Live counts shown next to nav items (href -> count). */
+  badges?: Record<string, number>;
 };
 
 export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; ctx: SidebarCtx }) {
@@ -161,9 +175,9 @@ export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; 
                       isActive={active}
                       tooltip={it.label}
                       className={cn(
-                        'relative h-9 text-sidebar-foreground/80 transition-colors hover:text-sidebar-foreground',
+                        'h-9 rounded-lg text-sidebar-foreground/75 transition-all hover:bg-sidebar-accent hover:text-sidebar-foreground',
                         active &&
-                          'bg-primary/10 font-medium text-primary hover:bg-primary/15 hover:text-primary data-[active=true]:bg-primary/10 data-[active=true]:text-primary before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-primary',
+                          'bg-primary font-medium text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground data-[active=true]:bg-primary data-[active=true]:text-primary-foreground',
                       )}
                     >
                       <Link href={it.href} aria-current={active ? 'page' : undefined}>
@@ -171,6 +185,17 @@ export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; 
                         <span>{it.label}</span>
                       </Link>
                     </SidebarMenuButton>
+                    {!!ctx.badges?.[it.href] && (
+                      <SidebarMenuBadge
+                        className={cn(
+                          'rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white peer-hover/menu-button:text-white',
+                          active && 'bg-primary-foreground text-primary peer-hover/menu-button:text-primary',
+                        )}
+                        aria-label={`${ctx.badges[it.href]} need attention`}
+                      >
+                        {ctx.badges[it.href]}
+                      </SidebarMenuBadge>
+                    )}
                   </SidebarMenuItem>
                 );
               })}
@@ -180,24 +205,32 @@ export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; 
       </SidebarContent>
       {mode === 'app' && (
         <SidebarFooter className="gap-2">
-          <div className="flex items-center justify-between rounded-lg px-1 group-data-[collapsible=icon]:hidden">
+          <div className="flex items-center rounded-lg border bg-background/50 p-0.5 group-data-[collapsible=icon]:hidden">
             <FooterLink href={ctx.links.docs} label="Documentation" icon={BookOpen} />
             <FooterLink href={ctx.links.github} label="GitHub" icon={GitHubIcon} />
             {ctx.links.video && <FooterLink href={ctx.links.video} label="Video walkthroughs" icon={Video} />}
             <FooterLink href={ctx.links.support} label="Support" icon={LifeBuoy} />
+            <ThemeSwitcher compact />
           </div>
-          <SidebarMenu>
+          <SidebarMenu className="hidden group-data-[collapsible=icon]:flex">
             <SidebarMenuItem>
               <ThemeSwitcher />
             </SidebarMenuItem>
           </SidebarMenu>
           <Link
             href="/settings/billing"
-            className="flex items-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm transition-colors hover:bg-primary/10 group-data-[collapsible=icon]:hidden"
+            className="group/plan flex items-center gap-2.5 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/20 via-primary/5 to-transparent p-2.5 transition-colors hover:border-primary/60 group-data-[collapsible=icon]:hidden"
           >
-            <Gem className="size-4 text-primary" />
-            <span className="font-medium">Free plan</span>
-            <span className="ml-auto text-xs text-primary">Upgrade →</span>
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Gem className="size-4" />
+            </span>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block text-sm font-semibold">Free plan</span>
+              <span className="block text-xs text-muted-foreground">Your current plan</span>
+            </span>
+            <span className="text-xs font-medium text-primary">
+              Upgrade <span className="inline-block transition-transform group-hover/plan:translate-x-0.5">→</span>
+            </span>
           </Link>
           <UserCard ctx={ctx} />
         </SidebarFooter>

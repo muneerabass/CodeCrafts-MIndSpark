@@ -32,7 +32,14 @@ test('dashboard: greeting, KPIs, charts, range', async ({ page }) => {
 test('projects: filters, columns, toggles in URL, pagination', async ({ page }) => {
   await page.goto('/projects');
   await expect(page.getByRole('button', { name: 'Scan a repository' })).toBeVisible();
-  await columns(page, ['Repository Name', 'No. of Versions', 'No. of Components', 'Policy Violations', 'Vulnerabilities', 'Created At']);
+  // Grid (default): one card per project with health and numbers.
+  const card = page.getByRole('article').filter({ hasText: 'storefront' });
+  await expect(card.getByText('At risk')).toBeVisible();
+  await expect(card.getByText('Vulnerabilities')).toBeVisible();
+  await expect(page.getByRole('article').filter({ hasText: 'infra-tools' }).getByText('Healthy')).toBeVisible();
+  await page.getByRole('button', { name: 'Table view' }).click();
+  await expect(page).toHaveURL(/view=table/);
+  await columns(page, ['Repository Name', 'Health', 'No. of Versions', 'No. of Components', 'Policy Violations', 'Vulnerabilities', 'Created At']);
   await expect(page.getByRole('link', { name: 'acme/storefront' })).toBeVisible();
   await page.getByLabel('Has Vulnerabilities').click();
   await expect(page).toHaveURL(/has_vulns=true/);
