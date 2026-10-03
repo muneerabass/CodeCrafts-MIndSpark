@@ -97,10 +97,10 @@ test('project detail tabs', async ({ page }) => {
 const lists: [string, string[]][] = [
   ['/components', ['Component', 'Status', 'Dependency', 'Projects', 'Policy Violations', 'Vulnerabilities', 'Last Updated']],
   ['/scans', ['Scanned Project', 'Trigger', 'Status', 'Policy Violations', 'Vulnerabilities', 'Scan Date']],
-  ['/package-analysis', ['Component', 'Project Name', 'Project Version', 'Status', 'Component Version', 'Verification', 'Scan Date']],
+  ['/package-analysis', ['Package', 'Verdict', 'Project', 'Scanned']],
   ['/vulnerabilities', ['Vulnerability', 'Risk', 'Affected', 'Published']],
   ['/policy/violations', ['Violation', 'Severity', 'Component', 'Project', 'Detected']],
-  ['/package-analysis?view=suspicious', ['Package', 'Rule', 'Severity', 'Reason', 'Similar To', 'Project', 'Detected']],
+  ['/package-analysis?view=suspicious', ['Package', 'Finding', 'Severity', 'Project', 'Detected']],
   ['/endpoints', ['Endpoint', 'Type', 'Hostname', 'OS', 'Last Sync']],
   ['/settings/package-exclusions', ['Ecosystem', 'Package Name', 'Version', 'Reason', 'Status', 'Expires At', 'Actions']],
 ];
@@ -181,12 +181,12 @@ test('policy editor', async ({ page }) => {
 
 test('suspicious findings and violation filters', async ({ page }) => {
   await page.goto('/package-analysis?view=suspicious');
-  await expect(page.getByRole('cell', { name: 'lodash', exact: true })).toBeVisible();
+  await expect(page.getByText('Looks like lodash').first()).toBeVisible();
   await page.getByRole('button', { name: 'Rule' }).click();
   await page.getByRole('option', { name: 'deprecated' }).click();
   await expect(page).toHaveURL(/rule=deprecated/);
   await expect(page.getByText('request has been deprecated').first()).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'lodash', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Looks like lodash')).toHaveCount(0);
   await page.goto('/policy/violations');
   await page.getByRole('button', { name: 'Severity' }).click();
   await page.getByRole('option', { name: 'Low' }).click();

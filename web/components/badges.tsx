@@ -67,18 +67,18 @@ export const triggerLabel = (t: string) => ({ pull_request: 'Pull request', push
 export function AnalysisStatus({ status }: { status: string }) {
   if (status === 'malicious')
     return (
-      <span className={cn(pill, 'bg-red-50 text-red-700 ring-1 ring-red-200')}>
+      <span className={cn(pill, 'bg-red-500/10 text-red-700 ring-1 ring-red-500/25 dark:text-red-300')}>
         <Skull aria-hidden /> Malicious
       </span>
     );
   if (status === 'suspicious')
     return (
-      <span className={cn(pill, 'bg-amber-50 text-amber-700 ring-1 ring-amber-200')}>
+      <span className={cn(pill, 'bg-amber-500/10 text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-300')}>
         <ShieldAlert aria-hidden /> Suspicious
       </span>
     );
   return (
-    <span className={cn(pill, 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200')}>
+    <span className={cn(pill, 'bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-500/25 dark:text-emerald-300')}>
       <Check aria-hidden /> Clean
     </span>
   );
