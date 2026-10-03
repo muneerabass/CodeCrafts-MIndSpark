@@ -310,6 +310,10 @@ func persist(ctx context.Context, tx pgx.Tx, in persistIn) error {
 	b.Queue(`UPDATE scans SET status='success', error=NULL, finished_at=now(), components_count=$2, vulns_count=$3,
 		violations_count=$4, malicious_count=$5, conclusion=$6, report_md=$7, suspicious_count=$8 WHERE id=$1`,
 		in.scanID, len(in.findings), vulnCount, countViolations(in.findings), malCount, in.conclusion, in.reportMD, countSuspicious(in.findings))
+	// Drop raw uploaded lockfile bodies once we've committed the scan results.
+	// Scans that must retry stay in a non-success state and keep their uploads;
+	// non-upload scans (PR, repo) have no scan_uploads rows, so this is a no-op there.
+	b.Queue(`DELETE FROM scan_uploads WHERE scan_id=$1`, in.scanID)
 	return tx.SendBatch(ctx, b).Close()
 }
 

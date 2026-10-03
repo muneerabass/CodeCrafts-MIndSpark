@@ -25,6 +25,14 @@ for v in APP_HOST API_HOST ACME_EMAIL SUPERADMIN_EMAILS GITHUB_APP_ID GITHUB_APP
          NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY; do
   [[ -n ${!v:-} ]] || die "$v is empty in $CONF"
 done
+# Application data lives in the local PostgreSQL this script sets up. Refuse to
+# proceed if deploy.conf tries to override an application DATABASE_URL with a
+# Supabase DSN — Supabase is only used for Auth.
+for v in DATABASE_URL DATABASE_OWNER_URL DATABASE_QUERY_URL DATABASE_URL_WEB; do
+  if [[ "${!v:-}" == *supabase.co* || "${!v:-}" == *pooler.supabase.com* ]]; then
+    die "$v in $CONF points at Supabase. Remove it: application data must live in local PostgreSQL (Supabase is Auth only)."
+  fi
+done
 [[ -f /etc/depguard/github-app.pem ]] || die "missing /etc/depguard/github-app.pem"
 
 log "Packages"

@@ -55,6 +55,9 @@ func run(log *slog.Logger) error {
 	if dsn == "" {
 		return errors.New("DATABASE_URL is required")
 	}
+	if err := db.RejectSupabaseDSN("DATABASE_URL", dsn); err != nil {
+		return err
+	}
 	pool, err := db.Open(ctx, dsn)
 	if err != nil {
 		return fmt.Errorf("open db: %w", err)
@@ -100,7 +103,9 @@ func run(log *slog.Logger) error {
 		Logger:             log,
 	})
 	feeds.AddWorkers(workers, pool)
+	engine.AddCleanupWorkers(workers, pool)
 	periodic := feeds.PeriodicJobs()
+	periodic = append(periodic, engine.CleanupPeriodicJobs()...)
 	if clients != nil {
 		ghapp.AddWorkers(workers, ghcfg)
 		periodic = append(periodic, ghapp.PeriodicJobs()...)

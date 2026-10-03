@@ -78,6 +78,11 @@ func run(ctx context.Context, log *slog.Logger, migrate bool) error {
 	if appDSN == "" || queryDSN == "" || len(secret) < 32 {
 		return errors.New("DATABASE_URL, DATABASE_QUERY_URL and SERVICE_JWT_SECRET (>= 32 chars) are required")
 	}
+	for name, dsn := range map[string]string{"DATABASE_URL": appDSN, "DATABASE_OWNER_URL": ownerDSN, "DATABASE_QUERY_URL": queryDSN} {
+		if err := db.RejectSupabaseDSN(name, dsn); err != nil {
+			return err
+		}
+	}
 	if migrate {
 		if ownerDSN == "" {
 			return errors.New("DATABASE_OWNER_URL is required for migrations (or run with -migrate=false)")

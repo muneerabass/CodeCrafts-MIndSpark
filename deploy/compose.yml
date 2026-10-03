@@ -79,7 +79,16 @@ services:
 
   web:
     <<: *hardening
-    build: { context: ../web, dockerfile: Dockerfile }
+    build:
+      context: ../web
+      dockerfile: Dockerfile
+      # NEXT_PUBLIC_* values must be present at build time so Next.js inlines
+      # them into the client bundle. The service-role key is NOT a build arg.
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED: ${NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED:-1}
+        NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED: ${NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED:-0}
     image: depguard/web:${VERSION:-latest}
     environment:
       DATABASE_URL_WEB: postgres://depguard_web:${DEPGUARD_WEB_PASSWORD}@postgres:5432/depguard_web?sslmode=disable
@@ -90,6 +99,13 @@ services:
       SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET}
       TENANT_DOMAIN_SUFFIX: ${TENANT_DOMAIN_SUFFIX}
       SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS}
+      # Supabase Auth (only the web service receives these). The service-role
+      # key is runtime-only and never baked into the image.
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED: ${NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED:-1}
+      NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED: ${NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED:-0}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}

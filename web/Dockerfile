@@ -10,7 +10,19 @@ RUN pnpm install --frozen-lockfile
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* values are inlined into the client bundle during `pnpm build`,
+# so they must be supplied as build args (see deploy/compose.yml). The Supabase
+# service-role key is deliberately NOT a build arg — it only reaches the
+# runtime stage via environment variables.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED=1
+ARG NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED=0
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL} \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY} \
+    NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED=${NEXT_PUBLIC_SUPABASE_GITHUB_ENABLED} \
+    NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED=${NEXT_PUBLIC_SUPABASE_GOOGLE_ENABLED}
 # Placeholder only satisfies Better Auth while collecting page data; the runtime stage never sees it.
 RUN BETTER_AUTH_SECRET=build-only-placeholder-not-used-at-runtime-0000 pnpm build
 

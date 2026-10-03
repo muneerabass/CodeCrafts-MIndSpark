@@ -59,3 +59,11 @@ type SyncInstallation struct {
 }
 
 func (SyncInstallation) Kind() string { return "sync_installation" }
+
+// CleanupScanUploads removes scan_uploads rows for scans that have finished
+// (success/failed/skipped) and for abandoned queued/running scans older than
+// the retention window. Scheduled by the worker; retries are preserved because
+// River keeps a scan in a non-terminal status until MaxAttempts is reached.
+type CleanupScanUploads struct{}
+
+func (CleanupScanUploads) Kind() string { return "cleanup_scan_uploads" }

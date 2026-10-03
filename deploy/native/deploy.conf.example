@@ -10,7 +10,9 @@ GITHUB_APP_ID=
 GITHUB_APP_SLUG=
 GITHUB_WEBHOOK_SECRET=
 
-# Supabase (sign-in). Dashboard → Project Settings → API
+# Supabase (sign-in only — all application data lives in local PostgreSQL set up by this installer).
+# Do NOT set DATABASE_URL / DATABASE_OWNER_URL / DATABASE_QUERY_URL / DATABASE_URL_WEB here; the installer refuses Supabase DSNs.
+# Dashboard → Project Settings → API
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=

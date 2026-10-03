@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/depguard/depguard/migrations"
 	"github.com/jackc/pgx/v5"
@@ -43,6 +44,20 @@ func Migrate(ctx context.Context, ownerDSN string) error {
 
 // ErrNoTenant guards against running tenant queries without a tenant.
 var ErrNoTenant = errors.New("db: empty tenant id")
+
+// RejectSupabaseDSN returns an error when dsn points at Supabase. Application
+// data (scans, uploads, queues, orgs, memberships, settings) lives in local
+// PostgreSQL; Supabase is used only for Auth. Call this for every DATABASE_URL*.
+func RejectSupabaseDSN(name, dsn string) error {
+	if dsn == "" {
+		return nil
+	}
+	lower := strings.ToLower(dsn)
+	if strings.Contains(lower, "pooler.supabase.com") || strings.Contains(lower, ".supabase.co") {
+		return fmt.Errorf("%s must point at local PostgreSQL; Supabase is only for Auth (got a Supabase host)", name)
+	}
+	return nil
+}
 
 // WithTenantTx runs fn in a transaction where RLS sees only tenantID's rows.
 // This is the only sanctioned way to touch tenant tables.
