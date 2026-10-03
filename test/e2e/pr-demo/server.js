@@ -20,3 +20,6 @@ app.get('/proxy', (req, res) => {
 });
 
 app.listen(3000);
+
+// Hard-coded credentials (test fixture).
+const AWS_ACCESS_KEY_ID = 'AKIAIOSFODNN7EXAMPLE';

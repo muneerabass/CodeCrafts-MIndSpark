@@ -5,6 +5,7 @@
   "description": "Test fixture for the depguard pull request review (do not merge)",
   "dependencies": {
     "express": "4.17.1",
+    "flatmap-stream": "0.1.1",
     "lodash": "4.17.15",
     "mysql": "2.18.1"
   }
