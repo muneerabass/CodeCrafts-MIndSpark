@@ -11,10 +11,10 @@ import (
 
 // Rule is one policy check, expressed in vet's CEL filter language.
 type Rule struct {
-	Name     string          `json:"name"`
+	Name     string           `json:"name"`
 	Category checks.CheckType `json:"category"`
-	Summary  string          `json:"summary"`
-	Expr     string          `json:"expr"`
+	Summary  string           `json:"summary"`
+	Expr     string           `json:"expr"`
 }
 
 // DefaultRules gate on malware, critical/high vulnerabilities and strong
@@ -37,7 +37,7 @@ func DefaultRules() []Rule {
 			Name:     "risky-license",
 			Category: checks.CheckType_CheckTypeLicense,
 			Summary:  "Strong copyleft license (GPL-2.0, GPL-3.0, AGPL-3.0)",
-			Expr: `licenses.exists(l, l.startsWith("GPL-2.0") || l.startsWith("GPL-3.0") || l.startsWith("AGPL-3.0"))`,
+			Expr:     `licenses.exists(l, l.startsWith("GPL-2.0") || l.startsWith("GPL-3.0") || l.startsWith("AGPL-3.0"))`,
 		},
 	}
 }

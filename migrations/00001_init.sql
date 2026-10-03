@@ -222,6 +222,7 @@ CREATE TABLE package_analyses (
   created_at         timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON package_analyses (tenant_id, created_at DESC);
+CREATE INDEX ON package_analyses (component_id);
 
 CREATE TABLE exclusions (
   id         text PRIMARY KEY,                   -- ULID
@@ -332,6 +333,7 @@ CREATE TABLE affected (
   ranges      jsonb NOT NULL DEFAULT '[]'::jsonb -- OSV ranges[] (SEMVER/ECOSYSTEM events)
 );
 CREATE INDEX ON affected (ecosystem, name_norm);
+CREATE INDEX ON affected (advisory_id);
 CREATE TABLE cve_score (
   cve        text PRIMARY KEY,
   epss       real,

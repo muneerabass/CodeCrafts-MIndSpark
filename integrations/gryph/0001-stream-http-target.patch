@@ -1,0 +1,267 @@
+From dc63a2b6ac82e881b97a6124d93943ab33fd7774 Mon Sep 17 00:00:00 2001
+From: depguard <aman962248@gmail.com>
+Date: Sat, 3 Oct 2026 16:42:59 +0530
+Subject: [PATCH] stream: add http target that POSTs agent events to a
+ collector
+
+---
+ cli/stream.go            |   8 +++
+ config/config.go         |   1 +
+ config/validate.go       |   1 +
+ stream/http/http.go      | 118 +++++++++++++++++++++++++++++++++++++++
+ stream/http/http_test.go |  55 ++++++++++++++++++
+ stream/registry.go       |   1 +
+ 6 files changed, 184 insertions(+)
+ create mode 100644 stream/http/http.go
+ create mode 100644 stream/http/http_test.go
+
+diff --git a/cli/stream.go b/cli/stream.go
+index 3a649f1..33de7d8 100644
+--- a/cli/stream.go
++++ b/cli/stream.go
+@@ -7,6 +7,7 @@ import (
+ 
+ 	"github.com/safedep/gryph/config"
+ 	"github.com/safedep/gryph/stream"
++	httptarget "github.com/safedep/gryph/stream/http"
+ 	"github.com/safedep/gryph/stream/nop"
+ 	"github.com/safedep/gryph/stream/stdout"
+ 	"github.com/safedep/gryph/tui"
+@@ -163,6 +164,13 @@ func buildStreamRegistry(cfg *config.Config) *stream.Registry {
+ 			registry.Register(stdout.New(tc.Name, tc.Enabled))
+ 		case stream.TargetTypeNop:
+ 			registry.Register(nop.New(tc.Name, tc.Enabled))
++		case stream.TargetTypeHTTP:
++			hc, err := httptarget.ParseConfig(tc.Config)
++			if err != nil {
++				fmt.Fprintf(os.Stderr, "gryph: skipping stream target %q: %v\n", tc.Name, err)
++				continue
++			}
++			registry.Register(httptarget.New(tc.Name, tc.Enabled, hc))
+ 		}
+ 	}
+ 
+diff --git a/config/config.go b/config/config.go
+index 99ecd7a..4f53d6c 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -19,6 +19,7 @@ import (
+ const (
+ 	streamTargetTypeStdout = "stdout"
+ 	streamTargetTypeNop    = "nop"
++	streamTargetTypeHTTP   = "http"
+ )
+ 
+ // LoggingLevel represents the verbosity level for logging.
+diff --git a/config/validate.go b/config/validate.go
+index a8597a5..f95ac5c 100644
+--- a/config/validate.go
++++ b/config/validate.go
+@@ -103,6 +103,7 @@ func isValidTimezoneMode(mode TimezoneMode) bool {
+ var knownStreamTargetTypes = map[string]bool{
+ 	streamTargetTypeStdout: true,
+ 	streamTargetTypeNop:    true,
++	streamTargetTypeHTTP:   true,
+ }
+ 
+ func validatePolicyConfig(cfg PolicyConfig) error {
+diff --git a/stream/http/http.go b/stream/http/http.go
+new file mode 100644
+index 0000000..711e2e8
+--- /dev/null
++++ b/stream/http/http.go
+@@ -0,0 +1,118 @@
++// Package http implements a stream target that POSTs agent events as JSON to an
++// HTTP endpoint (for example a central audit collector).
++package http
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net/http"
++	"os"
++	"time"
++
++	corestream "github.com/safedep/gryph/core/stream"
++	"github.com/safedep/gryph/stream"
++)
++
++// Config for the HTTP target, read from the stream target's `config` map:
++//
++//	url:       endpoint receiving a JSON array of events (required)
++//	token_env: name of an env var holding a bearer token (optional)
++//	headers:   extra static headers (optional)
++//	timeout:   request timeout, Go duration string (default 15s)
++type Config struct {
++	URL      string
++	TokenEnv string
++	Headers  map[string]string
++	Timeout  time.Duration
++}
++
++// ParseConfig builds a Config from the raw target config map.
++func ParseConfig(raw map[string]any) (Config, error) {
++	c := Config{Timeout: 15 * time.Second, Headers: map[string]string{}}
++	if v, ok := raw["url"].(string); ok {
++		c.URL = v
++	}
++	if c.URL == "" {
++		return c, fmt.Errorf("http stream target: config.url is required")
++	}
++	if v, ok := raw["token_env"].(string); ok {
++		c.TokenEnv = v
++	}
++	if h, ok := raw["headers"].(map[string]any); ok {
++		for k, v := range h {
++			c.Headers[k] = fmt.Sprint(v)
++		}
++	}
++	if v, ok := raw["timeout"].(string); ok && v != "" {
++		d, err := time.ParseDuration(v)
++		if err != nil {
++			return c, fmt.Errorf("http stream target: invalid timeout: %w", err)
++		}
++		c.Timeout = d
++	}
++	return c, nil
++}
++
++// Target sends event batches with one POST per Send call. A non-2xx response
++// is returned as an error so the syncer retries the batch later.
++type Target struct {
++	name    string
++	enabled bool
++	cfg     Config
++	client  *http.Client
++}
++
++// New creates an HTTP stream target.
++func New(name string, enabled bool, cfg Config) *Target {
++	return &Target{name: name, enabled: enabled, cfg: cfg, client: &http.Client{Timeout: cfg.Timeout}}
++}
++
++func (t *Target) Name() string  { return t.name }
++func (t *Target) Type() string  { return stream.TargetTypeHTTP }
++func (t *Target) Enabled() bool { return t.enabled }
++
++func (t *Target) Send(ctx context.Context, items []corestream.StreamItem) error {
++	events := make([]any, 0, len(items))
++	for _, it := range items {
++		if it.Event != nil {
++			events = append(events, it.Event)
++		}
++	}
++	if len(events) == 0 {
++		return nil
++	}
++	body, err := json.Marshal(events)
++	if err != nil {
++		return fmt.Errorf("encode events: %w", err)
++	}
++	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.cfg.URL, bytes.NewReader(body))
++	if err != nil {
++		return err
++	}
++	req.Header.Set("Content-Type", "application/json")
++	for k, v := range t.cfg.Headers {
++		req.Header.Set(k, v)
++	}
++	if t.cfg.TokenEnv != "" {
++		if tok := os.Getenv(t.cfg.TokenEnv); tok != "" {
++			req.Header.Set("Authorization", "Bearer "+tok)
++		}
++	}
++	resp, err := t.client.Do(req)
++	if err != nil {
++		return fmt.Errorf("post events: %w", err)
++	}
++	defer resp.Body.Close()
++	if resp.StatusCode < 200 || resp.StatusCode > 299 {
++		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
++		return fmt.Errorf("post events: %s: %s", resp.Status, bytes.TrimSpace(msg))
++	}
++	return nil
++}
++
++func (t *Target) Close() error { return nil }
++
++var _ corestream.Target = (*Target)(nil)
+diff --git a/stream/http/http_test.go b/stream/http/http_test.go
+new file mode 100644
+index 0000000..f1e9ae3
+--- /dev/null
++++ b/stream/http/http_test.go
+@@ -0,0 +1,55 @@
++package http
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/safedep/gryph/core/events"
++	corestream "github.com/safedep/gryph/core/stream"
++)
++
++func TestSendPostsEventsWithToken(t *testing.T) {
++	var got []map[string]any
++	var auth string
++	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		auth = r.Header.Get("Authorization")
++		_ = json.NewDecoder(r.Body).Decode(&got)
++		w.WriteHeader(http.StatusAccepted)
++	}))
++	defer srv.Close()
++	t.Setenv("TEST_TOKEN", "secret")
++
++	cfg, err := ParseConfig(map[string]any{"url": srv.URL, "token_env": "TEST_TOKEN"})
++	if err != nil {
++		t.Fatal(err)
++	}
++	tg := New("collector", true, cfg)
++	err = tg.Send(context.Background(), []corestream.StreamItem{{Event: &events.Event{}}, {}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if auth != "Bearer secret" || len(got) != 1 {
++		t.Fatalf("auth=%q events=%d", auth, len(got))
++	}
++}
++
++func TestSendErrorsOnNon2xx(t *testing.T) {
++	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
++		http.Error(w, "nope", http.StatusUnauthorized)
++	}))
++	defer srv.Close()
++	tg := New("c", true, Config{URL: srv.URL})
++	tg.client = srv.Client()
++	if err := tg.Send(context.Background(), []corestream.StreamItem{{Event: &events.Event{}}}); err == nil {
++		t.Fatal("expected error")
++	}
++}
++
++func TestParseConfigRequiresURL(t *testing.T) {
++	if _, err := ParseConfig(map[string]any{}); err == nil {
++		t.Fatal("expected error")
++	}
++}
+diff --git a/stream/registry.go b/stream/registry.go
+index a62d14b..15bf3c5 100644
+--- a/stream/registry.go
++++ b/stream/registry.go
+@@ -8,6 +8,7 @@ import (
+ 
+ const (
+ 	TargetTypeStdout = "stdout"
++	TargetTypeHTTP   = "http"
+ 	TargetTypeNop    = "nop"
+ )
+ 
+-- 
+2.55.0
+

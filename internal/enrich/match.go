@@ -1,0 +1,97 @@
+package enrich
+
+import (
+	"slices"
+	"strings"
+
+	"github.com/google/osv-scalibr/semantic"
+)
+
+type osvEvent struct {
+	Introduced   string `json:"introduced"`
+	Fixed        string `json:"fixed"`
+	LastAffected string `json:"last_affected"`
+	Limit        string `json:"limit"`
+}
+
+type osvRange struct {
+	Type   string     `json:"type"`
+	Events []osvEvent `json:"events"`
+}
+
+func (e osvEvent) version() string {
+	for _, v := range []string{e.Introduced, e.Fixed, e.LastAffected, e.Limit} {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// parse parses a version for an OSV ecosystem; SEMVER ranges and ecosystems
+// semantic doesn't know (e.g. "GitHub Actions") fall back to SemVer.
+func parse(ver, eco, rangeType string) (semantic.Version, error) {
+	if rangeType != "SEMVER" {
+		if v, err := semantic.Parse(ver, eco); err == nil {
+			return v, nil
+		}
+	}
+	return semantic.Parse(ver, "npm")
+}
+
+// affects reports whether version is affected per an OSV affected[] entry:
+// explicit versions[] or any SEMVER/ECOSYSTEM range (GIT ranges ignored).
+// Port of osv-scalibr's osvlocal matcher.
+func affects(eco, version string, versions []string, ranges []osvRange) bool {
+	bare := strings.TrimPrefix(version, "v")
+	for _, v := range versions {
+		if v == version || strings.TrimPrefix(v, "v") == bare {
+			return true
+		}
+	}
+	for _, r := range ranges {
+		if (r.Type == "SEMVER" || r.Type == "ECOSYSTEM") && rangeContains(eco, version, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func rangeContains(eco, version string, r osvRange) bool {
+	vp, err := parse(version, eco, r.Type)
+	if err != nil || len(r.Events) == 0 {
+		return false
+	}
+	events := slices.Clone(r.Events)
+	slices.SortStableFunc(events, func(a, b osvEvent) int {
+		switch {
+		case a.Introduced == "0" && b.Introduced == "0":
+			return 0
+		case a.Introduced == "0":
+			return -1
+		case b.Introduced == "0":
+			return 1
+		}
+		av, err := parse(a.version(), eco, r.Type)
+		if err != nil {
+			return 0
+		}
+		c, _ := av.CompareStr(b.version())
+		return c
+	})
+	affected := false
+	for _, e := range events {
+		switch {
+		case affected && e.Fixed != "":
+			c, err := vp.CompareStr(e.Fixed)
+			affected = err == nil && c < 0
+		case affected && e.LastAffected != "":
+			c, err := vp.CompareStr(e.LastAffected)
+			affected = e.LastAffected == version || (err == nil && c <= 0)
+		case !affected && e.Introduced != "":
+			c, err := vp.CompareStr(e.Introduced)
+			affected = e.Introduced == "0" || (err == nil && c >= 0)
+		}
+	}
+	return affected
+}

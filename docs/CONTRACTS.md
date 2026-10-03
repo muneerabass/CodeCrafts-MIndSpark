@@ -136,7 +136,10 @@ DATABASE_URL            postgres://depguard_app:...@postgres:5432/depguard   (ru
 DATABASE_OWNER_URL      postgres://depguard:...@postgres:5432/depguard        (migrations)
 DATABASE_QUERY_URL      postgres://depguard_query:...@postgres:5432/depguard  (Query page)
 SERVICE_JWT_SECRET      shared by web and api
-PUBLIC_URL              https://app.depguard.dev   (links in PR comments)
+PUBLIC_URL              https://app.depguard.dev   (web app; links in PR comments)
+PUBLIC_API_URL          https://api.depguard.dev   (machine API: CLI, agent, MCP, webhooks)
+HTTP_ADDR               api listen address, default :8080
+GITHUB_APP_PRIVATE_KEY  PEM contents OR a file path (compose mounts /run/secrets/github_app_key)
 TENANT_DOMAIN_SUFFIX    depguard.dev
 GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY (PEM or path), GITHUB_WEBHOOK_SECRET
 GITHUB_API_URL          default https://api.github.com/
@@ -145,3 +148,33 @@ GUARDDOG_IMAGE          sandbox image for guarddog
 DEPSDEV_DISABLED, SCORECARD_DISABLED   (tests/offline)
 LOG_LEVEL
 ```
+
+## Deployment hooks (deploy/compose.yml)
+- `api healthcheck` subcommand: GET http://127.0.0.1$HTTP_ADDR/healthz, exit 0/1 (distroless image has no curl).
+- The api runs migrations (db.Migrate with DATABASE_OWNER_URL) + river migrations before serving; worker starts after api is healthy.
+- Postgres init (deploy/postgres/init.sh) pre-creates roles depguard_app / depguard_query / depguard_web with passwords and a separate database `depguard_web` for Better Auth.
+- Public reverse proxy blocks /api/v1/* and /admin/* on the API host; the web server reaches the api on the internal network (API_URL=http://api:8080).
+
+## Feeds & enrichment (implemented, workstream A)
+- `feeds.New(pool, Options)`, `Syncer.SyncAll/SyncOSV/SyncKEV/SyncEPSS/Ingest`; River job kinds `feeds_osv`, `feeds_kev`, `feeds_epss` (arg types in internal/feeds); `feeds.PeriodicJobs()`, `feeds.AddWorkers(w, pool)`, `feeds.Status(ctx, pool)` (JSON = GET /admin/feeds).
+- `enrich.New(pool, Options)`, `Enrich(ctx, pkgs)`, then `enrich.Matches(pkg) []enrich.Match{AdvisoryID,Risk,Summary,Aliases,Malware}` → rows for component_vulnerabilities. Env DEPSDEV_DISABLED/SCORECARD_DISABLED map to Options.DisableDepsDev/DisableScorecard (caller's job).
+- `affected.ecosystem` / `package_meta.ecosystem` hold OSV ecosystem names ("crates.io", "GitHub Actions"); ranges live in `affected.ranges` (no affected_range table). sync_state sources: `osv:<Ecosystem>`, `kev`, `epss`.
+- Test helper: `internal/feeds/feedstest.Postgres(t)` (testcontainers, migrated, app-role pool).
+
+## Engine & GitHub App (implemented, workstream B)
+- Insert ScanRepository/ScanUpload jobs with `ghapp.JobOpts` (MaxAttempts 5, unique while in flight).
+- Manual ScanRepository: api pre-creates the scan row (placeholder project/version allowed); worker overwrites project_id, project_version_id, head_sha (version = branch).
+- `webhook_deliveries.status` also: `processed` (handled without a job). A `failed` delivery is accepted again on redelivery.
+- River tables need `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES` + `USAGE ON ALL SEQUENCES` to depguard_app after rivermigrate (see internal/engine/testpg).
+- Worker env: WORKER_HEALTH_ADDR (:8081), WORKER_CONCURRENCY, XBOM_DISABLED, GUARDDOG_BIN, GUARDDOG_ALLOW_NO_SANDBOX.
+- Binaries need cgo (vet tree-sitter parsers, xbom).
+
+## API deviations (implemented, workstream C)
+- POST /api/v1/scans → 202 {scan_id}. POST /v1/scans and GET /v1/scans/{id} → 202 while queued/running, 200 when finished.
+- GET /integrations adds top-level `api_url`, `mcp_url` (from PUBLIC_API_URL).
+- POST /v1/endpoints/{id}/agent-events accepts a JSON array or JSONL (gryph export); returns {inserted,duplicates}. pmg ingest returns {inserted}.
+- /query, /query/schema, /queries: all roles (read-only). Other writes: admin/owner.
+- POST /admin/tenants idempotent; 409 when domain belongs to another tenant.
+- MAL- advisories count as malware, not vulnerabilities, in counts. "Current" components = project_versions.last_scan_id (fallback: latest successful non-PR scan).
+- SERVICE_JWT_SECRET must be ≥ 32 chars. API key rate limit: 10 rps, burst 50. Ingest ≤ 10k items/request.
+- migrations/00002 revokes EXECUTE on pg_catalog.set_config from PUBLIC (prevents tenant switching from the Query role); requires the migration owner to be superuser (docker POSTGRES_USER is).

@@ -1,0 +1,143 @@
+# Production stack on a single host:  docker compose --env-file .env up -d
+name: depguard
+
+x-go-env: &go-env
+  DATABASE_URL: postgres://depguard_app:${DEPGUARD_APP_PASSWORD}@postgres:5432/depguard?sslmode=disable
+  DATABASE_OWNER_URL: postgres://depguard:${POSTGRES_PASSWORD}@postgres:5432/depguard?sslmode=disable
+  DATABASE_QUERY_URL: postgres://depguard_query:${DEPGUARD_QUERY_PASSWORD}@postgres:5432/depguard?sslmode=disable
+  SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET}
+  PUBLIC_URL: https://${APP_HOST}
+  PUBLIC_API_URL: https://${API_HOST}
+  TENANT_DOMAIN_SUFFIX: ${TENANT_DOMAIN_SUFFIX}
+  GITHUB_APP_ID: ${GITHUB_APP_ID}
+  GITHUB_APP_SLUG: ${GITHUB_APP_SLUG}
+  GITHUB_APP_PRIVATE_KEY: /run/secrets/github_app_key
+  GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET}
+  CHECK_RUN_NAME: "${CHECK_RUN_NAME:-depguard: Supply Chain Security}"
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-hardening: &hardening
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=512m"]
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: depguard
+      POSTGRES_DB: depguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEPGUARD_APP_PASSWORD: ${DEPGUARD_APP_PASSWORD}
+      DEPGUARD_QUERY_PASSWORD: ${DEPGUARD_QUERY_PASSWORD}
+      DEPGUARD_WEB_PASSWORD: ${DEPGUARD_WEB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/10-init.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U depguard -d depguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 256m
+
+  api:
+    <<: *hardening
+    build: { context: .., dockerfile: deploy/Dockerfile, target: api }
+    image: depguard/api:${VERSION:-latest}
+    environment:
+      <<: *go-env
+      HTTP_ADDR: ":8080"
+    secrets: [github_app_key]
+    depends_on: { postgres: { condition: service_healthy } }
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/api", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  worker:
+    <<: *hardening
+    build: { context: .., dockerfile: deploy/Dockerfile, target: worker }
+    image: depguard/worker:${VERSION:-latest}
+    environment:
+      <<: *go-env
+      HOME: /tmp
+    secrets: [github_app_key]
+    tmpfs: ["/tmp:size=2g"]
+    depends_on: { api: { condition: service_healthy } }   # api runs migrations first
+    deploy:
+      resources: { limits: { cpus: "2", memory: 3g } }
+
+  web:
+    <<: *hardening
+    build: { context: ../web, dockerfile: Dockerfile }
+    image: depguard/web:${VERSION:-latest}
+    environment:
+      DATABASE_URL_WEB: postgres://depguard_web:${DEPGUARD_WEB_PASSWORD}@postgres:5432/depguard_web?sslmode=disable
+      API_URL: http://api:8080
+      PUBLIC_API_URL: https://${API_HOST}
+      BETTER_AUTH_URL: https://${APP_HOST}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      SERVICE_JWT_SECRET: ${SERVICE_JWT_SECRET}
+      TENANT_DOMAIN_SUFFIX: ${TENANT_DOMAIN_SUFFIX}
+      SUPERADMIN_EMAILS: ${SUPERADMIN_EMAILS}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM}
+    tmpfs: ["/tmp:size=256m", "/app/.next/cache:size=256m"]
+    depends_on: { api: { condition: service_healthy } }
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      APP_HOST: ${APP_HOST}
+      API_HOST: ${API_HOST}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - backups:/backups
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    depends_on: { postgres: { condition: service_healthy } }
+
+  # Local development only: `docker compose --profile dev up mailpit`
+  mailpit:
+    image: axllent/mailpit
+    profiles: [dev]
+    ports: ["8025:8025", "1025:1025"]
+
+secrets:
+  github_app_key:
+    file: ${GITHUB_APP_PRIVATE_KEY_FILE:-./secrets/github-app.pem}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+  backups:

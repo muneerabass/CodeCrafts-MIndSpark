@@ -32,6 +32,11 @@ func Parse(lockfiles []Lockfile) ([]*models.PackageManifest, error) {
 		}
 		err = r.EnumManifests(func(m *models.PackageManifest, _ readers.PackageReader) error {
 			m.SetDisplayPath(lf.RepoPath)
+			// Local sources ignore DisplayPath and show Namespace/Path (the
+			// temp dir); point them at the repo path instead.
+			if m.Source.Type == models.ManifestSourceLocal {
+				m.Source.Namespace, m.Source.Path = "", lf.RepoPath
+			}
 			out = append(out, m)
 			return nil
 		})
