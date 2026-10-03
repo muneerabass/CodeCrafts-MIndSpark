@@ -178,3 +178,89 @@ LOG_LEVEL
 - MAL- advisories count as malware, not vulnerabilities, in counts. "Current" components = project_versions.last_scan_id (fallback: latest successful non-PR scan).
 - SERVICE_JWT_SECRET must be ≥ 32 chars. API key rate limit: 10 rps, burst 50. Ingest ≤ 10k items/request.
 - migrations/00002 revokes EXECUTE on pg_catalog.set_config from PUBLIC (prevents tenant switching from the Query role); requires the migration owner to be superuser (docker POSTGRES_USER is).
+
+## Risk analysis (attack paths, transitive, suspicious, licenses) — migration 00003
+Plan: `/home/manas/.claude/plans/snug-nibbling-cocoa.md`. Shared Go types: `internal/scan/risk.go`
+(`scan.Finding`, `scan.Project`, `scan.PackageContext`, `scan.CheckInput`, `scan.Checker`, Severity*/Usage*/Category*).
+
+### Ownership (parallel workstreams — touch only your paths)
+| Stream | Owns |
+|---|---|
+| A graph+engine | `internal/scan/graph.go`, `internal/scan/manifests.go`, `internal/scan/imports.go`, `internal/enrich/graph.go` (+ `FixedIn` in enrich `Match`), all of `internal/engine/` **except** `guarddog.go` |
+| B suspicious | `internal/suspicious/**`, `internal/enrich/latest.go`, `internal/engine/guarddog.go`, `internal/scan/presets.go`, `internal/scan/policy.go` |
+| C license | `internal/license/**` |
+| D surface | `internal/httpapi/**`, `internal/render/**`, `cmd/depguard/**`, `web/**`, `docs/RISK-MODEL.md`, `docs/TESTING.md` |
+
+### Schema (00003)
+- `scan_packages`: `direct bool NULL`, `depth int NULL` (1 = direct), `dev bool NULL`, `via text[]` (shortest chain root→pkg, `name@version`, last = the package), `paths jsonb` (≤3 chains, `[["a@1","b@2","pkg@3"], …]`), `graph_source` (`lockfile|depsdev|none`), `imported bool NULL` (path head imported by app source).
+- `project_version_components`: `direct`, `depth`, `dev`.
+- `project_version_dependencies(id, tenant_id, project_version_id, manifest_path, parent_component_id NULL=app, child_component_id, graph_source)` — full scans replace it.
+- `projects`: `license` (SPDX expr), `license_source`, `usage_model` (`internal|saas|distributed_binary|distributed_source`, default `distributed_binary`).
+- `policy_violations`: `severity` (`critical|high|medium|low|info`), `blocking bool` (counts toward failing the check), `details jsonb`. Suspicious/license findings are rows with `category` `suspicious` / `license`.
+- Global caches: `depsdev_graph`, `package_latest`, `guarddog_verdict`. Views: `q_project_components`, `q_policy_violations` (new cols), `q_dependency_edges`, `q_scan_packages`.
+
+### Go APIs
+```go
+// A — internal/scan
+type DirectDep struct{ Name, Version string; Dev bool }       // from manifests
+func ReadDirectDeps(ecosystem string, files map[string][]byte) []DirectDep // package.json, go.mod, pom.xml, Cargo.toml, pyproject.toml, requirements*.txt, Gemfile, composer.json
+type GraphInfo struct{ Direct bool; Depth int; Dev bool; Paths [][]*models.Package /* ≤3, root first, ends with pkg */ }
+type Graph struct{ /* … */ }
+func BuildGraph(m *models.PackageManifest, direct []DirectDep) *Graph // lockfile graph; else direct set only
+func (g *Graph) Info(p *models.Package) (GraphInfo, bool)
+func (g *Graph) Source() string                                      // lockfile | depsdev | none
+func (g *Graph) Edges() [][2]*models.Package                          // parent nil = app
+func ImportedPackages(files map[string][]byte) map[string]bool        // normalized dep names imported by source
+// A — internal/enrich
+func (e *Enricher) DepsDevGraph(ctx, eco, name, version string) (nodes []GraphNode, edges [][2]int, err error) // cached depsdev_graph
+// Match gains FixedIn string (first OSV fixed version above installed; "" if none)
+
+// B — internal/suspicious
+type Config struct{ Typosquat, Unmaintained, Deprecated, NewPackage, NoRepo, UnusualBehaviour bool; UnmaintainedMonths int; Blocking map[string]bool }
+func ConfigFromPolicy(p scan.PolicyConfig) Config
+func New(pool *pgxpool.Pool, e *enrich.Enricher, cfg Config) scan.Checker // rules: typosquat, deprecated, unmaintained, new-package, no-source-repo
+func Prioritize(pkgs []*models.Package, findings []scan.Finding) []*models.Package // guarddog order
+// B — internal/engine/guarddog.go: worker checks/writes guarddog_verdict; issues>0 → package_analyses suspicious
+//      AND a policy_violations row (category suspicious, rule unusual-behaviour, details.rules).
+
+// C — internal/license
+type Detection struct{ Expr, Source string }
+func DetectProject(files map[string][]byte, githubSPDX string) Detection // manifest > LICENSE text (licensecheck) > github > unknown
+func New(cfg Config) scan.Checker // rules: license-unknown, license-copyleft-distributed, license-network-copyleft, license-weak-copyleft, license-noncommercial, license-incompatible (project↔dep via OSADL), license-conflict (dep↔dep)
+type Config struct{ Deny []string /* extra denied SPDX prefixes from policy */ }
+func Explain(spdx string) (category, summary string)                // for UI/report
+```
+Engine (A) wiring per scan: parse → BuildGraph (+deps.dev fallback for direct deps when the lockfile has no graph) → Enrich → CEL policy → `suspicious.New(...).Check` + `license.New(...).Check` with `CheckInput{Project, Packages, Context}` → persist findings (`severity`, `blocking`, `details`) → conclusion = failure iff any **blocking** finding/violation in block mode → render. Project license: `projects.license` override wins over `DetectProject`. Default CEL `risky-license` rule is removed in favour of `license-*` rules (B edits `DefaultRules`).
+
+### Policy JSON additions (`/api/v1/policy`)
+```json
+{"presets": {
+  "suspicious": {"typosquat": true, "unmaintained": true, "unmaintained_months": 24, "deprecated": true,
+                 "new_package": true, "no_source_repo": false, "unusual_behaviour": true,
+                 "blocking": ["typosquat", "unusual-behaviour"]},
+  "license": {"deny": ["…"], "enabled": true, "blocking_severity": "high"}}}
+```
+
+### REST additions (service JWT, tenant)
+| Method & path | Response |
+|---|---|
+| version components / components lists | items add `direct` (bool\|null), `depth`, `dev`; filter `direct=true\|false` |
+| GET `/projects/{id}/versions/{vid}/paths?target=<component_id>&advisory=<id>` | `{source, nodes:[{id,name,version,ecosystem,direct,depth,vulns,max_risk,malware,suspicious,license_issue}], edges:[{from,to}] /* from "app" or component id */, paths:[PathItem]}` |
+| GET `/scans/{id}/paths` | `{paths:[PathItem]}` from `scan_packages.paths` |
+| GET `/vulnerabilities/{id}/paths` | `{items:[{project:{id,name}, version, paths:[PathItem]}]}` |
+| GET/PUT `/projects/{id}/settings` | `{license, license_source, detected_license, usage_model}` (PUT: `license` override or null, `usage_model`; admin/owner) |
+| GET `/scans/{id}/report?format=md\|json\|html` | full combined report (Content-Disposition attachment) |
+| GET `/projects/{id}/versions/{vid}/licenses` | `{project_license, usage_model, findings:[{rule,severity,summary,component,details}], distribution:[{license,count,category}]}` |
+| GET `/dashboard` | adds `transitive_vulnerabilities, attack_paths, suspicious_findings, license_issues` |
+| `/scans/{id}` packages | add `direct, depth, dev, via, paths, imported, licenses, graph_source`; top-level `findings:[{rule,category,severity,blocking,summary,component,details}]` |
+| `/policy/violations` items | add `severity, blocking, details`; filter `category=suspicious\|license`, `severity=` |
+```
+PathItem = {chain:[{name,version,component_id|null}], target:{name,version,component_id}, advisories:[{id,risk,epss,kev,fixed_in}],
+            risk:"CRITICAL|HIGH|MEDIUM|LOW", score:0-100, depth:int, direct_head:"name@version", imported:bool|null,
+            dev:bool, approximate:bool, fix:"Upgrade qs to ≥6.10.3 (via express ≥4.17.3)"}
+```
+Path score (computed at read time): base C=40,H=30,M=15,L=5 (max over advisories) + 20·KEV + 20·EPSS; × (imported true 1.0 / null 0.6 / false 0.3) × (dev 0.5) × max(0.5, 1 − 0.05·(depth−1)); clamp 0–100; MAL- target = 100.
+
+### Machine / CLI
+- `GET /v1/scans/{id}/report?format=md|json|html` (API key).
+- CLI `depguard scan` also uploads manifests (`package.json`, `go.mod`, `pom.xml`, `Cargo.toml`, `pyproject.toml`, `Gemfile`, `composer.json`) and root `LICENSE*`/`COPYING*`; flags `--format md|json|report`, `--report-out <file.md|.json|.html>`, `--project-license <spdx>`, `--usage-model <model>` (sent as multipart fields `project_license`, `usage_model`; stored on the project).

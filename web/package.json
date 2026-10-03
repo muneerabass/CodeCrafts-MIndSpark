@@ -14,8 +14,10 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
     "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-table": "^8.21.3",
+    "@xyflow/react": "^12.12.0",
     "better-auth": "1.7.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
