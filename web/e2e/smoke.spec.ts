@@ -272,11 +272,10 @@ test.describe('RBAC', () => {
 
 test('pull requests: inbox, detail, actions, settings', async ({ page }) => {
   await page.goto('/pull-requests');
-  await columns(page, ['Urgency', 'Pull Request', 'Why', 'Findings', 'Labels', 'Updated']);
-  const rows = page.locator('tbody tr');
+  const rows = page.getByRole('list', { name: 'Pull requests' }).getByRole('listitem');
   await expect(rows.first()).toContainText('Add Stripe webhooks and the payments SDK');
   await expect(rows.first()).toContainText('Critical');
-  await expect(rows.first()).toContainText('1 malware');
+  await expect(rows.first().getByTitle('1 malware')).toBeVisible();
   await expect(page.getByText('Bump next to 16.1')).toBeVisible();
   await expect(page.getByText('Docs: payment flow diagram')).toHaveCount(0); // merged PRs are not in the default (open) view
   await page.getByRole('link', { name: /Medium pull requests/ }).click();

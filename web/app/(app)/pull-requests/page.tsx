@@ -2,13 +2,22 @@ import Link from 'next/link';
 import { api, listQuery, type SearchParams } from '@/lib/api';
 import { requireOrg } from '@/lib/session';
 import type { List, Project, PRSummaryCounts, PullRequest } from '@/lib/types';
-import { PageHeader } from '@/components/page';
+import { PageHeader, PageIntro } from '@/components/page';
 import { FilterBar } from '@/components/data-table';
-import { PullRequestsTable, UrgencyPill } from '@/components/pull-requests';
+import { PullRequestsTable } from '@/components/pull-requests';
 import { LEVELS, PR_STATE_OPTIONS, levelLabel } from '@/lib/pr';
 import { cn } from '@/lib/utils';
 
 export const metadata = { title: 'Pull Requests' };
+
+const levelBar: Record<string, string> = {
+  critical: 'bg-red-500',
+  high: 'bg-orange-500',
+  medium: 'bg-amber-500',
+  low: 'bg-sky-500',
+  clean: 'bg-emerald-500',
+  pending: 'bg-muted-foreground/40',
+};
 
 export default async function PullRequestsPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;
@@ -26,23 +35,22 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
         info="Every pull request of your connected repositories, reviewed for vulnerable or malicious dependencies, license problems and security issues in the code, ranked by how urgently it needs fixing."
         actions={null}
       />
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3" aria-label="Open pull requests by urgency">
-        <span className="mr-1 text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground tabular-nums">{summary.open}</span> open
-        </span>
+      <PageIntro title="Pull Requests" description="Every pull request of your repositories, most urgent first." />
+      <nav className="grid grid-cols-3 gap-2 border-b px-4 pt-2 pb-4 sm:grid-cols-6 md:px-6" aria-label="Open pull requests by urgency">
         {LEVELS.map((l) => (
           <Link
             key={l}
             href={level === l ? '/pull-requests' : `/pull-requests?level=${l}`}
-            aria-current={level === l}
-            className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-sm hover:bg-muted', level === l && 'ring-2 ring-primary')}
+            aria-current={level === l ? 'true' : undefined}
+            className={cn('relative overflow-hidden rounded-xl border bg-card p-3 transition-colors hover:border-primary/40', level === l && 'border-primary/60 bg-primary/5')}
           >
-            <UrgencyPill level={l} />
-            <span className="font-semibold tabular-nums">{summary.by_level[l] ?? 0}</span>
+            <span className={cn('absolute inset-x-0 top-0 h-0.5', levelBar[l])} aria-hidden />
+            <span className="block text-2xl leading-none font-semibold tabular-nums">{summary.by_level[l] ?? 0}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">{levelLabel[l]}</span>
             <span className="sr-only">{levelLabel[l]} pull requests</span>
           </Link>
         ))}
-      </div>
+      </nav>
       <FilterBar
         filters={[
           { type: 'select', key: 'state', label: 'State', options: PR_STATE_OPTIONS },
@@ -50,7 +58,15 @@ export default async function PullRequestsPage({ searchParams }: { searchParams:
           { type: 'select', key: 'project_id', label: 'Projects', options: projects.items.map((p) => ({ value: p.id, label: p.name })) },
           { type: 'text', key: 'author', label: 'Author', placeholder: 'GitHub login' },
           { type: 'text', key: 'q', label: 'Search', placeholder: 'Title, repo or #number' },
-          { type: 'select', key: 'sort', label: 'Sort', options: [{ value: 'urgency', label: 'Most urgent' }, { value: 'updated', label: 'Recently updated' }] },
+          {
+            type: 'select',
+            key: 'sort',
+            label: 'Sort',
+            options: [
+              { value: 'urgency', label: 'Most urgent' },
+              { value: 'updated', label: 'Recently updated' },
+            ],
+          },
         ]}
       />
       <PullRequestsTable data={data.items} total={data.total} />
