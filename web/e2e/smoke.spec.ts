@@ -559,3 +559,55 @@ test('vault: passphrase, create, encrypt and view a .env, unlock again, approve 
   await page.goto('/secrets');
   await expect(page.getByRole('listitem').filter({ hasText: 'acme/storefront' }).getByText(/1 file · .*1 with access/)).toBeVisible();
 });
+
+test('ask depguard: briefing, streamed answer with safe links, history, settings switch', async ({ page, context, baseURL }) => {
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Ask depguard' }).click();
+  const panel = page.getByRole('dialog', { name: 'Ask depguard' });
+  await expect(panel.getByRole('link', { name: /acme\/payments-api #482/ })).toHaveAttribute('href', '/pull-requests/01JB7Q3M1K8Z4XW2N5R6T9V0AB/482');
+  await panel.getByRole('button', { name: 'What should I fix first?' }).click();
+  await expect(panel.getByText(/actively exploited/)).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'Fix First' }).first()).toHaveAttribute('href', '/fix-queue');
+  await expect(panel.getByText('this link')).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'this link' })).toHaveCount(0); // evil.example is not a link
+  await panel.getByText('How I found this').click();
+  await expect(panel.getByText("SELECT count(*) FROM findings WHERE status = 'open'")).toBeVisible();
+
+  // A follow-up continues the conversation; history lists it, reopens it and deletes it.
+  await panel.getByLabel('Message').fill('And after that?');
+  await panel.getByLabel('Message').press('Enter');
+  await expect(panel.getByText(/actively exploited/)).toHaveCount(2);
+  await panel.getByRole('button', { name: 'History' }).click();
+  await expect(panel.getByRole('button', { name: /^What should I fix first\?/ })).toHaveCount(1);
+  await panel.getByRole('button', { name: 'New chat' }).click();
+  await panel.getByRole('button', { name: 'History' }).click();
+  await panel.getByRole('button', { name: /^What should I fix first\?/ }).click();
+  await expect(panel.getByText('And after that?')).toBeVisible();
+  await panel.getByRole('button', { name: 'History' }).click();
+  await panel.getByRole('button', { name: 'Delete What should I fix first?' }).click();
+  await expect(panel.getByText('No conversations in the last 30 days.')).toBeVisible();
+
+  // Page-aware suggestions; Ctrl+/ toggles the panel.
+  await page.goto(`/projects/${P1}`);
+  await page.keyboard.press('Control+/');
+  await expect(panel.getByRole('button', { name: 'What should I fix first in this project?' })).toBeVisible();
+  await page.keyboard.press('Control+/');
+  await expect(panel).toHaveCount(0);
+
+  // Admins turn it off: members lose the button, admins see a note.
+  await page.goto('/settings/ai');
+  await expect(page.getByText('gemini-flash-lite-latest')).toBeVisible();
+  await page.getByLabel('Turn on Ask depguard').click();
+  await expect(page.getByText('Assistant turned off')).toBeVisible();
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Ask depguard' }).click();
+  await expect(panel.getByText(/turned off for this organization/)).toBeVisible();
+  await context.addCookies([{ name: 'e2e_role', value: 'member', url: baseURL! }]);
+  await page.goto('/dashboard');
+  await expect(page.getByRole('link', { name: 'Fix First' }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ask depguard' })).toHaveCount(0);
+  await context.clearCookies({ name: 'e2e_role' });
+  await page.goto('/settings/ai');
+  await page.getByLabel('Turn on Ask depguard').click();
+  await expect(page.getByText('Assistant turned on')).toBeVisible();
+});

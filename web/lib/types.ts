@@ -589,3 +589,12 @@ export type VaultMember = { user_id: string; email: string; public_key: string; 
 export type VaultState = { project_id: string; project: string; initialized: boolean; key_version: number; my_key: VaultWrappedKey | null; items: VaultItemMeta[]; members: VaultMember[] };
 export type VaultItemCipher = { id: string; name: string; kind: 'env' | 'file'; version: number; key_version: number; iv: string; ciphertext: string; size: number };
 export type VaultMatch = { fingerprint: string; project_id: string; project: string; item: string; key: string };
+
+export type AssistantStep = { tool: string; label: string; sql?: string };
+export type AssistantSource = { title: string; url: string };
+export type AssistantBriefing = { enabled: boolean; configured: boolean; items: { tone: 'red' | 'amber' | 'green'; text: string; url: string }[] };
+export type AssistantMessage = { id: string; role: 'user' | 'assistant'; text: string; steps?: AssistantStep[]; sources?: AssistantSource[]; created_at: string };
+export type AssistantConversation = { id: string; title: string; updated_at: string };
+export type AssistantConversationDetail = { id: string; title: string; messages: AssistantMessage[] };
+export type AssistantSettings = { enabled: boolean; configured: boolean; provider: 'gemini' | 'bedrock' | ''; model: string; usage_30d: { questions: number; input_tokens: number; output_tokens: number } };
+export type AssistantContext = { path: string; project_id?: string; pr?: { project_id: string; number: number }; vuln?: string };

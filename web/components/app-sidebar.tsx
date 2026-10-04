@@ -40,6 +40,7 @@ import {
   FileKey2,
   ListOrdered,
   ScrollText,
+  Sparkles,
   Wand2,
   Webhook,
 } from 'lucide-react';
@@ -115,6 +116,7 @@ const SETTINGS: Group[] = [
       { href: '/settings/pull-requests', label: 'Pull Requests', icon: GitPullRequest },
       { href: '/settings/auto-fix', label: 'Auto-fix', icon: Wand2 },
       { href: '/settings/notifications', label: 'Notifications', icon: Bell },
+      { href: '/settings/ai', label: 'AI', icon: Sparkles },
       { href: '/settings/audit-log', label: 'Audit Log', icon: ScrollText },
     ],
   },

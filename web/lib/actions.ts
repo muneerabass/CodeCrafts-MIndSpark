@@ -10,7 +10,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, NotificationSettings, NotificationsResponse, VaultState, VaultMemberSelf, VaultItemCipher, VaultWrappedKey, VaultWrappedPrivate, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, NotificationSettings, NotificationsResponse, VaultState, VaultMemberSelf, VaultItemCipher, VaultWrappedKey, VaultWrappedPrivate, AssistantBriefing, AssistantConversation, AssistantConversationDetail, AssistantSettings, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -278,6 +278,37 @@ export const vaultDeleteItem = async (projectId: string, itemId: string) =>
   run(async () => {
     await requireRole('admin');
     return api<VaultState>(vaultPath(projectId, `/items/${encodeURIComponent(itemId)}`), { method: 'DELETE' });
+  });
+
+// ---------- Ask depguard ----------
+export const assistantBriefing = async () =>
+  run(async () => {
+    await requireOrg();
+    return api<AssistantBriefing>('/assistant/briefing');
+  });
+
+export const assistantConversations = async () =>
+  run(async () => {
+    await requireOrg();
+    return (await api<{ items: AssistantConversation[] }>('/assistant/conversations')).items;
+  });
+
+export const assistantConversation = async (id: string) =>
+  run(async () => {
+    await requireOrg();
+    return api<AssistantConversationDetail>(`/assistant/conversations/${encodeURIComponent(id)}`);
+  });
+
+export const assistantDeleteConversation = async (id: string) =>
+  run(async () => {
+    await requireOrg();
+    await api(`/assistant/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  });
+
+export const saveAssistantSettings = async (enabled: boolean) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<AssistantSettings>('/settings/assistant', { method: 'PUT', body: { enabled } });
   });
 
 export const savePolicy = async (policy: Policy) =>

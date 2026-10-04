@@ -56,6 +56,34 @@ Live deployment: **https://app.16-4-42-122.sslip.io** (dashboard) · **https://a
 
 Theme: switch between *Cyber* (dark) and *Classic* in the sidebar footer. PDFs always print in the light theme.
 
+### Ask depguard (the assistant)
+
+Click **Ask depguard** in the bottom-right corner of any page, or press **Ctrl + /** (**⌘ + /** on a Mac). The panel opens with:
+
+- a short **briefing**: the 2–4 things that need attention right now, each with a link;
+- **three suggested questions** for the page you are on. For example, a project page suggests "What should I fix first in this project?", a pull request suggests "Why is this PR blocked?", and a vulnerability suggests "Where does this reach our code?".
+
+Ask anything about your workspace in plain words:
+
+- "Which pull requests are blocked and why?"
+- "Where do we use lodash 4.17.20?"
+- "What changed in our risk this week?"
+- "Who can read the storefront vault?"
+
+Answers stream in, stay short and link to the page that proves them. Under each answer:
+
+- **How I found this** lists every lookup the assistant made, including any read-only SQL, so you can check its work.
+- **Copy** copies the answer.
+
+General security questions ("what is a typosquat?") are answered too, and labelled as general knowledge rather than your data.
+
+- **What it can see:** exactly what you can see with your role, nothing more.
+- **Read-only:** it never changes settings, opens or merges pull requests, or dismisses findings.
+- **Vault:** it sees names and metadata only (which files exist, who has access). Secret values are end-to-end encrypted and never reach it.
+- **History:** the clock icon lists your conversations. They are private to you and deleted after 30 days; the bin icon deletes one now. **+** starts a new chat.
+- **Turning it off:** the assistant is on by default. Admins can turn it off under **Settings → AI**. The button then disappears for members, and admins see a note. That page also shows the AI provider and model in use, the privacy note (questions and the relevant workspace data go to the provider, and nothing is used for training) and the last 30 days of usage.
+- **Coding agents:** they can ask the same questions over the MCP server ([section 7](#7-ai-coding-agents-mcp-server--skill)).
+
 ---
 
 ## 3. GitHub App: automatic PR and push scans

@@ -285,6 +285,21 @@ function vaultState(pid: string): T.VaultState {
     members: members.map((m) => ({ ...m, has_access: !!keys[m.user_id], key_version: keys[m.user_id]?.key_version ?? null, granted_by: keys[m.user_id]?.granted_by ?? null, granted_at: keys[m.user_id]?.created_at ?? null })),
   };
 }
+// Assistant (the chat stream itself is scripted in app/api/assistant/chat/route.ts via mockAssistantChat).
+let assistantEnabled = true;
+// On globalThis: the route handler and server actions load separate copies of this module in dev.
+const assistantConvs: (T.AssistantConversationDetail & { updated_at: string })[] = ((globalThis as { __mockAssistantConvs?: [] }).__mockAssistantConvs ??= []);
+export function mockAssistantChat(conversationId: string | undefined, message: string, answer: string, steps: T.AssistantStep[], sources: T.AssistantSource[]) {
+  let c = assistantConvs.find((x) => x.id === conversationId);
+  if (!c) {
+    c = { id: `conv-${assistantConvs.length + 1}`, title: message.slice(0, 60), messages: [], updated_at: new Date().toISOString() };
+    assistantConvs.unshift(c);
+  }
+  const now = new Date().toISOString();
+  c.messages.push({ id: `m-${c.messages.length + 1}`, role: 'user', text: message, created_at: now }, { id: `m-${c.messages.length + 2}`, role: 'assistant', text: answer, steps, sources, created_at: now });
+  c.updated_at = now;
+  return { conversation_id: c.id, message_id: c.messages[c.messages.length - 1].id };
+}
 let sla: T.SLA = { critical: 7, high: 30, medium: 90, low: 0 };
 let fixSettings: T.FixSettings = { auto: false, levels: ['critical'], kev: true, max_open: 5 };
 const fixes: T.FixPR[] = [
@@ -586,6 +601,32 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       jiraLinks.push(link);
       return { issue_key: link.issue_key, url: link.url, status: 'created' };
     }
+    case 'GET /assistant/briefing':
+      return {
+        enabled: assistantEnabled,
+        configured: true,
+        items: [
+          { tone: 'red', text: '1 pull request is blocked: acme/payments-api #482 (malware)', url: `/pull-requests/${P2.id}/482` },
+          { tone: 'amber', text: 'minimist 1.2.5 is past its fix deadline', url: '/fix-queue' },
+          { tone: 'green', text: '7 of 9 vulnerabilities fixed on time this month', url: '/dashboard' },
+        ],
+      } satisfies T.AssistantBriefing;
+    case 'GET /assistant/conversations':
+      return { items: assistantConvs.map(({ id, title, updated_at }) => ({ id, title, updated_at })) };
+    case 'GET /assistant/conversations/:': {
+      const c = assistantConvs.find((x) => x.id === seg[2]);
+      if (!c) throw new MockNotFound();
+      return { id: c.id, title: c.title, messages: c.messages };
+    }
+    case 'DELETE /assistant/conversations/:': {
+      const i = assistantConvs.findIndex((x) => x.id === seg[2]);
+      if (i >= 0) assistantConvs.splice(i, 1);
+      return null;
+    }
+    case 'GET /settings/assistant':
+    case 'PUT /settings/assistant':
+      if (method === 'PUT') assistantEnabled = Boolean((body as { enabled: boolean }).enabled);
+      return { enabled: assistantEnabled, configured: true, provider: 'gemini', model: 'gemini-flash-lite-latest', usage_30d: { questions: 42, input_tokens: 183000, output_tokens: 21000 } } satisfies T.AssistantSettings;
     case 'GET /vaults':
       return { items: projects.map((p) => { const v = vaultState(p.id); return { project_id: p.id, project: p.name, source: 'github', initialized: v.initialized, has_access: !!v.my_key, items: v.items.length, members: v.members.filter((m) => m.has_access).length, leaks: v.items.reduce((n, i) => n + i.leaks.length, 0), updated_at: v.items[0]?.updated_at ?? null }; }) };
     case 'GET /vault/me':
@@ -783,7 +824,7 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
 function isStatic(root: string, i: number, s: string) {
   const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review', 'fixes', 'vault', 'init', 'grants', 'rotate', 'items'];
   if (root === 'admin' && i === 1) return true;
-  if ((root === 'pull-requests' && s === 'summary') || (root === 'components' && s === 'health') || root === 'settings') return true;
+  if ((root === 'pull-requests' && s === 'summary') || (root === 'components' && s === 'health') || (root === 'assistant' && i === 1) || root === 'settings') return true;
   if (root === 'policy' || root === 'query' || root === 'jira' || root === 'vault') return true;
   return words.includes(s) && i !== 1;
 }
