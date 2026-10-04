@@ -6,7 +6,8 @@ import { MobileNav } from '@/components/landing/mobile-nav';
 import { ArrowRight, ArrowUpRight, Bot, Check, ChevronRight, Database, GitPullRequest, Laptop, Workflow } from 'lucide-react';
 import { Logo, GitHubIcon } from '@/components/icons';
 import { Layers } from '@/components/landing/layers';
-import { HeroFlow, HeroPRCard, HeroTerminal } from '@/components/landing/hero-flow';
+import { HeroPRCard, HeroTerminal } from '@/components/landing/hero-flow';
+import { ThreatSphere } from '@/components/landing/threat-sphere';
 import { TryIt } from '@/components/landing/try-it';
 import { Incidents } from '@/components/landing/incidents';
 import { getCtx } from '@/lib/session';
@@ -210,11 +211,10 @@ export default async function Home() {
                 <ChevronRight className="size-3.5" />
               </a>
               <h1 className="lp-display mt-7 text-[44px] leading-[1.04] md:text-[66px]">
-                Most of your code was written by <span className="lp-gradient-text">strangers.</span>
+                Your software supply chain is your <span className="lp-gradient-text">attack surface.</span>
               </h1>
               <p className="mt-6 max-w-xl text-[18px] leading-relaxed text-[var(--lp-fg)]/90">
-                Every package you install runs with your permissions. depguard maps every direct and transitive dependency, stops the malicious and vulnerable ones before they run, and shows exactly
-                how they got in.
+                Every dependency is a potential entry point. depguard maps the paths into your codebase, catches malicious packages before execution, and gives security teams the control to stop them.
               </p>
               <ul className="mt-7 flex max-w-xl flex-wrap gap-2">
                 {['Malware', 'CVEs & attack paths', 'Typosquats', 'Licenses', 'AI code review'].map((c) => (
@@ -242,12 +242,12 @@ export default async function Home() {
               </p>
             </div>
 
-            <div className="relative mx-auto w-full max-w-[640px] lg:mx-0 xl:pt-[4.75rem]">
+            <div className="relative mx-auto w-full max-w-[640px] lg:mx-0 xl:pt-[2rem]">
               <div className="absolute top-0 right-0 z-10 hidden xl:block">
                 <HeroPRCard />
               </div>
-              <HeroFlow />
-              <div className="relative z-10 -mt-4 flex justify-center lg:justify-start">
+              <ThreatSphere />
+              <div className="relative z-10 -mt-20 flex justify-center lg:justify-start">
                 <HeroTerminal />
               </div>
             </div>

@@ -198,6 +198,22 @@
 
 .lp .lp-stat { background: linear-gradient(180deg, rgb(167 139 250 / 8%), transparent); }
 
+/* Three.js cyber-defense hero. The canvas stays decorative; the real message and actions remain HTML. */
+.lp .lp-threat-sphere {
+  isolation: isolate;
+  cursor: crosshair;
+  background: radial-gradient(circle at center, rgb(139 92 246 / 14%), transparent 52%);
+  mask-image: radial-gradient(circle at center, black 48%, transparent 74%);
+  -webkit-mask-image: radial-gradient(circle at center, black 48%, transparent 74%);
+}
+.lp .lp-threat-sphere canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; z-index: 1; }
+.lp .lp-threat-reticle { z-index: 0; border: 1px solid rgb(196 181 253 / 16%); box-shadow: 0 0 0 36px rgb(167 139 250 / 2%), 0 0 70px rgb(139 92 246 / 18%); }
+.lp .lp-threat-reticle::before, .lp .lp-threat-reticle::after { content: ''; position: absolute; background: rgb(196 181 253 / 18%); }
+.lp .lp-threat-reticle::before { left: 50%; top: -24%; width: 1px; height: 148%; }
+.lp .lp-threat-reticle::after { top: 50%; left: -24%; width: 148%; height: 1px; }
+.lp .lp-threat-label { z-index: 2; color: rgb(229 236 246 / 55%); font-size: 9px; letter-spacing: .12em; line-height: 1.5; }
+.lp .lp-threat-core { z-index: 2; border: 1px solid rgb(196 181 253 / 48%); background: rgb(10 8 20 / 75%); box-shadow: 0 0 30px rgb(139 92 246 / 42%), inset 0 0 18px rgb(167 139 250 / 12%); letter-spacing: .16em; }
+
 @media (prefers-reduced-motion: reduce) {
   .lp .lp-aurora, .lp .lp-gradient-text, .lp .lp-wire, .lp .lp-core-glow, .lp .lp-orbit, .lp .lp-ping, .lp .lp-float, .lp .lp-marquee, .lp .lp-caret { animation: none; }
   .lp .lp-node, .lp .lp-line { opacity: 1; animation: none; }
