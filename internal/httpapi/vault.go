@@ -500,3 +500,28 @@ func (s *Server) deleteVaultItem(w http.ResponseWriter, r *http.Request) error {
 	}
 	return s.getVault(w, r)
 }
+
+// listVaults is the Secrets overview: every project with its vault status for the caller.
+func (s *Server) listVaults(w http.ResponseWriter, r *http.Request) error {
+	var out json.RawMessage
+	err := s.tx(r, func(tx pgx.Tx) error {
+		uid, err := vaultUser(r, tx)
+		if err != nil {
+			return err
+		}
+		out, err = one(r.Context(), tx, `SELECT COALESCE(jsonb_agg(jsonb_build_object('project_id', p.id, 'project', p.name, 'source', p.source,
+			'initialized', EXISTS (SELECT 1 FROM vault_keys k WHERE k.project_id = p.id),
+			'has_access', EXISTS (SELECT 1 FROM vault_keys k WHERE k.project_id = p.id AND k.user_id = $1),
+			'items', (SELECT count(*) FROM vault_items i WHERE i.project_id = p.id),
+			'members', (SELECT count(*) FROM vault_keys k WHERE k.project_id = p.id),
+			'leaks', (SELECT count(*) FROM vault_items i, jsonb_array_elements(i.fingerprints) fp
+				WHERE i.project_id = p.id AND EXISTS (SELECT 1 FROM pr_reviews rv WHERE rv.findings @> jsonb_build_array(jsonb_build_object('fingerprint', fp->>'sha256')))),
+			'updated_at', (SELECT max(updated_at) FROM vault_items i WHERE i.project_id = p.id))
+			ORDER BY (SELECT count(*) FROM vault_items i WHERE i.project_id = p.id) DESC, p.name), '[]') FROM projects p`, uid)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	return writeJSON(w, http.StatusOK, map[string]any{"items": out})
+}

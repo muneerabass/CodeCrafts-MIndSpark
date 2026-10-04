@@ -586,6 +586,8 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       jiraLinks.push(link);
       return { issue_key: link.issue_key, url: link.url, status: 'created' };
     }
+    case 'GET /vaults':
+      return { items: projects.map((p) => { const v = vaultState(p.id); return { project_id: p.id, project: p.name, source: 'github', initialized: v.initialized, has_access: !!v.my_key, items: v.items.length, members: v.members.filter((m) => m.has_access).length, leaks: v.items.reduce((n, i) => n + i.leaks.length, 0), updated_at: v.items[0]?.updated_at ?? null }; }) };
     case 'GET /vault/me':
       return { member: vaultMe };
     case 'PUT /vault/me': {

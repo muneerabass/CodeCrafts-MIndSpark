@@ -512,7 +512,9 @@ test('audit log: entries, filter, CSV export', async ({ page }) => {
 
 test('vault: passphrase, create, encrypt and view a .env, unlock again, approve a teammate, rotate on removal', async ({ page }) => {
   test.setTimeout(120_000); // PBKDF2 with 600k iterations runs a few times
-  await page.goto('/projects/01JB7Q3M1K8Z4XW2N5R6T9V0AA?tab=secrets');
+  await page.goto('/dashboard');
+  await page.getByRole('link', { name: 'Secrets', exact: true }).click();
+  await page.getByRole('listitem').filter({ hasText: 'acme/storefront' }).getByRole('link', { name: /Create vault|Open vault/ }).click();
   await expect(page.getByRole('heading', { name: 'Project secrets' })).toBeVisible();
   await page.getByLabel('Passphrase (12+ characters)').fill('correct horse battery');
   await page.getByLabel('Repeat it').fill('correct horse battery');
@@ -554,4 +556,6 @@ test('vault: passphrase, create, encrypt and view a .env, unlock again, approve 
   await expect(page.getByText('grace@acme.dev removed; vault key rotated')).toBeVisible();
   await page.getByLabel('Vault items').getByRole('button', { name: 'View' }).click(); // still decrypts with the new key
   await expect(page.getByLabel('Contents of .env.production').getByText('STRIPE_SECRET_KEY')).toBeVisible();
+  await page.goto('/secrets');
+  await expect(page.getByRole('listitem').filter({ hasText: 'acme/storefront' }).getByText(/1 file · .*1 with access/)).toBeVisible();
 });

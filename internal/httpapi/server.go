@@ -95,6 +95,7 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/v1/projects/{id}/versions/{vid}/licenses", read(s.versionLicenses))
 	mux.Handle("GET /api/v1/projects/{id}/sbom", read(s.projectSBOM))
 	mux.Handle("GET /api/v1/vault/me", read(s.vaultMe))
+	mux.Handle("GET /api/v1/vaults", read(s.listVaults))
 	mux.Handle("PUT /api/v1/vault/me", read(s.putVaultMe)) // every member registers their own key
 	mux.Handle("GET /api/v1/projects/{id}/vault", read(s.getVault))
 	mux.Handle("GET /api/v1/projects/{id}/vault/items/{item}", read(s.getVaultItem))

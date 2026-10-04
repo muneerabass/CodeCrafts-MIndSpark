@@ -113,6 +113,10 @@ INSERT INTO projects (id, tenant_id, source, name, url, gh_repo_id) VALUES ('pv'
 		t.Fatalf("owner after rotation: %v", err)
 	}
 
+	if l := listOf(expect(t, do(t, "GET", "/api/v1/vaults", owner, nil), 200).body["items"]); len(l) != 1 || mapOf(l[0])["items"].(float64) != 1 || mapOf(l[0])["has_access"] != true || mapOf(l[0])["leaks"].(float64) != 1 {
+		t.Fatalf("vaults overview %v", l)
+	}
+
 	// CLI (API key of the owner): the whole vault with ciphertext, audited.
 	k, err := auth.CreateKey(ctx, tdb.App, "tv", "u-owner", "cli", nil)
 	if err != nil {

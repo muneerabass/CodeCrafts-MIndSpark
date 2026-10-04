@@ -37,6 +37,7 @@ import {
   UserPlus,
   Users,
   Video,
+  FileKey2,
   ListOrdered,
   ScrollText,
   Wand2,
@@ -84,6 +85,7 @@ const APP: Group[] = [
     items: [
       { href: '/package-analysis', label: 'Package Analysis', icon: FileSearch },
       { href: '/fix-queue', label: 'Fix First', icon: ListOrdered },
+      { href: '/secrets', label: 'Secrets', icon: FileKey2 },
       { href: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
       { href: '/policy/violations', label: 'Policy Violations', icon: FileChartLine },
       { href: '/endpoints', label: 'Endpoints', icon: Monitor },

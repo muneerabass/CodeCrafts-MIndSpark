@@ -94,13 +94,13 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
         <Stat icon={GitBranch} label="Versions Available" value={summary.versions_available} />
       </dl>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
-        <nav className="flex gap-1 rounded-lg bg-muted p-1" aria-label="Project sections">
+        <nav className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1" aria-label="Project sections">
           {TABS.map((t) => (
             <Link
               key={t.key}
               href={tabHref(t.key)}
               aria-current={t.key === tab ? 'page' : undefined}
-              className={cn('rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground', t.key === tab && 'bg-background font-medium text-foreground shadow-xs')}
+              className={cn('shrink-0 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground', t.key === tab && 'bg-background font-medium text-foreground shadow-xs')}
             >
               {t.label}
             </Link>
