@@ -100,8 +100,10 @@ func runScan(args []string) (int, error) {
 	apiURL, apiKey := addClientFlags(fs)
 	project := fs.String("project", "", "project name (default: CI repository or directory name)")
 	ver := fs.String("version", "", "version/branch (default: CI branch or git branch)")
-	source := fs.String("source", "", "cli|gitlab|bitbucket|github (default: detected from CI env)")
+	source := fs.String("source", "", "cli|gitlab|bitbucket|github|container (default: detected from CI env)")
 	dir := fs.String("dir", ".", "directory to search for lockfiles")
+	image := fs.String("image", "", "scan a container image instead of a directory (needs syft), e.g. ghcr.io/acme/api:1.4")
+	sbomFile := fs.String("sbom", "", "scan an SBOM file (CycloneDX *.cdx.json or SPDX *.spdx.json) instead of a directory")
 	failOn := fs.Bool("fail-on-violation", false, "exit 1 when the scan conclusion is failure")
 	format := fs.String("format", "md", "output: md (PR-style summary) | json | report (full risk report)")
 	reportOut := fs.String("report-out", "", "also save the full report to this file (.md, .json or .html)")
@@ -131,6 +133,7 @@ func runScan(args []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	userProject, userVer, userSource := *project, *ver, *source
 	src, proj, branch := detectCI(root)
 	if *source == "" {
 		*source = src
@@ -141,12 +144,40 @@ func runScan(args []string) (int, error) {
 	if *ver == "" {
 		*ver = branch
 	}
-	files, err := findLockfiles(root)
-	if err != nil {
-		return 0, err
-	}
-	if !slices.ContainsFunc(files, isLockfile) {
-		return 0, fmt.Errorf("no supported lockfiles found under %s", root)
+	var files []string
+	switch {
+	case *image != "" && *sbomFile != "":
+		return 0, errors.New("use either --image or --sbom")
+	case *image != "":
+		tmp, err := os.MkdirTemp("", "depguard-image-")
+		if err != nil {
+			return 0, err
+		}
+		defer os.RemoveAll(tmp)
+		f, err := imageSBOM(*image, tmp)
+		if err != nil {
+			return 0, err
+		}
+		name, tag := imageName(*image)
+		// The image, not the surrounding repository, names the project.
+		root, files, *source = tmp, []string{f}, firstNonEmpty(userSource, "container")
+		*project, *ver = firstNonEmpty(userProject, name), firstNonEmpty(userVer, tag)
+	case *sbomFile != "":
+		abs, err := filepath.Abs(*sbomFile)
+		if err != nil {
+			return 0, err
+		}
+		if !isSBOM(filepath.Base(abs)) {
+			return 0, errors.New("--sbom needs a CycloneDX (*.cdx.json, bom.json) or SPDX (*.spdx.json) file")
+		}
+		root, files = filepath.Dir(abs), []string{filepath.Base(abs)}
+	default:
+		if files, err = findLockfiles(root); err != nil {
+			return 0, err
+		}
+		if !slices.ContainsFunc(files, isLockfile) {
+			return 0, fmt.Errorf("no supported lockfiles found under %s", root)
+		}
 	}
 	fields := map[string]string{"project": *project, "version": *ver, "source": *source}
 	if *projectLicense != "" {

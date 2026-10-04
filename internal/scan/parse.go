@@ -4,8 +4,11 @@ package scan
 
 import (
 	"fmt"
+	"os"
+	"regexp"
 
 	"github.com/safedep/vet/pkg/models"
+	"github.com/safedep/vet/pkg/parser"
 	"github.com/safedep/vet/pkg/readers"
 )
 
@@ -23,6 +26,11 @@ type Lockfile struct {
 func Parse(lockfiles []Lockfile) ([]*models.PackageManifest, error) {
 	var out []*models.PackageManifest
 	for _, lf := range lockfiles {
+		if lf.As == parser.LockfileAsBomCycloneDx {
+			if err := downgradeCycloneDX(lf.Path); err != nil {
+				return nil, fmt.Errorf("read %s: %w", lf.RepoPath, err)
+			}
+		}
 		r, err := readers.NewLockfileReader(readers.LockfileReaderConfig{
 			Lockfiles:  []string{lf.Path},
 			LockfileAs: lf.As,
@@ -45,4 +53,20 @@ func Parse(lockfiles []Lockfile) ([]*models.PackageManifest, error) {
 		}
 	}
 	return out, nil
+}
+
+var newerCycloneDX = regexp.MustCompile(`("specVersion"\s*:\s*")1\.(7|8|9)(")`)
+
+// downgradeCycloneDX relabels CycloneDX 1.7+ (syft's default) as 1.6, the
+// newest version vet's decoder accepts; the component list is unchanged.
+// ponytail: drop when vet moves to cyclonedx-go >= v0.12.
+func downgradeCycloneDX(p string) error {
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return err
+	}
+	if loc := newerCycloneDX.FindIndex(b); loc != nil && loc[0] < 4096 {
+		return os.WriteFile(p, newerCycloneDX.ReplaceAll(b, []byte("${1}1.6${3}")), 0o600)
+	}
+	return nil
 }

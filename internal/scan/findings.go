@@ -169,3 +169,15 @@ func Diff(base, head []*models.PackageManifest) []Change {
 	}
 	return out
 }
+
+// SBOMFormat returns vet's --lockfile-as value for SBOM files (*.cdx.json,
+// *.spdx.json), "" for anything else.
+func SBOMFormat(repoPath string) string {
+	switch b := path.Base(repoPath); {
+	case strings.HasSuffix(b, ".cdx.json") || b == "bom.json":
+		return parser.LockfileAsBomCycloneDx
+	case strings.HasSuffix(b, ".spdx.json"):
+		return parser.LockfileAsBomSpdx
+	}
+	return ""
+}

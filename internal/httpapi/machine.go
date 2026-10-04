@@ -25,7 +25,7 @@ const (
 	maxUploadTotal = 50 << 20
 )
 
-var sources = map[string]bool{"cli": true, "gitlab": true, "bitbucket": true, "github": true}
+var sources = map[string]bool{"cli": true, "gitlab": true, "bitbucket": true, "github": true, "container": true}
 
 // cleanRepoPath validates a lockfile path relative to the repository root.
 func cleanRepoPath(p string) (string, error) {
@@ -121,7 +121,7 @@ func (s *Server) uploadScan(w http.ResponseWriter, r *http.Request) error {
 		version = "main"
 	}
 	if project == "" || !sources[source] {
-		return badRequest("project is required; source must be cli, gitlab, bitbucket or github")
+		return badRequest("project is required; source must be cli, gitlab, bitbucket, github or container")
 	}
 	if len(files) == 0 {
 		return badRequest("at least one lockfile is required")

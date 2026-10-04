@@ -226,7 +226,7 @@ func writeFiles(dir string, files []file) ([]scan.Lockfile, []string) {
 			notes = append(notes, "skipped "+f.Path+": "+err.Error())
 			continue
 		}
-		out = append(out, scan.Lockfile{Path: filepath.Join(dir, p), RepoPath: f.Path})
+		out = append(out, scan.Lockfile{Path: filepath.Join(dir, p), RepoPath: f.Path, As: scan.SBOMFormat(f.Path)})
 	}
 	return out, notes
 }

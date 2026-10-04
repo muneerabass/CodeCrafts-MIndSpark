@@ -26,7 +26,8 @@ func (d Deps) fullScan(ctx context.Context, tenant, projectID, versionID, scanID
 	}
 	for _, f := range files {
 		in.aux[f.Path] = f.Data
-		if scan.IsManifest(f.Path) {
+		// Repo files arrive pre-filtered by fullScanManifests; uploads may also be SBOMs (container images).
+		if scan.IsManifest(f.Path) || scan.SBOMFormat(f.Path) != "" {
 			lockfiles = append(lockfiles, f)
 		}
 	}
