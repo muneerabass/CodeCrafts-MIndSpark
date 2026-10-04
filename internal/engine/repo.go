@@ -57,6 +57,9 @@ func (d Deps) fullScan(ctx context.Context, tenant, projectID, versionID, scanID
 	})
 	if err == nil {
 		d.enqueueGuarddog(ctx, tenant, scanID, findings)
+		if e := d.enqueue(ctx, jobs.Notify{TenantID: tenant, ScanID: scanID}, &river.InsertOpts{MaxAttempts: 4}); e != nil {
+			d.Logger.Warn("queue alerts", "scan", scanID, "err", e)
+		}
 	}
 	return err
 }

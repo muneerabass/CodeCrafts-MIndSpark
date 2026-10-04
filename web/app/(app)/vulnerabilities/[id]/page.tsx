@@ -9,6 +9,9 @@ import { Chip, RiskBadge } from '@/components/badges';
 import { Markdown } from '@/components/markdown';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AffectedTable } from '../table';
+import { JiraButton } from '@/components/jira-button';
+import { jiraState } from '@/lib/jira';
+import { canWrite, requireOrg } from '@/lib/session';
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   return { title: decodeURIComponent((await params).id) };
@@ -19,10 +22,14 @@ export default async function VulnerabilityPage({ params, searchParams }: { para
   const sp = await searchParams;
   const path = `/vulnerabilities/${encodeURIComponent(id)}`;
   const [v, affected, reach] = await Promise.all([apiOr404<VulnerabilityDetail>(path), api<List<AffectedComponent>>(`${path}/components`, { query: listQuery(sp, [], 10) }), api<VulnPaths>(`${path}/paths`)]);
+  const jira = await jiraState(canWrite((await requireOrg()).role));
 
   return (
     <>
-      <PageHeader crumbs={[{ label: 'Vulnerabilities', href: '/vulnerabilities' }, { label: v.id }]} actions={null} />
+      <PageHeader
+        crumbs={[{ label: 'Vulnerabilities', href: '/vulnerabilities' }, { label: v.id }]}
+        actions={!v.id.startsWith('MAL-') && affected.total > 0 ? <JiraButton refKind="vuln" refId={v.id} link={jira.find('vuln', v.id)} enabled={jira.enabled} /> : null}
+      />
       <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
         <div>
           <div className="flex flex-wrap items-center gap-3">

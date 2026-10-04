@@ -247,6 +247,15 @@ function filterPRs(q: URLSearchParams, project?: string) {
     .map(prRow);
 }
 
+let notif: T.NotificationsResponse = {
+  settings: { email_to: ['security@acme.dev'], events: { malware: true, critical: true, kev: true, pr_blocked: true, overdue: true }, digest: { enabled: true, weekday: 1 }, jira: { base_url: '', email: '', project_key: '', issue_type: 'Task' } },
+  slack_configured: false,
+  slack_hint: '',
+  jira_token_set: false,
+  email_configured: true,
+  secrets_enabled: true,
+};
+const jiraLinks: T.JiraLink[] = [{ ref_kind: 'vuln', ref: 'GHSA-9wv6-86v2-598j', issue_key: 'SEC-41', url: 'https://acme.atlassian.net/browse/SEC-41', created_by: 'ada@acme.dev', created_at: iso(2) }];
 let sla: T.SLA = { critical: 7, high: 30, medium: 90, low: 0 };
 let fixSettings: T.FixSettings = { auto: false, levels: ['critical'], kev: true, max_open: 5 };
 const fixes: T.FixPR[] = [
@@ -493,6 +502,35 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       for (const x of all) x.share = Math.round(((cum += x.weight) / total) * 1000) / 10;
       return { items: all, total: all.length, total_weight: total, summary: { overdue: all.filter((x) => x.overdue).length, due_soon: 0, fixable: all.length }, sla } satisfies T.FixQueue;
     }
+    case 'GET /settings/notifications':
+      return notif;
+    case 'PUT /settings/notifications': {
+      const x = b as { settings: T.NotificationSettings; slack_webhook_url?: string; jira_token?: string };
+      if (x.slack_webhook_url !== undefined && x.slack_webhook_url !== '' && !x.slack_webhook_url.startsWith('https://hooks.slack.com/')) throw new Error('Slack webhook URL must start with https://hooks.slack.com/');
+      notif = {
+        ...notif,
+        settings: x.settings,
+        slack_configured: x.slack_webhook_url === undefined ? notif.slack_configured : x.slack_webhook_url !== '',
+        slack_hint: x.slack_webhook_url ? '…' + x.slack_webhook_url.slice(-6) : x.slack_webhook_url === '' ? '' : notif.slack_hint,
+        jira_token_set: x.jira_token === undefined ? notif.jira_token_set : x.jira_token !== '',
+      };
+      return notif;
+    }
+    case 'POST /settings/notifications/test': {
+      const c = (b as { channel: string }).channel;
+      if (c === 'slack' && !notif.slack_configured) throw new Error('add a Slack webhook URL first');
+      return { status: 'sent' };
+    }
+    case 'GET /jira/links':
+      return paginate(jiraLinks, q);
+    case 'POST /jira/issues': {
+      const x = b as { ref_kind: 'vuln' | 'package'; ref: string };
+      const found = jiraLinks.find((l) => l.ref_kind === x.ref_kind && l.ref === x.ref);
+      if (found) return { issue_key: found.issue_key, url: found.url, status: 'exists' };
+      const link: T.JiraLink = { ...x, issue_key: `SEC-${42 + jiraLinks.length}`, url: `https://acme.atlassian.net/browse/SEC-${42 + jiraLinks.length}`, created_by: 'ada@acme.dev', created_at: new Date().toISOString() };
+      jiraLinks.push(link);
+      return { issue_key: link.issue_key, url: link.url, status: 'created' };
+    }
     case 'GET /settings/sla':
       return sla;
     case 'PUT /settings/sla':
@@ -645,7 +683,7 @@ function isStatic(root: string, i: number, s: string) {
   const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review', 'fixes'];
   if (root === 'admin' && i === 1) return true;
   if ((root === 'pull-requests' && s === 'summary') || root === 'settings') return true;
-  if (root === 'policy' || root === 'query') return true;
+  if (root === 'policy' || root === 'query' || root === 'jira') return true;
   return words.includes(s) && i !== 1;
 }
 

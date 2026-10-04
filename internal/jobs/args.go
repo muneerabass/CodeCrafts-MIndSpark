@@ -109,3 +109,25 @@ type CreateFixPR struct {
 }
 
 func (CreateFixPR) Kind() string { return "create_fix_pr" }
+
+// Notify sends the team's alerts for a finished full scan (ScanID) or a
+// blocked pull request (PRID).
+type Notify struct {
+	TenantID string `json:"tenant_id"`
+	ScanID   string `json:"scan_id,omitempty"`
+	PRID     string `json:"pr_id,omitempty"`
+}
+
+func (Notify) Kind() string { return "notify" }
+
+// DailyAlerts queues TenantDaily for every active tenant (periodic).
+type DailyAlerts struct{}
+
+func (DailyAlerts) Kind() string { return "daily_alerts" }
+
+// TenantDaily sends a tenant's overdue-deadline alert and, on its digest day, the weekly digest.
+type TenantDaily struct {
+	TenantID string `json:"tenant_id"`
+}
+
+func (TenantDaily) Kind() string { return "tenant_daily" }

@@ -5,6 +5,7 @@ package teamcfg
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -86,4 +87,88 @@ func (s SLA) Days(risk string) int {
 		return s.Low
 	}
 	return 0
+}
+
+// Notifications configures alerts, the weekly digest and Jira (secrets are
+// stored separately, encrypted).
+type Notifications struct {
+	EmailTo []string `json:"email_to"`
+	Events  struct {
+		Malware   bool `json:"malware"`    // malicious package found
+		Critical  bool `json:"critical"`   // new critical vulnerability
+		KEV       bool `json:"kev"`        // new actively exploited vulnerability
+		PRBlocked bool `json:"pr_blocked"` // a pull request is blocked by policy
+		Overdue   bool `json:"overdue"`    // a vulnerability passed its fix deadline
+	} `json:"events"`
+	Digest struct {
+		Enabled bool `json:"enabled"`
+		Weekday int  `json:"weekday"` // 0 = Sunday … 6 = Saturday (UTC)
+	} `json:"digest"`
+	Jira struct {
+		BaseURL    string `json:"base_url"` // https://<site>.atlassian.net
+		Email      string `json:"email"`
+		ProjectKey string `json:"project_key"`
+		IssueType  string `json:"issue_type"`
+	} `json:"jira"`
+}
+
+func DefaultNotifications() Notifications {
+	var n Notifications
+	n.EmailTo = []string{}
+	n.Events.Malware, n.Events.Critical, n.Events.KEV, n.Events.PRBlocked, n.Events.Overdue = true, true, true, true, true
+	n.Digest.Enabled, n.Digest.Weekday = true, 1
+	n.Jira.IssueType = "Task"
+	return n
+}
+
+func ParseNotifications(raw []byte) Notifications {
+	n := DefaultNotifications()
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &n)
+	}
+	if n.EmailTo == nil {
+		n.EmailTo = []string{}
+	}
+	return n
+}
+
+var (
+	emailRe      = regexp.MustCompile(`^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$`)
+	jiraSiteRe   = regexp.MustCompile(`^https://[a-z0-9][a-z0-9-]*\.atlassian\.net$`)
+	jiraProjects = regexp.MustCompile(`^[A-Z][A-Z0-9_]{1,9}$`)
+)
+
+func (n *Notifications) Validate() error {
+	if len(n.EmailTo) > 20 {
+		return fmt.Errorf("at most 20 email recipients")
+	}
+	for i, e := range n.EmailTo {
+		n.EmailTo[i] = strings.TrimSpace(e)
+		if len(n.EmailTo[i]) > 254 || !emailRe.MatchString(n.EmailTo[i]) {
+			return fmt.Errorf("%q is not an email address", e)
+		}
+	}
+	if n.Digest.Weekday < 0 || n.Digest.Weekday > 6 {
+		return fmt.Errorf("digest weekday must be 0-6")
+	}
+	j := &n.Jira
+	j.BaseURL = strings.TrimRight(strings.TrimSpace(j.BaseURL), "/")
+	if j.BaseURL != "" && !jiraSiteRe.MatchString(j.BaseURL) {
+		return fmt.Errorf("Jira site must look like https://your-site.atlassian.net")
+	}
+	if j.ProjectKey != "" && !jiraProjects.MatchString(j.ProjectKey) {
+		return fmt.Errorf("Jira project key must be like SEC or APPSEC")
+	}
+	if j.Email != "" && !emailRe.MatchString(j.Email) {
+		return fmt.Errorf("Jira email is not an email address")
+	}
+	if len(j.IssueType) > 40 {
+		return fmt.Errorf("issue type is too long")
+	}
+	return nil
+}
+
+// JiraReady reports whether Jira fields are filled in (the token is checked separately).
+func (n Notifications) JiraReady() bool {
+	return n.Jira.BaseURL != "" && n.Jira.Email != "" && n.Jira.ProjectKey != ""
 }

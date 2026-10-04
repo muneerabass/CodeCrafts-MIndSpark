@@ -517,3 +517,19 @@ export type FixQueueItem = {
   share: number;
 };
 export type FixQueue = { items: FixQueueItem[]; total: number; total_weight: number; summary: { overdue: number; due_soon: number; fixable: number }; sla: SLA };
+
+export type NotificationSettings = {
+  email_to: string[];
+  events: { malware: boolean; critical: boolean; kev: boolean; pr_blocked: boolean; overdue: boolean };
+  digest: { enabled: boolean; weekday: number };
+  jira: { base_url: string; email: string; project_key: string; issue_type: string };
+};
+export type NotificationsResponse = {
+  settings: NotificationSettings;
+  slack_configured: boolean;
+  slack_hint: string;
+  jira_token_set: boolean;
+  email_configured: boolean;
+  secrets_enabled: boolean;
+};
+export type JiraLink = { ref_kind: 'vuln' | 'package'; ref: string; issue_key: string; url: string; created_by: string; created_at: string };

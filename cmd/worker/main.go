@@ -23,6 +23,7 @@ import (
 	"github.com/depguard/depguard/internal/license"
 	"github.com/depguard/depguard/internal/llm"
 	"github.com/depguard/depguard/internal/malysis"
+	"github.com/depguard/depguard/internal/notify"
 	"github.com/depguard/depguard/internal/suspicious"
 	"github.com/palantir/go-githubapp/githubapp"
 	"github.com/riverqueue/river"
@@ -113,12 +114,14 @@ func run(log *slog.Logger) error {
 		MaxGuarddogJobs:    guarddogJobs,
 		Malysis:            mal,
 		LLM:                llm.New(os.Getenv("AWS_BEARER_TOKEN_BEDROCK"), llm.ParseTargets(os.Getenv("DEPGUARD_AI_MODELS"))),
+		SMTP:               notify.SMTPFromEnv(),
 		Logger:             log,
 	})
 	feeds.AddWorkers(workers, pool)
 	engine.AddCleanupWorkers(workers, pool)
 	periodic := feeds.PeriodicJobs()
 	periodic = append(periodic, engine.CleanupPeriodicJobs()...)
+	periodic = append(periodic, engine.AlertPeriodicJobs()...)
 	if clients != nil {
 		ghapp.AddWorkers(workers, ghcfg)
 		periodic = append(periodic, ghapp.PeriodicJobs()...)

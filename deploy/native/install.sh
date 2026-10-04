@@ -49,7 +49,7 @@ install -d -m 755 /opt/depguard /opt/depguard/bin /etc/caddy /var/cache/depguard
 log "Secrets"
 SECRETS=/etc/depguard/secrets.env
 touch "$SECRETS"; chmod 600 "$SECRETS"
-for k in OWNER_DB_PASSWORD APP_DB_PASSWORD QUERY_DB_PASSWORD WEB_DB_PASSWORD SERVICE_JWT_SECRET; do
+for k in OWNER_DB_PASSWORD APP_DB_PASSWORD QUERY_DB_PASSWORD WEB_DB_PASSWORD SERVICE_JWT_SECRET DEPGUARD_SECRET_KEY; do
   grep -q "^$k=" "$SECRETS" || echo "$k=$(openssl rand -hex 32)" >> "$SECRETS"
 done
 # shellcheck disable=SC1090
@@ -108,6 +108,14 @@ DEPGUARD_DATA_DIR=/var/lib/depguard
 LOG_LEVEL=info
 AI_REVIEW_CONFIGURED=$([ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ] && echo 1 || echo 0)
 DEPGUARD_AI_MODELS=${DEPGUARD_AI_MODELS:-}
+# Encrypts team secrets stored in the database (Slack webhook, Jira token).
+DEPGUARD_SECRET_KEY=$DEPGUARD_SECRET_KEY
+# Alert and digest emails (same mailbox as the web app's invitations).
+SMTP_HOST=${SMTP_HOST:-}
+SMTP_PORT=${SMTP_PORT:-587}
+SMTP_USER=${SMTP_USER:-}
+SMTP_PASS=${SMTP_PASS:-}
+SMTP_FROM="${SMTP_FROM:-depguard <no-reply@$APP_HOST>}"
 ENV
 # The Bedrock API key is read by the worker only (AI review of pull requests).
 cat > /etc/depguard/ai.env <<ENV

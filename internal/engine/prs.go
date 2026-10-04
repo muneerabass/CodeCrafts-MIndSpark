@@ -212,6 +212,9 @@ func (d Deps) refreshPR(ctx context.Context, gh *github.Client, tenant, prID str
 	}
 	if blocking {
 		labelSet["blocked"] = true
+		if e := d.enqueue(ctx, jobs.Notify{TenantID: tenant, PRID: pr.ID}, &river.InsertOpts{MaxAttempts: 4}); e != nil {
+			d.Logger.Warn("queue PR alert", "pr", pr.ID, "err", e)
+		}
 	}
 	if rank.Level == prrank.Clean && pr.LatestScanID != "" {
 		labelSet["clean"] = true

@@ -8,6 +8,8 @@ import { DueBadge, RiskBadge } from '@/components/badges';
 import { EcosystemTile } from '@/components/icons';
 import { CopyButton } from '@/components/client';
 import { FixButton } from '@/components/fix-button';
+import { JiraButton } from '@/components/jira-button';
+import { jiraState } from '@/lib/jira';
 import { cn } from '@/lib/utils';
 
 export const metadata = { title: 'Fix first' };
@@ -18,6 +20,7 @@ export default async function FixQueuePage() {
   const { role } = await requireOrg();
   const [q, fixes] = await Promise.all([api<FixQueue>('/fix-queue'), api<List<FixPR>>('/fixes', { query: { page_size: 50 } })]);
   const edit = canWrite(role);
+  const jira = await jiraState(edit);
   const top = q.items.slice(0, 5);
   const topShare = top.length ? top[top.length - 1].share : 0;
   const fixOf = (name: string, version: string, project: string, manifest: string) =>
@@ -104,6 +107,7 @@ export default async function FixQueuePage() {
                           <CopyButton value={it.command} />
                         </p>
                       )}
+                      <JiraButton refKind="package" refId={`${it.ecosystem}/${it.name}@${it.version}`} link={jira.find('package', `${it.ecosystem}/${it.name}@${it.version}`)} enabled={jira.enabled} />
                     </div>
                     <ul className="space-y-1.5 text-sm" aria-label={`Projects using ${it.name}`}>
                       {it.projects.map((p) => (

@@ -389,3 +389,35 @@ test('fix first queue, deadlines on vulnerabilities and dashboard, deadline sett
   await page.reload();
   await expect(page.getByLabel('Critical')).toHaveValue('14');
 });
+
+test('notifications: slack, email, events, digest, jira tickets', async ({ page }) => {
+  await page.goto('/settings/notifications');
+  await expect(page.getByLabel('Email recipients')).toHaveValue('security@acme.dev');
+  await page.getByLabel('Slack webhook URL').fill('https://evil.example/hook');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Slack webhook URL must start with https://hooks.slack.com/')).toBeVisible();
+  await page.getByLabel('Slack webhook URL').fill('https://hooks.slack.com/services/T0/B0/abc123');
+  await page.getByLabel('Pull request blocked').click();
+  await page.getByLabel('Jira site').fill('https://acme.atlassian.net');
+  await page.getByLabel('Account email').fill('bot@acme.dev');
+  await page.getByLabel('Project key').fill('sec');
+  await page.getByLabel('API token').fill('token-1');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText('Notification settings saved')).toBeVisible();
+  await expect(page.getByLabel('Slack webhook URL')).toHaveAttribute('placeholder', /Connected \(…abc123\)/);
+  await expect(page.getByLabel('Slack webhook URL')).toHaveValue('');
+  await page.getByRole('button', { name: 'Send test' }).first().click();
+  await expect(page.getByText('Test message sent')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Pull request blocked')).not.toBeChecked();
+  await expect(page.getByLabel('Project key')).toHaveValue('SEC');
+
+  // Jira tickets from a vulnerability and the fix queue.
+  await page.goto('/vulnerabilities/GHSA-9wv6-86v2-598j');
+  await expect(page.getByRole('link', { name: 'SEC-41' })).toBeVisible(); // existing ticket
+  await page.goto('/vulnerabilities/GHSA-3xgq-45jj-v275');
+  await page.getByRole('button', { name: 'Create Jira ticket' }).click();
+  await expect(page.getByRole('link', { name: /SEC-4\d/ })).toBeVisible();
+  await page.goto('/fix-queue');
+  await expect(page.getByRole('button', { name: 'Create Jira ticket' }).first()).toBeVisible();
+});

@@ -18,6 +18,7 @@ import (
 	"github.com/depguard/depguard/internal/ids"
 	"github.com/depguard/depguard/internal/llm"
 	"github.com/depguard/depguard/internal/malysis"
+	"github.com/depguard/depguard/internal/notify"
 	"github.com/depguard/depguard/internal/scan"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,7 +61,9 @@ type Deps struct {
 	// Malysis adds SafeDep's community malware verdicts to scans and pre-install checks; nil skips it.
 	Malysis *malysis.Client
 	// LLM runs the AI security review of pull requests; nil or keyless disables it.
-	LLM    *llm.Client
+	LLM *llm.Client
+	// SMTP sends alert and digest emails; unconfigured sends Slack only.
+	SMTP   notify.SMTP
 	Logger *slog.Logger
 }
 
@@ -89,6 +92,9 @@ func AddWorkers(w *river.Workers, d Deps) {
 	river.AddWorker(w, &prActionWorker{d: d})
 	river.AddWorker(w, &syncAllWorker{d: d})
 	river.AddWorker(w, &fixPRWorker{d: d})
+	river.AddWorker(w, &notifyWorker{d: d})
+	river.AddWorker(w, &dailyAlertsWorker{d: d})
+	river.AddWorker(w, &tenantDailyWorker{d: d})
 }
 
 // Size limits for anything fetched from repositories.

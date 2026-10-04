@@ -10,7 +10,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, NotificationSettings, NotificationsResponse, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -205,6 +205,24 @@ export const saveSLA = async (sla: SLA) =>
   run(async () => {
     await requireRole('admin');
     return api<SLA>('/settings/sla', { method: 'PUT', body: sla });
+  });
+
+export const saveNotifications = async (body: { settings: NotificationSettings; slack_webhook_url?: string; jira_token?: string }) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<NotificationsResponse>('/settings/notifications', { method: 'PUT', body });
+  });
+
+export const testNotification = async (channel: 'slack' | 'email' | 'jira') =>
+  run(async () => {
+    await requireRole('admin');
+    return api<{ status: string }>('/settings/notifications/test', { method: 'POST', body: { channel } });
+  });
+
+export const createJiraIssue = async (ref_kind: 'vuln' | 'package', ref: string) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<{ issue_key: string; url: string; status: string }>('/jira/issues', { method: 'POST', body: { ref_kind, ref } });
   });
 
 export const savePolicy = async (policy: Policy) =>
