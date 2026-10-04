@@ -90,7 +90,12 @@ func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc, ws *Wo
 
 // Handler serves MCP over streamable HTTP (stateless; each request carries its API key).
 func Handler(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc, ws *Workspace) http.Handler {
-	return http.MaxBytesHandler(server.NewStreamableHTTPServer(NewServer(pool, enr, check, ws), server.WithStateLess(true)), 1<<20)
+	// Hosted behind a reverse proxy (Caddy) that forwards over loopback with the
+	// public Host header; mcp-go's DNS-rebinding guard for *local* servers would
+	// reject every request ("invalid Host header"). Every request here needs an
+	// API key, which a rebinding web page never has.
+	return http.MaxBytesHandler(server.NewStreamableHTTPServer(NewServer(pool, enr, check, ws),
+		server.WithStateLess(true), server.WithDisableLocalhostProtection(true)), 1<<20)
 }
 
 // addWorkspace registers the assistant tools an API key (member level) may use.

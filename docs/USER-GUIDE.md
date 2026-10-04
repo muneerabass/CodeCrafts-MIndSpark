@@ -344,10 +344,11 @@ One command connects every AI coding agent on the machine (Claude Code, Cursor, 
 Codex) to depguard, so agents check each package before installing it:
 
 ```sh
-curl -fsSL https://app.16-4-42-122.sslip.io/install.sh | sh
-depguard login --api-key dg_your_key
-depguard setup agents          # --print shows the config for other clients, --remove undoes it
+curl -fsSL https://app.16-4-42-122.sslip.io/install.sh | DEPGUARD_API_KEY=dg_your_key sh
 ```
+
+This installs the CLI, signs in and runs `depguard setup agents` (`--print` shows the config for other clients,
+`--remove` undoes it). Restart your agents afterwards.
 
 It adds the depguard MCP server (`https://api.16-4-42-122.sslip.io/mcp`, header `Authorization: Bearer dg_…`) to each
 agent's config and installs the depguard skill (`~/.claude/skills/depguard`, `~/.codex/skills/depguard`). Config files
@@ -433,7 +434,9 @@ every install on every machine with the guard.
 
 | Symptom | Fix |
 |---|---|
+| `depguard: command not found` after `install.sh` | open a new terminal (the installer adds its folder to your shell's PATH), or run the `export PATH=…` line it printed |
 | `depguard: command not found` after `npm i -D …` | use `npx depguard …`, or install globally with the `install.sh` line |
+| agent shows the depguard MCP server as failed | run the `install.sh` line again with your API key, then restart the agent; `claude mcp list` shows the status |
 | `not logged in` | `depguard login --api-key dg_…` (create the key under Settings → API Keys) |
 | installs are not checked | open a new terminal after `depguard init`; run `depguard doctor` |
 | `nothing new to install` | the package is already in your lockfile; `depguard check` reviews the whole project |

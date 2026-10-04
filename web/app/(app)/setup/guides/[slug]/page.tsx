@@ -218,8 +218,8 @@ pipelines:
         { title: 'Create an API key', body: keyNote },
         {
           title: 'One command for every agent on this machine (recommended)',
-          body: 'Installs the depguard CLI, signs in, then connects Claude Code, Cursor, VS Code (Copilot), Windsurf, Gemini CLI and Codex: the MCP server for each, and the depguard skill where the agent supports skills. Run it again any time; depguard setup agents --remove undoes it.',
-          code: `${install}\ndepguard login --api-url ${apiUrl} --api-key dg_your_key_here\ndepguard setup agents`,
+          body: 'Installs the depguard CLI, signs in, then connects Claude Code, Cursor, VS Code (Copilot), Windsurf, Gemini CLI and Codex: the MCP server for each, and the depguard skill where the agent supports skills. Then restart your agents. Run it again any time; depguard setup agents --remove undoes it. If a terminal says "depguard: command not found", open a new terminal (the installer adds depguard to your PATH).',
+          code: `curl -fsSL ${appUrl}/install.sh | DEPGUARD_API_URL=${apiUrl} DEPGUARD_API_KEY=dg_your_key_here sh`,
         },
         {
           title: 'What your agent gets',

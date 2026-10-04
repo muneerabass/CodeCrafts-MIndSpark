@@ -99,6 +99,15 @@ func TestTools(t *testing.T) {
 		t.Fatalf("no key: %d", res.StatusCode)
 	}
 
+	// Behind Caddy requests arrive over loopback with the public Host header.
+	req, _ := http.NewRequest("POST", srv.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`))
+	req.Host = "api.depguard.example"
+	req.Header.Set("Authorization", "Bearer "+key.Key)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	if res, err := http.DefaultClient.Do(req); err != nil || res.StatusCode != 200 {
+		t.Fatalf("public Host header behind a proxy: %v %v", err, res.Status)
+	}
 	c, err := client.NewStreamableHttpClient(srv.URL+"/mcp", transport.WithHTTPHeaders(map[string]string{"Authorization": "Bearer " + key.Key}))
 	if err != nil {
 		t.Fatal(err)

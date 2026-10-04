@@ -21,5 +21,5 @@ if [ -n "${DEPGUARD_API_KEY:-}" ] && command -v claude >/dev/null 2>&1; then
   claude mcp add -s user --transport http depguard "$API/mcp" --header "Authorization: Bearer $DEPGUARD_API_KEY" >/dev/null
   echo "depguard: MCP server added to Claude Code"
 else
-  echo "depguard: connect the MCP server too: install the depguard CLI and run 'depguard setup agents', or see Setup → AI agents"
+  echo "depguard: to connect the MCP server for every agent, use the one-line installer in depguard → Setup → AI agents"
 fi
