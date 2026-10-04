@@ -102,24 +102,27 @@ export default async function IntegrationsPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border bg-card p-5 opacity-80">
-              <div className="flex flex-wrap items-start gap-4">
-                <IconTile Icon={guides['bitbucket-pipes'].Icon} />
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-medium">Bitbucket App</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Pull-request scanning for Bitbucket Cloud workspaces, with results synced to Projects. Until it ships, use Bitbucket Pipes.
-                  </p>
+            {[
+              { name: 'GitLab', guide: 'gitlab-ci', desc: 'Merge-request checks and comments for GitLab.com and self-hosted GitLab, with results synced to Projects. Until it ships, use the GitLab CI job.' },
+              { name: 'Bitbucket', guide: 'bitbucket-pipes', desc: 'Pull-request scanning for Bitbucket Cloud workspaces, with results synced to Projects. Until it ships, use Bitbucket Pipes.' },
+            ].map((c) => (
+              <div key={c.name} className="rounded-xl border bg-card p-5 opacity-80" aria-label={`${c.name} App`}>
+                <div className="flex flex-wrap items-start gap-4">
+                  <IconTile Icon={guides[c.guide].Icon} />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-medium">{c.name} App</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{c.desc}</p>
+                  </div>
+                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Coming soon</span>
                 </div>
-                <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">Coming soon</span>
+                <div className="mt-4 flex border-t pt-4">
+                  <Button size="sm" disabled>
+                    Install {c.name} App
+                  </Button>
+                  <GuideLink slug={c.guide} className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline" />
+                </div>
               </div>
-              <div className="mt-4 flex border-t pt-4">
-                <Button size="sm" disabled>
-                  Install Bitbucket App
-                </Button>
-                <GuideLink slug="bitbucket-pipes" className="ml-auto inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline" />
-              </div>
-            </div>
+            ))}
           </div>
         </Section>
 
@@ -127,8 +130,8 @@ export default async function IntegrationsPage() {
           <GridCards slugs={['github-actions', 'gitlab-ci', 'bitbucket-pipes']} />
         </Section>
 
-        <Section title="Developer Tools" count={4}>
-          <GridCards slugs={['install-guard', 'cli', 'pmg', 'mcp']} />
+        <Section title="Developer Tools" count={5}>
+          <GridCards slugs={['install-guard', 'cli', 'container', 'pmg', 'mcp']} />
         </Section>
 
         <Section title="AI Governance & Endpoints">

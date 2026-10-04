@@ -191,6 +191,17 @@ depguard scan --project my-org/my-app --version main --fail-on-violation       #
 Options: `--dir` (default `.`), `--project-license MIT`, `--usage-model internal|saas|distributed_binary|distributed_source`.
 The scan appears under **Projects** and **Scans**, with attack paths, licenses and the PDF report.
 
+Container images and SBOMs:
+
+```sh
+depguard scan --image ghcr.io/acme/api:1.4 --fail-on-violation   # needs syft on PATH
+depguard scan --sbom image.cdx.json --project acme/api --version 1.4   # CycloneDX or SPDX JSON from any tool
+```
+
+`--image` reads the image with [syft](https://github.com/anchore/syft) (registry, local Docker or archive; the image
+is never run). The project is the image name and the version its tag (source `container`). Language packages are
+checked against advisories, malware and policy; OS packages (apk, deb) are listed but not checked.
+
 ### 5.5 Install guard: check every install before it happens
 
 ```sh

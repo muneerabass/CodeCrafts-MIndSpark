@@ -15,7 +15,7 @@ func TestAuditLog(t *testing.T) {
 	member, owner := token("tau", "member", false), token("tau", "owner", false)
 	expect(t, do(t, "PUT", "/api/v1/settings/sla", owner, map[string]int{"critical": 5, "high": 30, "medium": 90}), 200)
 	expect(t, do(t, "PUT", "/api/v1/settings/sla", owner, map[string]int{"critical": 999}), 400) // failed: not logged
-	expect(t, do(t, "GET", "/api/v1/settings/sla", owner, nil), 200)                          // reads: not logged
+	expect(t, do(t, "GET", "/api/v1/settings/sla", owner, nil), 200)                             // reads: not logged
 	expect(t, do(t, "POST", "/api/v1/api-keys", owner, map[string]string{"name": "CI deploy"}), 201)
 	expect(t, do(t, "POST", "/api/v1/audit", owner, map[string]any{"action": "web:member.role", "target_type": "member", "target_id": "u-2", "details": map[string]string{"role": "admin"}}), 201)
 	expect(t, do(t, "POST", "/api/v1/audit", owner, map[string]any{"action": "PUT /policy"}), 400) // web actions only

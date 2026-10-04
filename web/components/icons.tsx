@@ -96,5 +96,16 @@ export function SourceIcon({ source, className }: { source: string; className?: 
   if (source === 'github') return <GitHubIcon className={c} aria-label="GitHub" />;
   if (source === 'gitlab') return <GitLabIcon className={cn(c, 'text-orange-600')} aria-label="GitLab" />;
   if (source === 'bitbucket') return <BitbucketIcon className={cn(c, 'text-blue-600')} aria-label="Bitbucket" />;
+  if (source === 'container') return <ContainerIcon className={cn(c, 'text-sky-600')} aria-label="Container image" />;
   return <span className="font-mono text-[10px] uppercase text-muted-foreground">{source}</span>;
+}
+
+/** Container image (box with layers). */
+export function ContainerIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 8 12 3 3 8v8l9 5 9-5z" />
+      <path d="m3 8 9 5 9-5M12 13v8" />
+    </svg>
+  );
 }

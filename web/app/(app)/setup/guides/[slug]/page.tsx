@@ -168,6 +168,42 @@ pipelines:
         { title: 'Scan a project', body: 'Run it from the repository root. Supported lockfiles are found automatically; the exit code is non-zero when the policy fails.', code: 'depguard scan --project my-org/my-app --version main --fail-on-violation .' },
         { title: 'Open the report', body: 'The command prints a link to the scan report. You can also find it under Scans.' },
       ];
+    case 'container':
+      return [
+        { title: 'Install the CLI and syft', body: <>depguard reads images with <a className="text-primary underline" href="https://github.com/anchore/syft#installation" target="_blank" rel="noreferrer">syft</a>, which pulls from a registry, the local Docker daemon or an archive without running the image.</>, code: `${install}\nbrew install syft   # or: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b ~/.local/bin` },
+        { title: 'Point it at your tenant', body: keyNote, code: `export DEPGUARD_API_URL=${apiUrl}\nexport DEPGUARD_API_KEY=dg_your_key_here` },
+        {
+          title: 'Scan an image',
+          body: 'The image becomes a project (name without the tag) and the tag its version. Language packages (npm, PyPI, Go, Maven, …) are checked against advisories, malware and your policy; OS packages (apk, deb) are listed in the SBOM but not checked.',
+          code: 'depguard scan --image ghcr.io/acme/api:1.4 --fail-on-violation\n\n# already have an SBOM (CycloneDX or SPDX JSON) from another tool?\ndepguard scan --sbom image.cdx.json --project acme/api --version 1.4',
+        },
+        {
+          title: 'In GitHub Actions',
+          file: '.github/workflows/image.yml',
+          code: `- name: Scan image
+  env:
+    DEPGUARD_API_URL: ${apiUrl}
+    DEPGUARD_API_KEY: \${{ secrets.DEPGUARD_API_KEY }}
+  run: |
+    ${install}
+    curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b "$HOME/.local/bin"
+    depguard scan --image ghcr.io/\${{ github.repository }}:\${{ github.sha }} --fail-on-violation`,
+        },
+        {
+          title: 'In GitLab CI',
+          file: '.gitlab-ci.yml',
+          code: `scan-image:
+  stage: test
+  image: alpine:3.20
+  variables:
+    DEPGUARD_API_URL: "${apiUrl}"
+  script:
+    - apk add --no-cache curl
+    - ${install}
+    - curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+    - depguard scan --image "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" --fail-on-violation`,
+        },
+      ];
     case 'pmg':
       return [
         { title: 'Install Package Manager Guard (PMG)', body: 'PMG is an open-source (Apache-2.0) wrapper that checks packages before your package manager installs them.', code: 'brew install safedep/tap/pmg\n# or\ngo install github.com/safedep/pmg@latest' },

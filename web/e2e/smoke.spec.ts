@@ -221,6 +221,17 @@ test('setup integrations and guides', async ({ page }) => {
   await expect(page.getByText('Install Guard').first()).toBeVisible();
   await page.goto('/setup/guides/install-guard');
   for (const t of [/install\.sh \| sh/, /npm install --save-dev .*depguard-cli\.tgz/, /pip install --find-links .*pypi\/ depguard-cli/, /depguard init/, /depguard check/]) await expect(page.getByText(t).first()).toBeVisible();
+  // GitLab and Bitbucket apps are announced; the CI guides cover them meanwhile.
+  await page.goto('/setup/integrations');
+  for (const c of ['GitLab App', 'Bitbucket App']) {
+    const card = page.getByLabel(c);
+    await expect(card.getByText('Coming soon')).toBeVisible();
+    await expect(card.getByRole('button', { name: `Install ${c}` })).toBeDisabled();
+  }
+  await page.getByLabel('GitLab App').getByRole('link', { name: 'View setup guide' }).click();
+  await expect(page).toHaveURL(/\/setup\/guides\/gitlab-ci$/);
+  await page.goto('/setup/guides/container');
+  for (const t of [/depguard scan --image ghcr\.io\/acme\/api:1\.4/, /depguard scan --sbom image\.cdx\.json/, /OS packages \(apk, deb\)/]) await expect(page.getByText(t).first()).toBeVisible();
 });
 
 test('settings pages', async ({ page }) => {

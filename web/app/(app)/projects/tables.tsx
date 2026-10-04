@@ -15,7 +15,7 @@ import type { Project, VersionComponent, VersionScan, VulnRow } from '@/lib/type
 
 type TableProps<T> = { data: T[]; total: number; empty?: React.ReactNode };
 
-const sourceLabel: Record<string, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', cli: 'CLI upload' };
+const sourceLabel: Record<string, string> = { github: 'GitHub', gitlab: 'GitLab', bitbucket: 'Bitbucket', cli: 'CLI upload', container: 'Container image' };
 
 function health(p: Project) {
   return p.vulns

@@ -1,5 +1,5 @@
 import { Bot, PackageCheck, Server, ShieldCheck, Terminal } from 'lucide-react';
-import { BitbucketIcon, GitHubIcon, GitLabIcon } from '@/components/icons';
+import { BitbucketIcon, ContainerIcon, GitHubIcon, GitLabIcon } from '@/components/icons';
 
 export type GuideMeta = { title: string; desc: string; Icon: React.ComponentType<{ className?: string }> };
 
@@ -10,6 +10,7 @@ export const guides: Record<string, GuideMeta> = {
   'gitlab-ci': { title: 'GitLab CI', desc: 'Run a depguard job in your GitLab pipeline and stop merges that pull in risky packages.', Icon: GitLabIcon },
   'bitbucket-pipes': { title: 'Bitbucket Pipes', desc: 'Scan lockfiles in Bitbucket Pipelines and report results to depguard.', Icon: BitbucketIcon },
   'install-guard': { title: 'Install Guard', desc: 'Check every npm, pnpm, yarn, pip, uv, poetry, go and cargo install against your policy before anything is installed: vulnerabilities, malware, banned packages and allowed versions.', Icon: PackageCheck },
+  container: { title: 'Container images', desc: 'Scan the packages inside a Docker or OCI image, or upload an SBOM from any tool, and track the image as a project.', Icon: ContainerIcon },
   cli: { title: 'CLI', desc: 'Scan any project from your terminal and upload the results to your tenant.', Icon: Terminal },
   pmg: { title: 'PMG', desc: 'Stop malicious packages at install time on laptops and CI runners with Package Manager Guard.', Icon: ShieldCheck },
   mcp: { title: 'MCP Server', desc: 'Give AI coding agents a tool to check packages for malware and vulnerabilities before they install them.', Icon: Server },

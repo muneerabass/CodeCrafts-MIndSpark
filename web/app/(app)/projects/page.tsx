@@ -57,6 +57,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Sea
               { value: 'gitlab', label: 'GitLab' },
               { value: 'bitbucket', label: 'Bitbucket' },
               { value: 'cli', label: 'CLI' },
+              { value: 'container', label: 'Container image' },
             ],
           },
           { type: 'daterange' },
