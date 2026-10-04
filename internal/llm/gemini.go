@@ -120,11 +120,6 @@ type gResponse struct {
 		Output   int `json:"candidatesTokenCount"`
 		Thoughts int `json:"thoughtsTokenCount"`
 	} `json:"usageMetadata"`
-	Error *struct {
-		Code    int    `json:"code"`
-		Message string `json:"message"`
-		Status  string `json:"status"`
-	} `json:"error"`
 }
 
 func (g *Gemini) body(req ChatRequest, force string) map[string]any {
@@ -178,19 +173,49 @@ func (g *Gemini) body(req ChatRequest, force string) map[string]any {
 	return b
 }
 
-// classify turns an API error into a back-off and an error.
-func (g *Gemini) classify(model string, status int, msg string) error {
+type gError struct {
+	Error *struct {
+		Message string `json:"message"`
+		Details []struct {
+			Type       string `json:"@type"`
+			RetryDelay string `json:"retryDelay"`
+			Violations []struct {
+				QuotaID string `json:"quotaId"`
+			} `json:"violations"`
+		} `json:"details"`
+	} `json:"error"`
+}
+
+// classify turns an API error into a back-off and an error. Every 429 text
+// mentions "plan and billing", so the quota details decide, not the wording.
+func (g *Gemini) classify(model string, status int, raw []byte) error {
+	var e gError
+	_ = json.Unmarshal(raw, &e)
+	msg := string(raw)
+	retry, perDay := time.Duration(0), false
+	if e.Error != nil {
+		msg = e.Error.Message
+		for _, d := range e.Error.Details {
+			if v, err := time.ParseDuration(d.RetryDelay); err == nil && d.RetryDelay != "" {
+				retry = v
+			}
+			for _, q := range d.Violations {
+				perDay = perDay || strings.Contains(q.QuotaID, "PerDay")
+			}
+		}
+	}
 	low := strings.ToLower(msg)
 	switch {
-	case strings.Contains(low, "prepayment") || strings.Contains(low, "billing") || strings.Contains(low, "credits"):
+	case strings.Contains(low, "prepayment") || strings.Contains(low, "credits are depleted"):
 		g.block(model, time.Hour, "billing: "+firstN(msg, 120))
+	case status == http.StatusTooManyRequests && perDay:
+		next := g.now().UTC().Truncate(24 * time.Hour).Add(24*time.Hour + 5*time.Minute)
+		g.block(model, next.Sub(g.now()), "daily quota used")
 	case status == http.StatusTooManyRequests:
-		if strings.Contains(low, "per day") {
-			next := g.now().UTC().Truncate(24 * time.Hour).Add(24*time.Hour + 5*time.Minute)
-			g.block(model, next.Sub(g.now()), "daily quota used")
-		} else {
-			g.block(model, 2*time.Minute, "throttled")
+		if retry <= 0 {
+			retry = time.Minute
 		}
+		g.block(model, retry+time.Second, "rate limited")
 	case status == http.StatusNotFound || status == http.StatusForbidden:
 		g.block(model, 6*time.Hour, "not available to this key")
 	case status >= 500:
@@ -220,13 +245,7 @@ func (g *Gemini) turn(ctx context.Context, model string, body map[string]any, on
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-		var r gResponse
-		_ = json.Unmarshal(raw, &r)
-		msg := string(raw)
-		if r.Error != nil {
-			msg = r.Error.Message
-		}
-		return nil, g.classify(model, res.StatusCode, msg)
+		return nil, g.classify(model, res.StatusCode, raw)
 	}
 	reply := &ChatReply{Model: model}
 	var parts []json.RawMessage
@@ -288,6 +307,9 @@ func (g *Gemini) turn(ctx context.Context, model string, body map[string]any, on
 	return reply, nil
 }
 
+// MaxWait is how long a turn waits for a rate-limited model to free up.
+var MaxWait = 65 * time.Second
+
 // Chat runs one turn, falling back to the other model when one is unavailable.
 func (g *Gemini) Chat(ctx context.Context, req ChatRequest) (*ChatReply, error) {
 	return g.run(ctx, req, "")
@@ -298,6 +320,14 @@ func (g *Gemini) run(ctx context.Context, req ChatRequest, force string) (*ChatR
 		return nil, errors.New("AI is not configured")
 	}
 	body := g.body(req, force)
+	// Per-minute limits (free tier: 15 requests/minute) clear quickly: wait rather than fail.
+	if next := g.NextRetry(); !next.IsZero() && next.Sub(g.now()) <= MaxWait {
+		select {
+		case <-time.After(next.Sub(g.now())):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	var errs []string
 	for _, m := range g.order(req.Hard) {
 		if wait, why := g.blocked(m); wait {

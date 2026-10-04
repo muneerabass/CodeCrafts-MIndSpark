@@ -9,7 +9,10 @@ const linkHosts = new Set(['osv.dev', 'github.com', 'nvd.nist.gov']);
 
 export function safeHref(href: string | undefined): string | null {
   if (!href) return null;
-  if (href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/\\')) return href;
+  if (href.startsWith('/') && !href.startsWith('//') && !href.startsWith('/\\')) {
+    // A model sometimes writes placeholders like /components/ID or /projects/...: show them as text.
+    return /\/(ID|id|\.\.\.|…|:id|\{[^}]*\}|<[^>]*>)(\/|$|\?)/.test(href) ? null : href;
+  }
   try {
     const u = new URL(href);
     if (u.protocol === 'https:' && linkHosts.has(u.hostname)) return u.href;

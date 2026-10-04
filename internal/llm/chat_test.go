@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBedrockChatToolRoundTrip(t *testing.T) {
@@ -109,7 +110,9 @@ func TestGeminiFallbackAndForcedCall(t *testing.T) {
 	g, paths := fakeGemini(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "flash-lite") {
 			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":{"code":429,"message":"Quota exceeded for requests per day"}}`))
+			_, _ = w.Write([]byte(`{"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details.",
+				"details":[{"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}]},
+				{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"20s"}]}}`))
 			return
 		}
 		b, _ := io.ReadAll(r.Body)
@@ -149,5 +152,31 @@ func TestGeminiBillingError(t *testing.T) {
 	}
 	if g.NextRetry().IsZero() {
 		t.Fatal("both models should be backed off")
+	}
+}
+
+func TestGeminiPerMinuteLimitWaits(t *testing.T) {
+	n := 0
+	g, _ := fakeGemini(t, func(w http.ResponseWriter, r *http.Request) {
+		n++
+		if n <= 2 {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"code":429,"message":"You exceeded your current quota, please check your plan and billing details.",
+				"details":[{"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"0.2s"}]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`))
+	})
+	// Both models are throttled for a moment: the first call fails over and fails...
+	if _, err := g.Chat(context.Background(), ChatRequest{Messages: []Msg{{Role: "user", Text: "q"}}}); err == nil {
+		t.Fatal("expected rate limit")
+	}
+	if g.NextRetry().IsZero() || time.Until(g.NextRetry()) > 5*time.Second {
+		t.Fatalf("back-off should follow retryDelay, not an hour: %v", time.Until(g.NextRetry()))
+	}
+	// ...the next one waits for the limit to clear instead of failing.
+	r, err := g.Chat(context.Background(), ChatRequest{Messages: []Msg{{Role: "user", Text: "q"}}})
+	if err != nil || r.Text != "ok" {
+		t.Fatalf("%v %v", r, err)
 	}
 }

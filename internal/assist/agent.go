@@ -178,12 +178,14 @@ func pageNote(p PageContext) string {
 
 var mdLink = regexp.MustCompile(`\[([^\]]{1,200})\]\((/[A-Za-z0-9/_\-.:%?=&]*)\)`)
 
+var placeholder = regexp.MustCompile(`/(ID|id|\.\.\.|…|:id|\{[^}]*\}|<[^>]*>)(/|$|\?)`)
+
 // Sources lists the depguard pages an answer links to.
 func Sources(text string) []Source {
 	seen := map[string]bool{}
 	out := []Source{}
 	for _, m := range mdLink.FindAllStringSubmatch(text, -1) {
-		if !seen[m[2]] && len(out) < 20 {
+		if !seen[m[2]] && len(out) < 20 && !placeholder.MatchString(m[2]) {
 			seen[m[2]] = true
 			out = append(out, Source{Title: m[1], URL: m[2]})
 		}
