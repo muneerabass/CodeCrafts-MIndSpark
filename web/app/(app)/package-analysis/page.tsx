@@ -14,7 +14,7 @@ const VIEWS = [
   { key: 'analyses', label: 'Malware analysis' },
   { key: 'suspicious', label: 'Suspicious findings' },
 ] as const;
-const RULES = ['typosquat', 'unmaintained', 'deprecated', 'new-package', 'no-source-repo', 'unusual-behaviour'];
+const RULES = ['typosquat', 'unmaintained', 'deprecated', 'new-package', 'no-source-repo', 'unusual-behaviour', 'release-age', 'install-script-added', 'provenance-dropped', 'publisher-changed', 'new-behaviour'];
 
 export default async function PackageAnalysisPage({ searchParams }: { searchParams: SearchParams }) {
   const sp = await searchParams;

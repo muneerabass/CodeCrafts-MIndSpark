@@ -54,6 +54,31 @@ const RULE_HELP: Record<string, { title: string; what: string; action: string }>
     what: 'First published less than 30 days ago, with no track record yet.',
     action: 'Check the publisher and source before trusting it.',
   },
+  'release-age': {
+    title: 'Brand-new releases',
+    what: 'Published within the cooldown your policy sets. Hijacked releases are usually caught and pulled within hours.',
+    action: 'Stay on the previous version for a few days, or allow it once the release has a track record.',
+  },
+  'install-script-added': {
+    title: 'New install scripts',
+    what: 'This release runs code on install that its previous release did not, the pattern of hijacked npm releases.',
+    action: 'Read the script and the release notes before upgrading.',
+  },
+  'provenance-dropped': {
+    title: 'Provenance dropped',
+    what: 'Earlier releases were built and signed by the project CI; this one was published without that proof.',
+    action: 'Treat it as possibly published from a stolen token; stay on the previous version.',
+  },
+  'publisher-changed': {
+    title: 'New publisher',
+    what: 'Published by an account that never published this package before.',
+    action: 'Check the project announced the new maintainer.',
+  },
+  'new-behaviour': {
+    title: 'New behaviour in an upgrade',
+    what: 'Heuristic analysis found behaviour in the new version that the version you had did not show.',
+    action: 'Review what changed before merging the upgrade.',
+  },
   'no-source-repo': {
     title: 'No source repository',
     what: 'The package does not link to its source code, so it cannot be reviewed.',

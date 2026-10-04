@@ -356,6 +356,10 @@ func nextSteps(r Report, d FullData) []string {
 			add(fmt.Sprintf("Plan a replacement for %s (%s).", f.Package, f.Rule))
 		case "unusual-behaviour":
 			add(fmt.Sprintf("Review the install-time behaviour of %s before the next release.", f.Package))
+		case "release-age":
+			add(fmt.Sprintf("Keep the previous version of %s until the new release is a few days old (hijacked releases are usually pulled within hours).", f.Package))
+		case "install-script-added", "provenance-dropped", "publisher-changed", "new-behaviour":
+			add(fmt.Sprintf("Do not upgrade %s yet: the new release looks different from earlier ones (%s). Check the package's changelog and repository first.", f.Package, f.Rule))
 		}
 	}
 	if d.Counts.LicenseIssues > 0 {

@@ -189,6 +189,21 @@ test('policy editor', async ({ page }) => {
   await expect(rules.getByLabel('Rule 3 package')).toHaveCount(0);
 });
 
+test('policy: fresh releases preset', async ({ page }) => {
+  await page.goto('/policy');
+  const tile = page.getByRole('link', { name: /Fresh releases/ });
+  await expect(tile).toContainText('48h cooldown');
+  await expect(page.getByRole('switch', { name: 'New install scripts' })).toBeChecked();
+  await page.getByLabel('Wait before allowing a new release').click();
+  await page.getByRole('option', { name: '72 hours' }).click();
+  await page.getByRole('switch', { name: 'Fail the check (otherwise these only warn)' }).click();
+  await expect(tile).toContainText('72h cooldown · warn');
+  await page.getByRole('button', { name: /Save/ }).first().click();
+  await expect(page.getByText(/saved/i).first()).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('link', { name: /Fresh releases/ })).toContainText('72h cooldown · warn');
+});
+
 test('suspicious findings and violation filters', async ({ page }) => {
   await page.goto('/package-analysis?view=suspicious');
   await expect(page.getByText('Looks like lodash').first()).toBeVisible();

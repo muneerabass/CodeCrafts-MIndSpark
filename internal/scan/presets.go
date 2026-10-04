@@ -38,6 +38,32 @@ type Presets struct {
 	Packages []PackageRule `json:"packages,omitempty"`
 	// Secrets controls secrets committed in pull requests; nil = DefaultSecrets().
 	Secrets *SecretsPreset `json:"secrets,omitempty"`
+	// Fresh guards brand-new releases; nil = DefaultFresh().
+	Fresh *FreshPreset `json:"fresh,omitempty"`
+}
+
+// FreshPreset guards brand-new releases, the window in which hijacked
+// versions (event-stream, ua-parser-js, chalk/debug, Shai-Hulud) do their damage.
+type FreshPreset struct {
+	CooldownHours      int  `json:"cooldown_hours"`       // releases younger than this are flagged; 0 = off
+	AllowSecurityFixes bool `json:"allow_security_fixes"` // a release that fixes a known advisory skips the cooldown
+	Block              bool `json:"block"`                // findings fail the check (publisher changes only warn)
+	InstallScripts     bool `json:"install_scripts"`      // a release adds or changes install scripts (npm)
+	Provenance         bool `json:"provenance"`           // a release lacks provenance its predecessor had (npm)
+	Publisher          bool `json:"publisher"`            // a release published by an account new to the package (npm)
+}
+
+// DefaultFresh: 48h cooldown, security fixes exempt, everything on and blocking.
+func DefaultFresh() FreshPreset {
+	return FreshPreset{CooldownHours: 48, AllowSecurityFixes: true, Block: true, InstallScripts: true, Provenance: true, Publisher: true}
+}
+
+// FreshRules returns the fresh-release preset of a policy, defaults included.
+func (pc PolicyConfig) FreshRules() FreshPreset {
+	if pc.Presets == nil || pc.Presets.Fresh == nil {
+		return DefaultFresh()
+	}
+	return *pc.Presets.Fresh
 }
 
 // SecretsPreset decides when secrets found in a pull request diff fail the check.
@@ -102,8 +128,8 @@ func DefaultSuspicious() SuspiciousPreset {
 // that keys missing from stored policies keep today's behaviour.
 func (p *Presets) UnmarshalJSON(b []byte) error {
 	type plain Presets
-	sus := DefaultSuspicious()
-	v := plain{License: LicensePreset{Enabled: true, BlockingSeverity: SeverityHigh}, Suspicious: &sus}
+	sus, fresh := DefaultSuspicious(), DefaultFresh()
+	v := plain{License: LicensePreset{Enabled: true, BlockingSeverity: SeverityHigh}, Suspicious: &sus, Fresh: &fresh}
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}

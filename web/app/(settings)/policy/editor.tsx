@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Bug, Code2, FlaskConical, Info, KeyRound, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
+import { Bug, Code2, FlaskConical, Hourglass, Info, KeyRound, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAction } from '@/components/client';
 import { savePolicy, testPolicy } from '@/lib/actions';
-import type { CustomRule, PackageRule, Policy, Severity, SuspiciousPreset } from '@/lib/types';
+import type { CustomRule, FreshPreset, PackageRule, Policy, Severity, SuspiciousPreset } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const Monaco = dynamic(() => import('@monaco-editor/react'), {
@@ -40,6 +40,12 @@ const SUSPICIOUS_RULES: { key: keyof SuspiciousPreset; rule: string; label: stri
   { key: 'unusual_behaviour', rule: 'unusual-behaviour', label: 'Unusual behaviour', hint: 'Install scripts, obfuscation or exfiltration found by heuristic analysis.' },
 ];
 const SEVERITIES: Severity[] = ['critical', 'high', 'medium', 'low'];
+const DEFAULT_FRESH: FreshPreset = { cooldown_hours: 48, allow_security_fixes: true, block: true, install_scripts: true, provenance: true, publisher: true };
+const FRESH_RULES: { key: 'install_scripts' | 'provenance' | 'publisher'; label: string; hint: string }[] = [
+  { key: 'install_scripts', label: 'New install scripts', hint: 'A release adds a preinstall/install/postinstall script its previous release did not have (npm).' },
+  { key: 'provenance', label: 'Provenance dropped', hint: 'A release lacks the signed build provenance its previous release had (npm).' },
+  { key: 'publisher', label: 'New publisher', hint: 'A release published by an account that never published this package before (npm). Warns; blocks together with the two above.' },
+];
 
 /** Older stored policies lack the suspicious preset and the new license fields. */
 function withDefaults(p: Policy): Policy {
@@ -49,6 +55,7 @@ function withDefaults(p: Policy): Policy {
       ...p.presets,
       license: { enabled: true, blocking_severity: 'high', ...p.presets.license },
       suspicious: { ...DEFAULT_SUSPICIOUS, ...p.presets.suspicious },
+      fresh: { ...DEFAULT_FRESH, ...p.presets.fresh },
     },
   };
 }
@@ -116,6 +123,8 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
   const susOn = SUSPICIOUS_RULES.filter((r) => sus[r.key]).length;
   const pkgRules = p.presets.packages?.length ?? 0;
   const sec = p.presets.secrets ?? { block: true, block_passwords: false };
+  const fresh = p.presets.fresh ?? DEFAULT_FRESH;
+  const setFresh = (v: Partial<FreshPreset>) => setP({ ...p, presets: { ...p.presets, fresh: { ...fresh, ...v } } });
   const setSec = (v: Partial<typeof sec>) => setP({ ...p, presets: { ...p.presets, secrets: { ...sec, ...v } } });
   const glance: { id: string; icon: React.ComponentType<{ className?: string }>; label: string; value: string; on: boolean }[] = [
     { id: 'vulnerability', icon: Bug, label: 'Vulnerabilities', value: RISKS.find((r) => r.v === p.presets.vulnerability.min_risk)?.l ?? '', on: p.presets.vulnerability.min_risk !== 'OFF' },
@@ -130,6 +139,13 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
     },
     { id: 'suspicious', icon: ScanSearch, label: 'Suspicious', value: `${susOn} of ${SUSPICIOUS_RULES.length} checks · ${sus.blocking.length} block`, on: susOn > 0 },
     { id: 'popularity', icon: Star, label: 'Popularity', value: p.presets.popularity.enabled ? `≥ ${p.presets.popularity.min_stars} stars` : 'Off', on: p.presets.popularity.enabled },
+    {
+      id: 'fresh',
+      icon: Hourglass,
+      label: 'Fresh releases',
+      value: fresh.cooldown_hours ? `${fresh.cooldown_hours}h cooldown${fresh.block ? '' : ' · warn'}` : fresh.block ? 'Hijack checks' : 'Warn only',
+      on: fresh.cooldown_hours > 0 || fresh.install_scripts || fresh.provenance || fresh.publisher,
+    },
     { id: 'secrets', icon: KeyRound, label: 'Secrets in PRs', value: sec.block ? (sec.block_passwords ? 'Blocks keys & passwords' : 'Blocks keys & tokens') : 'Warn only', on: true },
     { id: 'maintenance', icon: Wrench, label: 'Maintenance', value: p.presets.maintenance.enabled ? `Scorecard ≥ ${p.presets.maintenance.min_scorecard}` : 'Off', on: p.presets.maintenance.enabled },
     { id: 'custom', icon: Code2, label: 'Custom rules', value: p.custom.length ? `${p.custom.length} rule${p.custom.length === 1 ? '' : 's'}` : 'None', on: p.custom.length > 0 },
@@ -301,6 +317,47 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
               disabled={ro || !p.presets.maintenance.enabled}
             />
           </div>
+        </div>
+      </Preset>
+
+      <Preset
+        id="fresh"
+        on={fresh.cooldown_hours > 0 || fresh.install_scripts || fresh.provenance || fresh.publisher}
+        icon={Hourglass}
+        title="Fresh releases"
+        description="Hijacked releases (event-stream, ua-parser-js, chalk/debug, Shai-Hulud) do their damage in the first hours, before advisories exist. These checks read the registry directly."
+      >
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="p-fresh-cool">Wait before allowing a new release</Label>
+          <Select value={String(fresh.cooldown_hours)} onValueChange={(v) => setFresh({ cooldown_hours: Number(v) })} disabled={ro}>
+            <SelectTrigger id="p-fresh-cool" className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[0, 24, 48, 72, 168].map((h) => (
+                <SelectItem key={h} value={String(h)}>
+                  {h === 0 ? 'No cooldown' : h === 168 ? '7 days' : `${h} hours`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="p-fresh-fix">Let security fixes through right away</Label>
+          <Switch id="p-fresh-fix" checked={fresh.allow_security_fixes} onCheckedChange={(v) => setFresh({ allow_security_fixes: v })} disabled={ro || !fresh.cooldown_hours} />
+        </div>
+        {FRESH_RULES.map((r) => (
+          <div key={r.key} className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor={`p-fresh-${r.key}`}>{r.label}</Label>
+              <p className="text-xs text-muted-foreground">{r.hint}</p>
+            </div>
+            <Switch id={`p-fresh-${r.key}`} checked={fresh[r.key]} onCheckedChange={(v) => setFresh({ [r.key]: v })} disabled={ro} />
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-4 border-t pt-3">
+          <Label htmlFor="p-fresh-block">Fail the check (otherwise these only warn)</Label>
+          <Switch id="p-fresh-block" checked={fresh.block} onCheckedChange={(v) => setFresh({ block: v })} disabled={ro} />
         </div>
       </Preset>
 

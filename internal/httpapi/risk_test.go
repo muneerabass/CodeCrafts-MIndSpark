@@ -257,6 +257,20 @@ func TestPolicyRiskPresets(t *testing.T) {
 		len(listOf(s["blocking"])) != 1 || mapOf(got["license"])["blocking_severity"] != "medium" {
 		t.Fatalf("round trip: %v", got)
 	}
+	// Secrets and fresh-release presets: defaults, then a round trip (secrets used to be dropped on save).
+	if sec, fr := mapOf(pre["secrets"]), mapOf(pre["fresh"]); sec["block"] != true || fr["cooldown_hours"].(float64) != 48 || fr["block"] != true {
+		t.Fatalf("secrets/fresh defaults: %v %v", sec, fr)
+	}
+	pre["secrets"] = map[string]any{"block": true, "block_passwords": true}
+	pre["fresh"] = map[string]any{"cooldown_hours": 72, "allow_security_fixes": false, "block": false, "install_scripts": true, "provenance": true, "publisher": false}
+	expect(t, do(t, "PUT", "/api/v1/policy", a, p), 200)
+	got = mapOf(expect(t, do(t, "GET", "/api/v1/policy", m, nil), 200).body["presets"])
+	if mapOf(got["secrets"])["block_passwords"] != true || mapOf(got["fresh"])["cooldown_hours"].(float64) != 72 || mapOf(got["fresh"])["publisher"] != false {
+		t.Fatalf("secrets/fresh round trip: %v", got)
+	}
+	pre["fresh"].(map[string]any)["cooldown_hours"] = 9999
+	expect(t, do(t, "PUT", "/api/v1/policy", a, p), 400)
+	pre["fresh"].(map[string]any)["cooldown_hours"] = 72
 	sus["blocking"] = []string{"nope"}
 	expect(t, do(t, "PUT", "/api/v1/policy", a, p), 400)
 	sus["blocking"], lic["blocking_severity"] = []string{}, "severe"

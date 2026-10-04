@@ -10,6 +10,7 @@ import (
 
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/feeds"
+	"github.com/depguard/depguard/internal/registry"
 	"github.com/depguard/depguard/internal/scan"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/safedep/vet/pkg/models"
@@ -36,6 +37,7 @@ type Config struct {
 	Typosquat, Unmaintained, Deprecated, NewPackage, NoRepo, UnusualBehaviour bool
 	UnmaintainedMonths                                                        int
 	Blocking                                                                  map[string]bool
+	Fresh                                                                     scan.FreshPreset // brand-new release rules
 }
 
 // ConfigFromPolicy maps presets.suspicious (nil = scan.DefaultSuspicious()).
@@ -46,7 +48,7 @@ func ConfigFromPolicy(p scan.PolicyConfig) Config {
 	}
 	c := Config{Typosquat: s.Typosquat, Unmaintained: s.Unmaintained, Deprecated: s.Deprecated, NewPackage: s.NewPackage,
 		NoRepo: s.NoSourceRepo, UnusualBehaviour: s.UnusualBehaviour, UnmaintainedMonths: s.UnmaintainedMonths,
-		Blocking: map[string]bool{}}
+		Blocking: map[string]bool{}, Fresh: p.FreshRules()}
 	if c.UnmaintainedMonths <= 0 {
 		c.UnmaintainedMonths = 24
 	}
@@ -59,6 +61,7 @@ func ConfigFromPolicy(p scan.PolicyConfig) Config {
 type checker struct {
 	pool *pgxpool.Pool
 	e    *enrich.Enricher
+	reg  *registry.Client
 	cfg  Config
 	now  func() time.Time
 }
@@ -66,15 +69,17 @@ type checker struct {
 // New returns the suspicious-package checker. pool (package_meta publish
 // dates) and e (deps.dev package data) may be nil: their rules are skipped.
 func New(pool *pgxpool.Pool, e *enrich.Enricher, cfg Config) scan.Checker {
-	return &checker{pool: pool, e: e, cfg: cfg, now: time.Now}
+	return &checker{pool: pool, e: e, reg: &registry.Client{}, cfg: cfg, now: time.Now}
 }
 
 func (c *checker) Name() string { return "suspicious" }
 
 // facts is what the rules need beyond pkg.Insights.
 type facts struct {
-	latest    map[*models.Package]*enrich.Latest
-	published map[*models.Package]time.Time
+	latest        map[*models.Package]*enrich.Latest
+	published     map[*models.Package]time.Time
+	releases      map[registry.Pkg][]registry.Version // npm/PyPI release history
+	securityFixes map[string]bool                     // "eco/name@version" that fix an advisory
 }
 
 // Check never fails: data that can't be fetched just disables its rule.
@@ -83,15 +88,19 @@ func (c *checker) Check(ctx context.Context, in scan.CheckInput) ([]scan.Finding
 	if c.e != nil && (c.cfg.Deprecated || c.cfg.Unmaintained) {
 		f.latest = c.e.PackagesLatest(ctx, in.Packages)
 	}
-	if c.pool != nil && c.cfg.NewPackage {
+	if c.pool != nil && (c.cfg.NewPackage || freshOn(c.cfg.Fresh)) {
 		var err error
 		if f.published, err = publishedAt(ctx, c.pool, in.Packages); err != nil {
 			slog.Warn("suspicious: package_meta read failed", "err", err)
 		}
 	}
+	if c.pool != nil && freshOn(c.cfg.Fresh) {
+		c.loadFresh(ctx, in.Packages, &f)
+	}
 	var out []scan.Finding
 	for _, p := range in.Packages {
 		out = append(out, c.evaluate(p, f)...)
+		out = append(out, c.evaluateFresh(p, f)...)
 	}
 	return out, nil
 }

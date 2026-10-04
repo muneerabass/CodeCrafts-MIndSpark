@@ -221,7 +221,9 @@ type PolicyDoc struct {
 			Enabled      bool    `json:"enabled"`
 			MinScorecard float64 `json:"min_scorecard"`
 		} `json:"maintenance"`
-		Packages []scan.PackageRule `json:"packages"`
+		Packages []scan.PackageRule  `json:"packages"`
+		Secrets  *scan.SecretsPreset `json:"secrets"`
+		Fresh    *scan.FreshPreset   `json:"fresh"`
 	} `json:"presets"`
 	Custom []CustomRule `json:"custom"`
 }
@@ -244,6 +246,8 @@ func DefaultPolicy() PolicyDoc {
 	p.Presets.Suspicious = scan.DefaultSuspicious()
 	p.Presets.Popularity.MinStars = 10
 	p.Presets.Maintenance.MinScorecard = 3
+	sec, fresh := scan.DefaultSecrets(), scan.DefaultFresh()
+	p.Presets.Secrets, p.Presets.Fresh = &sec, &fresh
 	p.Custom = []CustomRule{}
 	return p
 }
@@ -297,6 +301,9 @@ func (s *Server) putPolicy(w http.ResponseWriter, r *http.Request) error {
 	}
 	if m := p.Presets.Suspicious.UnmaintainedMonths; m < 1 || m > 240 {
 		return badRequest("presets.suspicious.unmaintained_months must be between 1 and 240")
+	}
+	if f := p.Presets.Fresh; f != nil && (f.CooldownHours < 0 || f.CooldownHours > 720) {
+		return badRequest("presets.fresh.cooldown_hours must be between 0 and 720")
 	}
 	if p.Presets.Suspicious.Blocking == nil {
 		p.Presets.Suspicious.Blocking = []string{}

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { Activity, ArrowRight, BadgeCheck, Ban, Bug, Copy, GitBranch, Hourglass, ScanSearch, Sparkles } from 'lucide-react';
+import { Activity, ArrowRight, BadgeCheck, Ban, Bug, Copy, GitBranch, Hourglass, ScanSearch, ShieldOff, Sparkles, UserRoundX } from 'lucide-react';
 import { AnalysisStatus, RiskBadge } from '@/components/badges';
 import { EcosystemTile } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -87,6 +87,11 @@ const ruleIcon: Record<string, typeof Bug> = {
   'new-package': Sparkles,
   'no-source-repo': GitBranch,
   'unusual-behaviour': Activity,
+  'release-age': Hourglass,
+  'install-script-added': Activity,
+  'provenance-dropped': ShieldOff,
+  'publisher-changed': UserRoundX,
+  'new-behaviour': Activity,
 };
 const det = (v: Violation, k: string) => (v.details?.[k] == null ? '' : String(v.details[k]));
 const suspCols: ColumnDef<Violation, unknown>[] = [

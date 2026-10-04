@@ -9,10 +9,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/depguard/depguard/internal/enrich"
+	"github.com/depguard/depguard/internal/feeds"
 	"github.com/depguard/depguard/internal/ids"
 	"github.com/depguard/depguard/internal/jobs"
 	"github.com/depguard/depguard/internal/scan"
@@ -72,32 +75,46 @@ func (w *guarddogWorker) Work(ctx context.Context, job *river.Job[jobs.GuarddogA
 	}); err != nil || exists {
 		return err
 	}
-	v, err := loadGuarddogVerdict(ctx, d, a)
-	if err != nil {
-		d.Logger.Warn("guarddog verdict cache read failed", "pkg", a.Name, "err", err)
+	if a.PrevVersion != "" && !recentRelease(ctx, d, a) {
+		return nil // upgrades to established releases are not re-analysed
 	}
-	if v == nil {
-		if v, err = runGuarddogVerdict(ctx, d, eco, a); err != nil || v == nil {
+	v, err := verdictFor(ctx, d, eco, a)
+	if err != nil || v == nil {
+		return err
+	}
+	// An upgrade: report only behaviour the previous version did not have.
+	var newRules []string
+	diff := false
+	if a.PrevVersion != "" {
+		pa := a
+		pa.Version = a.PrevVersion
+		pv, err := verdictFor(ctx, d, eco, pa)
+		if err != nil {
 			return err
 		}
-		if a.Version != "" { // an unversioned scan analyses "latest", which changes over time
-			if _, err := d.Pool.Exec(ctx, `INSERT INTO guarddog_verdict (ecosystem, name, version, issues, rules, results, error, analyzed_at)
-				VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), now())
-				ON CONFLICT (ecosystem, name, version) DO UPDATE SET issues = EXCLUDED.issues, rules = EXCLUDED.rules,
-				  results = EXCLUDED.results, error = EXCLUDED.error, analyzed_at = now()`,
-				a.Ecosystem, a.Name, a.Version, v.Issues, v.Rules, v.Output, v.Error); err != nil {
-				d.Logger.Warn("guarddog verdict cache write failed", "pkg", a.Name, "err", err)
+		if pv != nil {
+			diff = true
+			for _, r := range v.Rules {
+				if !slices.Contains(pv.Rules, r) {
+					newRules = append(newRules, r)
+				}
 			}
 		}
 	}
 	var prID string
 	var inst int64
 	err = withTenant(ctx, d, a.TenantID, func(tx pgx.Tx) error {
-		if err := recordGuarddog(ctx, tx, a, v); err != nil {
-			return err
-		}
-		if v.Issues == 0 {
-			return nil
+		if diff {
+			if err := recordGuarddogDiff(ctx, tx, a, v, newRules); err != nil || len(newRules) == 0 {
+				return err
+			}
+		} else {
+			if err := recordGuarddog(ctx, tx, a, v); err != nil {
+				return err
+			}
+			if v.Issues == 0 {
+				return nil
+			}
 		}
 		// A suspicious package in a PR: re-rank the PR and update its comment and labels.
 		err := tx.QueryRow(ctx, `SELECT id, COALESCE(installation_id, 0) FROM pull_requests WHERE latest_scan_id=$1`, a.ScanID).Scan(&prID, &inst)
@@ -114,6 +131,76 @@ func (w *guarddogWorker) Work(ctx context.Context, job *river.Job[jobs.GuarddogA
 		d.Logger.Warn("enqueue PR refresh after guarddog", "pr", prID, "err", err)
 	}
 	return nil
+}
+
+// verdictFor returns the cached guarddog verdict of a.Version, running guarddog when there is none.
+func verdictFor(ctx context.Context, d Deps, eco string, a jobs.GuarddogAnalyze) (*guarddogVerdict, error) {
+	v, err := loadGuarddogVerdict(ctx, d, a)
+	if err != nil {
+		d.Logger.Warn("guarddog verdict cache read failed", "pkg", a.Name, "err", err)
+	}
+	if v != nil {
+		return v, nil
+	}
+	if v, err = runGuarddogVerdict(ctx, d, eco, a); err != nil || v == nil {
+		return nil, err
+	}
+	if a.Version != "" { // an unversioned scan analyses "latest", which changes over time
+		if _, err := d.Pool.Exec(ctx, `INSERT INTO guarddog_verdict (ecosystem, name, version, issues, rules, results, error, analyzed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), now())
+			ON CONFLICT (ecosystem, name, version) DO UPDATE SET issues = EXCLUDED.issues, rules = EXCLUDED.rules,
+			  results = EXCLUDED.results, error = EXCLUDED.error, analyzed_at = now()`,
+			a.Ecosystem, a.Name, a.Version, v.Issues, v.Rules, v.Output, v.Error); err != nil {
+			d.Logger.Warn("guarddog verdict cache write failed", "pkg", a.Name, "err", err)
+		}
+	}
+	return v, nil
+}
+
+// recentRelease reports whether a.Version was published in the last 30 days
+// (unknown counts as recent: brand-new releases are often not indexed yet).
+func recentRelease(ctx context.Context, d Deps, a jobs.GuarddogAnalyze) bool {
+	eco := enrich.OSVEcosystemName(a.Ecosystem)
+	var t *time.Time
+	_ = d.Pool.QueryRow(ctx, `SELECT COALESCE(
+		(SELECT published_at FROM registry_versions WHERE ecosystem=$1 AND name_norm=$2 AND version=$3),
+		(SELECT published_at FROM package_meta WHERE ecosystem=$1 AND name_norm=$2 AND version=$3))`,
+		eco, feeds.NormalizeName(eco, a.Name), a.Version).Scan(&t)
+	return t == nil || time.Since(*t) < 30*24*time.Hour
+}
+
+// recordGuarddogDiff records an upgrade's analysis: suspicious only when the
+// new version gained guarddog rules, reported as new-behaviour (fresh preset).
+func recordGuarddogDiff(ctx context.Context, tx pgx.Tx, a jobs.GuarddogAnalyze, v *guarddogVerdict, newRules []string) error {
+	status := "clean"
+	if len(newRules) > 0 {
+		status = "suspicious"
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO package_analyses (id, tenant_id, component_id, project_version_id, scan_id, status, verified, source, evidence)
+		SELECT $1, $2, $3, (SELECT project_version_id FROM scans WHERE id=$4), NULLIF($4,''), $5, false, 'guarddog', $6`,
+		ids.New(), a.TenantID, a.ComponentID, a.ScanID, status, v.Output); err != nil || status != "suspicious" {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE scans SET suspicious_count=suspicious_count+1 WHERE id=$1`, a.ScanID); err != nil {
+		return err
+	}
+	var raw []byte
+	if err := tx.QueryRow(ctx, `SELECT policy FROM tenant_settings`).Scan(&raw); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	pc, err := scan.ParsePolicy(raw)
+	if err != nil {
+		pc = scan.PolicyConfig{}
+	}
+	details, _ := json.Marshal(map[string]any{"rules": newRules, "previous_version": a.PrevVersion})
+	summary := fmt.Sprintf("%s@%s adds behaviour %s did not have: %s", a.Name, a.Version, a.PrevVersion, strings.Join(newRules, ", "))
+	_, err = tx.Exec(ctx, `INSERT INTO policy_violations (id, tenant_id, scan_id, project_version_id, component_id, rule_name, category,
+		  summary, severity, blocking, details)
+		SELECT $1, $2, s.id, s.project_version_id, $4, $5, $6, $7, $8, $9, $10 FROM scans s
+		WHERE s.id = $3 AND s.project_version_id IS NOT NULL`,
+		ids.New(), a.TenantID, a.ScanID, a.ComponentID, suspicious.RuleNewBehaviour, scan.CategorySuspicious,
+		summary, scan.SeverityHigh, pc.FreshRules().Block, details)
+	return err
 }
 
 func loadGuarddogVerdict(ctx context.Context, d Deps, a jobs.GuarddogAnalyze) (*guarddogVerdict, error) {

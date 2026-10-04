@@ -8,6 +8,7 @@ import (
 
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/feeds/feedstest"
+	"github.com/depguard/depguard/internal/registry"
 	"github.com/depguard/depguard/internal/scan"
 	"github.com/safedep/vet/gen/insightapi"
 	"github.com/safedep/vet/pkg/models"
@@ -157,7 +158,9 @@ func TestCheckFromCache(t *testing.T) {
 	}
 	e := enrich.New(pool, enrich.Options{DisableDepsDev: true, DisableScorecard: true})
 	pkgs := []*models.Package{pkg("request", "2.88.2", "", 0, -1), pkg("fresh-thing", "0.1.0", "github.com/x/f", 1, -1), pkg("expres", "1.0.0", "", 0, -1)}
-	fs, err := New(pool, e, ConfigFromPolicy(scan.PolicyConfig{})).Check(ctx, scan.CheckInput{Packages: pkgs})
+	ch := New(pool, e, ConfigFromPolicy(scan.PolicyConfig{})).(*checker)
+	ch.reg = &registry.Client{NPMURL: "http://127.0.0.1:1", PyPIURL: "http://127.0.0.1:1"} // offline: fresh rules skip
+	fs, err := ch.Check(ctx, scan.CheckInput{Packages: pkgs})
 	if err != nil {
 		t.Fatal(err)
 	}

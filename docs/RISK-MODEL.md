@@ -62,6 +62,24 @@ Malware advice is always "remove and rotate credentials".
 Each rule can be switched off on the Policy page, and you choose which rules **block** (fail the check).
 Default: only `typosquat` and `unusual-behaviour` block; the rest are reported.
 
+### Fresh releases
+
+Hijacked releases (event-stream, ua-parser-js, chalk/debug, Shai-Hulud) are usually caught and pulled within hours,
+before any advisory exists. These rules read release metadata straight from the npm and PyPI registries (cached: 1 hour
+while a package's newest release is under a week old, else 24 hours) and are configured by the **Fresh releases**
+policy preset. They block by default; turn off "Fail the check" to only warn.
+
+| Rule | Severity | Fires when |
+|---|---|---|
+| `release-age` | high | The version was published less than the cooldown ago (default 48 hours; npm and PyPI). A release that is the `fixed` version of an OSV advisory skips the cooldown, so security fixes are never held back. |
+| `install-script-added` | high | (npm) The release has a `preinstall`/`install`/`postinstall`/`prepare` script and the previous release had none. A changed script is a medium warning. |
+| `provenance-dropped` | high | (npm) The previous release had signed build provenance and this one does not: it was probably not published by the project's CI. |
+| `publisher-changed` | medium | (npm) Published by an account that never published the package before. High and blocking together with `install-script-added` or `provenance-dropped`. |
+| `new-behaviour` | high | An upgrade in a pull request: guarddog rules that fire on the new version but not on the version the project had. Only releases under 30 days old are compared; each version is analysed once and cached. |
+
+The previous-release rules only look at releases younger than 90 days. Registry failures disable the rules for that
+package; they never fail a scan. Trusted packages (package rules) skip them.
+
 ## License compliance
 
 depguard needs two facts about your project:

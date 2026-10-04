@@ -297,6 +297,7 @@ export type Policy = {
     suspicious?: SuspiciousPreset;
     packages?: PackageRule[];
     secrets?: { block: boolean; block_passwords: boolean };
+    fresh?: FreshPreset;
   };
   custom: CustomRule[];
 };
@@ -576,3 +577,5 @@ export type AuditEntry = {
   ip: string;
   created_at: string;
 };
+
+export type FreshPreset = { cooldown_hours: number; allow_security_fixes: boolean; block: boolean; install_scripts: boolean; provenance: boolean; publisher: boolean };

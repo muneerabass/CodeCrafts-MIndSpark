@@ -59,6 +59,16 @@ export function suspiciousReason(rule: string, d: Record<string, unknown> = {}, 
       return Array.isArray(d.rules) && d.rules.length ? `Heuristic analysis flagged: ${d.rules.join(', ')}${s('risk_score') ? ` (risk ${s('risk_score')})` : ''}` : fallback;
     case 'no-source-repo':
       return 'No linked source repository to review';
+    case 'release-age':
+      return s('age_hours') ? `Published ${s('age_hours')} hours ago; cooldown is ${s('cooldown_hours')} hours` : fallback;
+    case 'install-script-added':
+      return d.scripts && typeof d.scripts === 'object' ? `${d.changed ? 'Changed' : 'New'} install script: ${Object.entries(d.scripts as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join('; ')}` : fallback;
+    case 'provenance-dropped':
+      return s('previous_version') ? `No build provenance; ${s('previous_version')} had it` : fallback;
+    case 'publisher-changed':
+      return s('publisher') ? `Published by ${s('publisher')}, new to this package` : fallback;
+    case 'new-behaviour':
+      return Array.isArray(d.rules) && d.rules.length ? `New since ${s('previous_version')}: ${d.rules.join(', ')}` : fallback;
   }
   return s('reason') || s('explanation') || fallback;
 }

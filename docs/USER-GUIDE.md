@@ -131,6 +131,8 @@ missed webhook never leaves a PR stale.
 | **Package & version rules** | per package: **Allowed versions** (e.g. `>=4.17.21 <5`, `<2 \|\| >=3.1`), **Banned**, or **Trusted** (skips suspicious/license checks, never vulnerability/malware). Severity high/critical blocks, medium/low warns |
 | License | usage-aware license compliance, the severity that blocks, denied SPDX licenses |
 | Suspicious | typosquats, unmaintained, deprecated, brand-new versions, no source repo, unusual behaviour; choose which ones block |
+| Fresh releases | wait 0/24/48/72 hours or 7 days before allowing a new release (security fixes skip the wait); flag new install scripts, dropped provenance, new publishers and new behaviour in upgrades; block or only warn |
+| Secrets in PRs | fail the check when keys/tokens are committed; optionally also on hard-coded passwords |
 | Popularity / Maintenance | minimum stars, minimum OpenSSF Scorecard |
 | Advanced | custom CEL rules (`pkg.name`, `vulns.critical`, `licenses`, `scorecard.score`, …) |
 

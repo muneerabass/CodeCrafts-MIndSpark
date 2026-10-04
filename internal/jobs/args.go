@@ -42,6 +42,7 @@ type ScanUpload struct {
 func (ScanUpload) Kind() string { return "scan_upload" }
 
 // GuarddogAnalyze runs heuristic malware analysis on a newly seen package.
+// With PrevVersion (an upgrade), only behaviour new since that version is reported.
 type GuarddogAnalyze struct {
 	TenantID    string `json:"tenant_id"`
 	ComponentID string `json:"component_id"`
@@ -49,6 +50,7 @@ type GuarddogAnalyze struct {
 	Ecosystem   string `json:"ecosystem"`
 	Name        string `json:"name"`
 	Version     string `json:"version"`
+	PrevVersion string `json:"prev_version,omitempty"`
 }
 
 func (GuarddogAnalyze) Kind() string { return "guarddog_analyze" }

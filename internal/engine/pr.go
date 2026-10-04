@@ -345,7 +345,7 @@ func (d Deps) enqueueGuarddog(ctx context.Context, tenant, scanID string, fs []*
 	var pkgs []*models.Package
 	var checks []scan.Finding
 	for _, f := range fs {
-		if (f.change != "added" && f.change != "full") || f.malware || guarddogEcosystem[f.ecosystem()] == "" {
+		if (f.change != "added" && f.change != "full" && !(f.change == "changed" && f.oldVersion != "")) || f.malware || guarddogEcosystem[f.ecosystem()] == "" {
 			continue
 		}
 		byPkg[f.pkg] = f
@@ -371,7 +371,7 @@ func (d Deps) enqueueGuarddog(ctx context.Context, tenant, scanID string, fs []*
 		}
 		seen[f.componentID] = true
 		params = append(params, river.InsertManyParams{Args: jobs.GuarddogAnalyze{TenantID: tenant, ComponentID: f.componentID, ScanID: scanID,
-			Ecosystem: f.ecosystem(), Name: f.pkg.GetName(), Version: f.pkg.GetVersion()},
+			Ecosystem: f.ecosystem(), Name: f.pkg.GetName(), Version: f.pkg.GetVersion(), PrevVersion: f.oldVersion},
 			InsertOpts: &river.InsertOpts{MaxAttempts: 3, UniqueOpts: river.UniqueOpts{ByArgs: true}}})
 	}
 	if len(params) == 0 {

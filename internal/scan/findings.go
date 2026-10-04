@@ -132,6 +132,7 @@ type Change struct {
 	Package *models.Package
 	Path    string // manifest display path
 	Kind    string // added | changed
+	Old     string // for "changed": a version of the same package in the base manifest
 }
 
 // Diff returns packages present in head but not in base, keyed by
@@ -160,11 +161,16 @@ func Diff(base, head []*models.PackageManifest) []Change {
 				continue
 			}
 			seen[full] = true
-			kind := "added"
+			kind, old := "added", ""
 			if len(baseVersions[k]) > 0 {
 				kind = "changed"
+				for v := range baseVersions[k] {
+					if old == "" || v < old { // deterministic pick when the base held several
+						old = v
+					}
+				}
 			}
-			out = append(out, Change{Package: p, Path: m.GetDisplayPath(), Kind: kind})
+			out = append(out, Change{Package: p, Path: m.GetDisplayPath(), Kind: kind, Old: old})
 		}
 	}
 	return out

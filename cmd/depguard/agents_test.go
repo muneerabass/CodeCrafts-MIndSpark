@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"

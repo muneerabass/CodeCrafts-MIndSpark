@@ -20,6 +20,7 @@ type finding struct {
 	pkg         *models.Package
 	path        string
 	change      string // full | added | changed
+	oldVersion  string // for "changed": the version the base had
 	vulns       []scan.Vuln
 	violations  []scan.Violation
 	malware     bool
@@ -66,7 +67,7 @@ func (d Deps) evaluate(ctx context.Context, changes []scan.Change, st settings, 
 		if err != nil {
 			return nil, err
 		}
-		f := &finding{pkg: c.Package, path: c.Path, change: c.Kind, vulns: scan.Vulns(c.Package),
+		f := &finding{pkg: c.Package, path: c.Path, change: c.Kind, oldVersion: c.Old, vulns: scan.Vulns(c.Package),
 			violations: scan.ApplyExclusions(vs, st.Exclusions, now), malware: scan.IsMalicious(c.Package)}
 		for _, v := range f.vulns {
 			if !strings.HasPrefix(v.ID, "MAL-") {
