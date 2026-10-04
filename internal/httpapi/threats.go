@@ -44,6 +44,10 @@ SELECT jsonb_build_object(
       OR EXISTS (SELECT 1 FROM component_vulnerabilities x WHERE x.component_id = inv.component_id AND x.advisory_id LIKE 'MAL-%')),
   'violations', (SELECT count(*) FROM curv),
   'vulnerabilities', (SELECT count(DISTINCT x.advisory_id) FROM component_vulnerabilities x JOIN inv USING (component_id) WHERE x.`+notMal+`),
+  'vulns_by_risk', (SELECT jsonb_build_object('critical', count(*) FILTER (WHERE risk = 'CRITICAL'), 'high', count(*) FILTER (WHERE risk = 'HIGH'),
+      'medium', count(*) FILTER (WHERE risk = 'MEDIUM'), 'low', count(*) FILTER (WHERE risk NOT IN ('CRITICAL','HIGH','MEDIUM')))
+      FROM (SELECT DISTINCT ON (x.advisory_id) x.risk FROM component_vulnerabilities x JOIN inv USING (component_id) WHERE x.`+notMal+`
+            ORDER BY x.advisory_id, array_position(ARRAY['CRITICAL','HIGH','MEDIUM','LOW'], x.risk)) a),
   'transitive_vulnerabilities', (SELECT count(DISTINCT (x.component_id, x.advisory_id)) FROM component_vulnerabilities x
       WHERE x.`+notMal+` AND EXISTS (SELECT 1 FROM project_version_components pvc WHERE pvc.component_id = x.component_id AND pvc.direct = false)),
   'attack_paths', (SELECT count(*) FROM (SELECT DISTINCT pvc.project_version_id, pvc.component_id FROM project_version_components pvc

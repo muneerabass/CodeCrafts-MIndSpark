@@ -355,6 +355,12 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
         malicious: analyses.filter((a) => a.status === 'malicious').length,
         violations: violations.length,
         vulnerabilities: vulns.length,
+        vulns_by_risk: {
+          critical: vulns.filter((v) => v.risk === 'CRITICAL').length,
+          high: vulns.filter((v) => v.risk === 'HIGH').length,
+          medium: vulns.filter((v) => v.risk === 'MEDIUM').length,
+          low: vulns.filter((v) => !['CRITICAL', 'HIGH', 'MEDIUM'].includes(v.risk)).length,
+        },
         violations_over_time: series(days).map(({ d, i }) => ({ date: d, count: (i * 7) % 5 })),
         violations_by_check: [
           { check: 'vulnerability', count: 6 },

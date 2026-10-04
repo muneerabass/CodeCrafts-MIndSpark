@@ -11,6 +11,7 @@ export type Dashboard = {
   malicious: number;
   violations: number;
   vulnerabilities: number;
+  vulns_by_risk?: { critical: number; high: number; medium: number; low: number };
   violations_over_time: { date: string; count: number }[];
   violations_by_check: { check: string; count: number }[];
   vulns_over_time: { date: string; critical: number; high: number; medium: number; low: number }[];

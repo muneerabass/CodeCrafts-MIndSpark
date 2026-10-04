@@ -177,6 +177,10 @@ func TestReadEndpoints(t *testing.T) {
 		len(d["top_projects"].([]any)) != 1 || len(d["violations_by_check"].([]any)) != 1 {
 		t.Fatalf("dashboard: %v", d)
 	}
+	// One HIGH advisory (GHSA-1); malware is not counted as a vulnerability.
+	if r := d["vulns_by_risk"].(map[string]any); r["high"].(float64) != 1 || r["critical"].(float64) != 0 {
+		t.Fatalf("vulns_by_risk: %v", r)
+	}
 	expect(t, do(t, "GET", "/api/v1/dashboard?range=1y", a, nil), 400)
 
 	pd := expect(t, do(t, "GET", "/api/v1/projects/pa", a, nil), 200).body
