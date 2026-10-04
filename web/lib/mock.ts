@@ -257,6 +257,11 @@ let notif: T.NotificationsResponse = {
   secrets_enabled: true,
 };
 const jiraLinks: T.JiraLink[] = [{ ref_kind: 'vuln', ref: 'GHSA-9wv6-86v2-598j', issue_key: 'SEC-41', url: 'https://acme.atlassian.net/browse/SEC-41', created_by: 'ada@acme.dev', created_at: iso(2) }];
+const auditLog: T.AuditEntry[] = [
+  { id: 'au-3', actor_id: 'u-ada', actor_email: 'ada@acme.dev', actor_role: 'owner', actor_kind: 'user', action: 'PUT /policy', target_type: '', target_id: '', details: {}, ip: '', created_at: iso(0.1) },
+  { id: 'au-2', actor_id: 'u-ada', actor_email: 'ada@acme.dev', actor_role: 'owner', actor_kind: 'user', action: 'web:member.role', target_type: 'member', target_id: 'm-2', details: { role: 'admin' }, ip: '', created_at: iso(1) },
+  { id: 'au-1', actor_id: 'u-ci', actor_email: '', actor_role: 'member', actor_kind: 'api_key', action: 'POST /v1/scans', target_type: '', target_id: '', details: { api_key_id: 'k-1' }, ip: '203.0.113.7', created_at: iso(2) },
+];
 let sla: T.SLA = { critical: 7, high: 30, medium: 90, low: 0 };
 let fixSettings: T.FixSettings = { auto: false, levels: ['critical'], kev: true, max_open: 5 };
 const fixes: T.FixPR[] = [
@@ -525,6 +530,10 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       for (const x of all) x.share = Math.round(((cum += x.weight) / total) * 1000) / 10;
       return { items: all, total: all.length, total_weight: total, summary: { overdue: all.filter((x) => x.overdue).length, due_soon: 0, fixable: all.length }, sla } satisfies T.FixQueue;
     }
+    case 'GET /audit-log':
+      return paginate(auditLog.filter((e) => has(e.actor_email, q.get('actor')) && has(e.action, q.get('action'))), q);
+    case 'POST /audit':
+      return { status: 'recorded' };
     case 'GET /settings/notifications':
       return notif;
     case 'PUT /settings/notifications': {

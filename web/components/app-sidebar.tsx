@@ -38,6 +38,7 @@ import {
   Users,
   Video,
   ListOrdered,
+  ScrollText,
   Wand2,
   Webhook,
 } from 'lucide-react';
@@ -112,6 +113,7 @@ const SETTINGS: Group[] = [
       { href: '/settings/pull-requests', label: 'Pull Requests', icon: GitPullRequest },
       { href: '/settings/auto-fix', label: 'Auto-fix', icon: Wand2 },
       { href: '/settings/notifications', label: 'Notifications', icon: Bell },
+      { href: '/settings/audit-log', label: 'Audit Log', icon: ScrollText },
     ],
   },
   { label: 'Personal', items: [{ href: '/settings/profile', label: 'Your Profile', icon: User }] },

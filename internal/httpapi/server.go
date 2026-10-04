@@ -69,11 +69,13 @@ func New(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	jwt := func(h http.Handler) http.Handler { return auth.JWTMiddleware(d.JWTSecret, h) }
-	read := func(h handler) http.Handler { return jwt(auth.RequireTenant(s.activeTenant(s.serve(h)))) }
-	write := func(h handler) http.Handler {
-		return jwt(auth.RequireTenant(s.activeTenant(auth.RequireWrite(s.serve(h)))))
+	read := func(h handler) http.Handler {
+		return jwt(auth.RequireTenant(s.activeTenant(s.audited(s.serve(h), "user"))))
 	}
-	admin := func(h handler) http.Handler { return jwt(auth.RequireSA(s.serve(h))) }
+	write := func(h handler) http.Handler {
+		return jwt(auth.RequireTenant(s.activeTenant(auth.RequireWrite(s.audited(s.serve(h), "user")))))
+	}
+	admin := func(h handler) http.Handler { return jwt(auth.RequireSA(s.audited(s.serve(h), "admin"))) }
 	key := func(h http.Handler) http.Handler {
 		return auth.APIKeyMiddleware(d.Pool, d.APIKeyRPS, d.APIKeyBurst, h)
 	}
@@ -151,6 +153,8 @@ func New(d Deps) http.Handler {
 	mux.Handle("PUT /api/v1/exclusions/{id}", write(s.updateExclusion))
 	mux.Handle("DELETE /api/v1/exclusions/{id}", write(s.deleteExclusion))
 	mux.Handle("GET /api/v1/integrations", read(s.integrations))
+	mux.Handle("GET /api/v1/audit-log", write(s.listAudit))
+	mux.Handle("POST /api/v1/audit", write(s.recordAudit))
 
 	// Super-admin.
 	mux.Handle("POST /api/v1/admin/tenants", admin(s.adminCreateTenant))
@@ -168,7 +172,7 @@ func New(d Deps) http.Handler {
 	}
 
 	// Machine (API key).
-	mux.Handle("POST /v1/scans", key(s.serve(s.uploadScan)))
+	mux.Handle("POST /v1/scans", key(s.audited(s.serve(s.uploadScan), "api_key")))
 	mux.Handle("GET /v1/scans/{id}", key(s.serve(s.machineGetScan)))
 	mux.Handle("GET /v1/scans/{id}/report", key(s.serve(s.scanReport)))
 	mux.Handle("POST /v1/packages/check", key(s.serve(s.checkPackages)))

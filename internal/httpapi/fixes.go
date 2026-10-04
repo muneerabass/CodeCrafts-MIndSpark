@@ -103,6 +103,7 @@ func (s *Server) createFix(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		out = map[string]any{"id": id, "status": "queued", "to_version": to, "command": cmd}
+		auditDetail(r, "package", cand.Name+" "+cand.Version+" → "+to)
 		return nil
 	})
 	if err != nil {

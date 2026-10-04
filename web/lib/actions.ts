@@ -24,6 +24,10 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   }
 }
 
+/** Records a change made here (not through the Go API) in the tenant's audit log; never fails the action. */
+const audit = (action: string, target_type: string, target_id: string, details: Record<string, string> = {}) =>
+  api('/audit', { method: 'POST', body: { action, target_type, target_id, details } }).catch(() => undefined);
+
 const noBypass = () => {
   if (authBypass) throw new Error('Not available in E2E bypass mode.');
 };
@@ -62,6 +66,7 @@ export const updateOrgName = async (name: string) =>
     noBypass();
     const validated = z.string().trim().min(2, 'Name is too short').max(80).parse(name);
     await db.update(schema.organization).set({ name: validated }).where(eq(schema.organization.id, ctx.org.id));
+    await audit('web:org.rename', 'organization', ctx.org.id, { name: validated });
   });
 
 const roleSchema = z.enum(['owner', 'admin', 'member']);
@@ -73,6 +78,7 @@ export const inviteMember = async (email: string, role: string) =>
     const validEmail = z.email('Enter a valid email').parse(email.trim());
     const validRole = roleSchema.parse(role);
     const id = await upsertInvitation(ctx.org.id, validEmail, validRole, ctx.user.id);
+    await audit('web:member.invite', 'invitation', id, { email: validEmail, role: validRole });
     return deliverInvitation(validEmail, ctx.org.name, id);
   });
 
@@ -90,6 +96,7 @@ export const cancelInvitation = async (invitationId: string) =>
     await requireRole('owner');
     noBypass();
     await db.update(schema.invitation).set({ status: 'cancelled' }).where(eq(schema.invitation.id, invitationId));
+    await audit('web:invitation.cancel', 'invitation', invitationId);
   });
 
 export const updateMemberRole = async (memberId: string, role: string) =>
@@ -98,6 +105,7 @@ export const updateMemberRole = async (memberId: string, role: string) =>
     noBypass();
     const validRole = roleSchema.parse(role);
     await db.update(schema.member).set({ role: validRole }).where(eq(schema.member.id, memberId));
+    await audit('web:member.role', 'member', memberId, { role: validRole });
   });
 
 export const removeMember = async (memberIdOrEmail: string) =>
@@ -105,6 +113,7 @@ export const removeMember = async (memberIdOrEmail: string) =>
     await requireRole('owner');
     noBypass();
     await db.delete(schema.member).where(eq(schema.member.id, memberIdOrEmail));
+    await audit('web:member.remove', 'member', memberIdOrEmail);
   });
 
 // ---------- Go API ----------

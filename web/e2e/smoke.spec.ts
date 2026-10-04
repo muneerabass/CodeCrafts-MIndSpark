@@ -465,3 +465,16 @@ test('components: health column and package detail page', async ({ page }) => {
   await expect(page.getByLabel('Scorecard checks').getByText('Signed Releases')).toBeVisible();
   await expect(page.getByRole('link', { name: 'acme/storefront' })).toBeVisible();
 });
+
+test('audit log: entries, filter, CSV export', async ({ page }) => {
+  await page.goto('/settings/audit-log');
+  await expect(page.getByText('Changed the policy')).toBeVisible();
+  await expect(page.getByText('Changed a member’s role')).toBeVisible();
+  await expect(page.getByText('Uploaded a scan (CLI/CI)')).toBeVisible();
+  await expect(page.getByText('203.0.113.7', { exact: false })).toBeVisible();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export CSV' }).click()]);
+  expect(dl.suggestedFilename()).toMatch(/^depguard-audit-log-.*\.csv$/);
+  await page.goto('/settings/audit-log?action=policy');
+  await expect(page.getByText('Changed the policy')).toBeVisible();
+  await expect(page.getByText('Uploaded a scan (CLI/CI)')).toHaveCount(0);
+});

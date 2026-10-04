@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/depguard/depguard/internal/jobs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -16,6 +17,7 @@ import (
 const (
 	finishedUploadRetention  = time.Hour
 	abandonedUploadRetention = 7 * 24 * time.Hour
+	auditRetention           = 365 * 24 * time.Hour
 )
 
 type cleanupWorker struct {
@@ -51,26 +53,16 @@ func (w *cleanupWorker) Work(ctx context.Context, _ *river.Job[jobs.CleanupScanU
 		DELETE FROM scan_uploads u
 		 USING victims v
 		 WHERE u.scan_id = v.scan_id AND u.path = v.path`
-	// RLS forces per-tenant scoping; run as a privileged system txn by temporarily
-	// disabling the tenant filter via a sentinel. scan_uploads policy requires
-	// tenant_id = current_setting('app.tenant'), so iterate over tenants.
-	rows, err := w.pool.Query(ctx, `SELECT DISTINCT tenant_id FROM scans
-		WHERE (status IN ('failed','skipped','cancelled') AND finished_at < now() - $1::interval)
-		   OR (status IN ('queued','running') AND created_at < now() - $2::interval)`,
-		finishedUploadRetention.String(), abandonedUploadRetention.String())
+	// RLS scopes scan_uploads to app.tenant, so iterate over every tenant
+	// (depguard_admin_tenants is the sanctioned cross-tenant list).
+	rows, err := w.pool.Query(ctx, `SELECT tenant_id FROM depguard_admin_tenants()`)
 	if err != nil {
 		return err
 	}
-	tenants := make([]string, 0, 16)
-	for rows.Next() {
-		var t string
-		if err := rows.Scan(&t); err != nil {
-			rows.Close()
-			return err
-		}
-		tenants = append(tenants, t)
+	tenants, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return err
 	}
-	rows.Close()
 	for _, t := range tenants {
 		if err := w.deleteOne(ctx, t, sql); err != nil {
 			return err
@@ -89,6 +81,9 @@ func (w *cleanupWorker) deleteOne(ctx context.Context, tenant, sql string) error
 		return err
 	}
 	if _, err := tx.Exec(ctx, sql, finishedUploadRetention.String(), abandonedUploadRetention.String()); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM audit_log WHERE created_at < now() - $1::interval`, auditRetention.String()); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

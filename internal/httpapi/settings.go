@@ -95,6 +95,7 @@ func (s *Server) createKey(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	auditDetail(r, "name", body.Name)
 	return writeJSON(w, http.StatusCreated, k)
 }
 
@@ -181,6 +182,8 @@ func (s *Server) createExclusion(w http.ResponseWriter, r *http.Request) error {
 	}
 	id := ids.New()
 	p := principal(r)
+	auditDetail(r, "package", b.Ecosystem+"/"+b.Name+"@"+b.Version)
+	auditDetail(r, "reason", b.Reason)
 	err := s.tx(r, func(tx pgx.Tx) error {
 		_, err := tx.Exec(r.Context(), `INSERT INTO exclusions (id, tenant_id, ecosystem, name, version, reason, expires_at, created_by)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, id, p.TenantID, b.Ecosystem, b.Name, b.Version, b.Reason, b.ExpiresAt, p.UserID)
@@ -379,6 +382,8 @@ func (s *Server) createScan(w http.ResponseWriter, r *http.Request) error {
 	}
 	p := principal(r)
 	scanID := ids.New()
+	auditDetail(r, "scan_id", scanID)
+	auditDetail(r, "branch", body.Branch)
 	err := s.tx(r, func(tx pgx.Tx) error {
 		ctx := r.Context()
 		var fullName, defBranch string

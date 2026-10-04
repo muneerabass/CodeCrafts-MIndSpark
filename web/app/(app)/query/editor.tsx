@@ -1,5 +1,7 @@
 'use client';
 
+import { downloadCsv } from '@/lib/csv';
+
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { ChevronRight, Download, Loader2, Play, Save, Table2, Trash2 } from 'lucide-react';
@@ -23,11 +25,6 @@ WHERE updated_at > now() - interval '30 days'
 ORDER BY updated_at DESC
 LIMIT 100`;
 
-const csvCell = (v: unknown) => {
-  const s = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
-  return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
-};
-
 export function QueryEditor({ schema, saved }: { schema: QuerySchema; saved: SavedQuery[] }) {
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [result, setResult] = useState<QueryResult | null>(null);
@@ -49,12 +46,7 @@ export function QueryEditor({ schema, saved }: { schema: QuerySchema; saved: Sav
   }
 
   function exportCsv() {
-    if (!result) return;
-    const lines = [result.columns.map(csvCell).join(','), ...result.rows.map((r) => r.map(csvCell).join(','))];
-    const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: `depguard-query-${new Date().toISOString().slice(0, 19)}.csv` });
-    a.click();
-    URL.revokeObjectURL(url);
+    if (result) downloadCsv('depguard-query', result.columns, result.rows);
   }
 
   return (

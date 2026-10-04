@@ -562,3 +562,17 @@ export type NotificationsResponse = {
   secrets_enabled: boolean;
 };
 export type JiraLink = { ref_kind: 'vuln' | 'package'; ref: string; issue_key: string; url: string; created_by: string; created_at: string };
+
+export type AuditEntry = {
+  id: string;
+  actor_id: string;
+  actor_email: string;
+  actor_role: string;
+  actor_kind: 'user' | 'api_key' | 'admin' | 'system';
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: Record<string, unknown>;
+  ip: string;
+  created_at: string;
+};
