@@ -13,6 +13,7 @@ import (
 
 	"github.com/depguard/depguard/internal/auth"
 	"github.com/depguard/depguard/internal/db"
+	"github.com/depguard/depguard/internal/engine"
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,16 +25,41 @@ import (
 // Version is reported to MCP clients.
 const Version = "0.1.0"
 
+// CheckFunc is the tenant's pre-install policy check (engine.Deps.CheckPackages).
+type CheckFunc func(ctx context.Context, tenant string, req engine.CheckRequest) (*engine.CheckResult, error)
+
 type tools struct {
-	pool *pgxpool.Pool
-	enr  *enrich.Enricher
+	pool  *pgxpool.Pool
+	enr   *enrich.Enricher
+	check CheckFunc
 }
 
-// NewServer builds the MCP server with depguard's tools.
-func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher) *server.MCPServer {
-	t := &tools{pool: pool, enr: enr}
-	s := server.NewMCPServer("depguard", Version, server.WithToolCapabilities(false), server.WithRecovery(),
-		server.WithInstructions("Supply-chain intelligence for open source packages: known vulnerabilities, malware verdicts, licenses and OpenSSF Scorecard."))
+// Instructions are sent to every MCP client: the rules an agent follows.
+const Instructions = `depguard checks open source packages against your team's security policy: malware, known vulnerabilities, typosquats, licenses and package health.
+
+Before you install, add or upgrade ANY dependency (npm/pnpm/yarn/bun, pip/uv/poetry, go get, cargo, gem, composer, maven, nuget) - including ones you are about to write into a manifest - call check_packages with every package you plan to add, in one call.
+- decision "block": do NOT install it. Tell the user it was blocked and why, and offer the suggested safer version or an alternative.
+- decision "warn": you may install it, but tell the user the warning in one line.
+- decision "allow": install it; no need to mention depguard.
+Never work around a block (other registries, vendoring, copying the code). Only the user can override it, from depguard.`
+
+// NewServer builds the MCP server with depguard's tools; check may be nil (no check_packages).
+func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc) *server.MCPServer {
+	t := &tools{pool: pool, enr: enr, check: check}
+	s := server.NewMCPServer("depguard", Version, server.WithToolCapabilities(false), server.WithRecovery(), server.WithInstructions(Instructions))
+	if check != nil {
+		s.AddTool(mcp.NewTool("check_packages",
+			mcp.WithDescription("Check packages against the team's depguard policy BEFORE installing or adding them. Returns allow, warn or block per package with the reasons and a safer version when one exists. Omit version to check the latest release."),
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithArray("packages", mcp.Required(), mcp.Description("Packages to check (max 100)"), mcp.Items(map[string]any{
+				"type": "object", "required": []string{"ecosystem", "name"},
+				"properties": map[string]any{
+					"ecosystem": map[string]any{"type": "string", "description": "npm, PyPI, Go, Maven, Cargo, RubyGems, Packagist or NuGet"},
+					"name":      map[string]any{"type": "string", "description": "Package name, e.g. lodash, requests, github.com/gin-gonic/gin"},
+					"version":   map[string]any{"type": "string", "description": "Exact version; omit for the latest release"},
+				},
+			}))), t.checkPackages)
+	}
 	pkgArgs := []mcp.ToolOption{
 		mcp.WithString("ecosystem", mcp.Required(), mcp.Description("Package ecosystem: npm, PyPI, Go, Maven, Cargo, RubyGems, Packagist, NuGet, Hex, Pub, GitHubActions")),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Package name, e.g. lodash or org.apache.logging.log4j:log4j-core")),
@@ -50,8 +76,8 @@ func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher) *server.MCPServer {
 }
 
 // Handler serves MCP over streamable HTTP (stateless; each request carries its API key).
-func Handler(pool *pgxpool.Pool, enr *enrich.Enricher) http.Handler {
-	return http.MaxBytesHandler(server.NewStreamableHTTPServer(NewServer(pool, enr), server.WithStateLess(true)), 1<<20)
+func Handler(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc) http.Handler {
+	return http.MaxBytesHandler(server.NewStreamableHTTPServer(NewServer(pool, enr, check), server.WithStateLess(true)), 1<<20)
 }
 
 var ecosystems = map[string]string{
@@ -184,5 +210,130 @@ func (t *tools) scorecard(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 			out["scorecard"] = ins.Scorecard.Content
 		}
 	}
+	return result(out)
+}
+
+type checkArgs struct {
+	Packages []struct {
+		Ecosystem string `json:"ecosystem"`
+		Name      string `json:"name"`
+		Version   string `json:"version"`
+	} `json:"packages"`
+}
+
+// checkPackages runs the tenant policy on the packages an agent wants to add.
+func (t *tools) checkPackages(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	p := auth.FromContext(ctx)
+	if p == nil || p.TenantID == "" {
+		return mcp.NewToolResultError("missing depguard API key"), nil
+	}
+	var a checkArgs
+	if err := req.BindArguments(&a); err != nil || len(a.Packages) == 0 || len(a.Packages) > 100 {
+		return mcp.NewToolResultError("packages must be a list of 1 to 100 {ecosystem, name, version?} objects"), nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	var pkgs []engine.CheckPackage
+	var notes []string
+	for _, x := range a.Packages {
+		vetEco, ok := ecosystems[strings.ToLower(strings.TrimSpace(x.Ecosystem))]
+		osv := enrich.OSVEcosystemName(vetEco)
+		if !ok || osv == "" {
+			notes = append(notes, "unsupported ecosystem "+x.Ecosystem+" for "+x.Name)
+			continue
+		}
+		v := strings.TrimSpace(x.Version)
+		if v == "" || v == "latest" {
+			l, err := t.enr.PackageLatest(ctx, osv, x.Name)
+			if err != nil || l == nil || !l.Found || l.DefaultVersion == "" {
+				notes = append(notes, x.Name+": package not found in the "+osv+" registry - it may not exist (a typo or hallucinated name). Do not install it.")
+				continue
+			}
+			v = l.DefaultVersion
+		}
+		pkgs = append(pkgs, engine.CheckPackage{Ecosystem: osv, Name: strings.TrimSpace(x.Name), Version: v})
+	}
+	out := map[string]any{"decision": engine.DecisionAllow, "packages": []any{}, "notes": notes}
+	if len(notes) > 0 {
+		out["decision"] = engine.DecisionBlock
+	}
+	if len(pkgs) == 0 {
+		out["agent_instruction"] = strings.Join(notes, " ")
+		return result(out)
+	}
+	res, err := t.check(ctx, p.TenantID, engine.CheckRequest{Packages: pkgs})
+	if err != nil {
+		return mcp.NewToolResultError("depguard check failed: " + err.Error()), nil
+	}
+	verdicts := map[string]engine.CheckVerdict{}
+	for _, v := range res.Packages {
+		verdicts[v.Ecosystem+"/"+v.Name+"@"+v.Version] = v
+	}
+	// For blocked or warned packages, see whether the latest release is clean.
+	var alts []engine.CheckPackage
+	for _, c := range pkgs {
+		if v, ok := verdicts[c.Ecosystem+"/"+c.Name+"@"+c.Version]; ok && v.Decision != engine.DecisionAllow {
+			if l, _ := t.enr.PackageLatest(ctx, c.Ecosystem, c.Name); l != nil && l.DefaultVersion != "" && l.DefaultVersion != c.Version {
+				alts = append(alts, engine.CheckPackage{Ecosystem: c.Ecosystem, Name: c.Name, Version: l.DefaultVersion})
+			}
+		}
+	}
+	safer := map[string]string{}
+	if len(alts) > 0 {
+		if ar, err := t.check(ctx, p.TenantID, engine.CheckRequest{Packages: alts}); err == nil {
+			bad := map[string]bool{}
+			for _, v := range ar.Packages {
+				if v.Decision == engine.DecisionBlock {
+					bad[v.Ecosystem+"/"+v.Name] = true
+				}
+			}
+			for _, c := range alts {
+				if !bad[c.Ecosystem+"/"+c.Name] {
+					safer[c.Ecosystem+"/"+c.Name] = c.Version
+				}
+			}
+		}
+	}
+	var list []any
+	var lines []string
+	decision := engine.DecisionAllow
+	if len(notes) > 0 {
+		decision = engine.DecisionBlock
+		lines = append(lines, notes...)
+	}
+	for _, c := range pkgs {
+		v, ok := verdicts[c.Ecosystem+"/"+c.Name+"@"+c.Version]
+		item := map[string]any{"ecosystem": c.Ecosystem, "name": c.Name, "version": c.Version, "decision": engine.DecisionAllow, "findings": []any{}}
+		if ok {
+			item["decision"], item["findings"] = v.Decision, v.Findings
+			if alt := safer[c.Ecosystem+"/"+c.Name]; alt != "" {
+				item["safer_version"] = alt
+			}
+			var why []string
+			for _, f := range v.Findings {
+				why = append(why, f.Summary)
+			}
+			label := c.Name + "@" + c.Version
+			switch v.Decision {
+			case engine.DecisionBlock:
+				l := "BLOCKED " + label + ": " + strings.Join(why, "; ") + ". Do not install it."
+				if alt := safer[c.Ecosystem+"/"+c.Name]; alt != "" {
+					l += " Use " + c.Name + "@" + alt + " instead (passes the policy)."
+				}
+				lines = append(lines, l)
+			case engine.DecisionWarn:
+				lines = append(lines, "WARNING "+label+": "+strings.Join(why, "; ")+". Allowed, but tell the user.")
+			}
+			if v.Decision == engine.DecisionBlock || (v.Decision == engine.DecisionWarn && decision == engine.DecisionAllow) {
+				decision = v.Decision
+			}
+		}
+		list = append(list, item)
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "All packages pass the team policy. Install them.")
+	}
+	out["decision"], out["packages"], out["agent_instruction"] = decision, list, strings.Join(lines, "\n")
+	out["block_mode"] = res.BlockMode
 	return result(out)
 }

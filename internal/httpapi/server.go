@@ -12,6 +12,7 @@ import (
 	"github.com/depguard/depguard/internal/auth"
 	"github.com/depguard/depguard/internal/db"
 	"github.com/depguard/depguard/internal/query"
+	"github.com/depguard/depguard/skills"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
@@ -170,6 +171,13 @@ func New(d Deps) http.Handler {
 	if d.RiverUI != nil {
 		mux.Handle("/admin/river/", jwt(auth.RequireSA(d.RiverUI)))
 	}
+
+	// Public: the depguard agent skill (any agent can fetch it; `depguard setup agents` embeds the same file).
+	mux.HandleFunc("GET /agent/SKILL.md", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Write([]byte(skills.Depguard))
+	})
 
 	// Machine (API key).
 	mux.Handle("POST /v1/scans", key(s.audited(s.serve(s.uploadScan), "api_key")))

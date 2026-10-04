@@ -79,6 +79,7 @@ func usage() {
   depguard login            connect to your team (API key from Settings → API Keys)
   depguard init             link this project (.depguard.yml) and guard installs
   depguard setup shell      guard npm, npx, pnpm, yarn, pip, uv, uvx, poetry, go and cargo on this machine
+  depguard setup agents     connect Claude Code, Cursor, VS Code, Windsurf, Gemini CLI and Codex (MCP + skill)
   depguard doctor           show whether installs on this machine are guarded
 
 %s

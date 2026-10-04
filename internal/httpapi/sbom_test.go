@@ -52,3 +52,10 @@ INSERT INTO component_vulnerabilities (tenant_id, component_id, advisory_id, ris
 	}
 	expect(t, do(t, "GET", "/v1/sbom", key, nil), 400)
 }
+
+func TestAgentSkillServed(t *testing.T) {
+	r := do(t, "GET", "/agent/SKILL.md", "", nil)
+	if r.code != 200 || !strings.Contains(r.raw, "name: depguard") || !strings.Contains(r.header.Get("Content-Type"), "text/markdown") {
+		t.Fatalf("%d %s", r.code, r.raw[:80])
+	}
+}

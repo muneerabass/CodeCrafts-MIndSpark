@@ -28,8 +28,11 @@ func shimDir() string {
 }
 
 func runSetup(args []string) error {
+	if len(args) > 0 && args[0] == "agents" {
+		return runSetupAgents(args[1:])
+	}
 	if len(args) == 0 || args[0] != "shell" {
-		return fmt.Errorf("usage: depguard setup shell [--remove]")
+		return fmt.Errorf("usage: depguard setup shell [--remove] | depguard setup agents [--remove|--print]")
 	}
 	fs := flag.NewFlagSet("setup shell", flag.ExitOnError)
 	remove := fs.Bool("remove", false, "remove the shims and PATH changes")

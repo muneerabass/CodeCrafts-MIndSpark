@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/depguard/depguard/internal/auth"
+	"github.com/depguard/depguard/internal/engine"
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/feeds"
 	"github.com/depguard/depguard/internal/httpapi/pgtest"
@@ -51,6 +52,8 @@ func TestTools(t *testing.T) {
 			w.Write([]byte(`{"licenses":["MIT"],"relatedProjects":[{"projectKey":{"id":"github.com/lodash/lodash"},"relationType":"SOURCE_REPO"}]}`))
 		case "/v3/projects/github.com/lodash/lodash":
 			w.Write([]byte(`{"starsCount":100,"forksCount":10}`))
+		case "/v3/systems/npm/packages/lodash":
+			w.Write([]byte(`{"versions":[{"versionKey":{"version":"4.17.20"},"publishedAt":"2020-08-13T00:00:00Z"},{"versionKey":{"version":"4.17.21"},"isDefault":true,"publishedAt":"2021-02-20T00:00:00Z"}]}`))
 		case "/projects/github.com/lodash/lodash":
 			w.Write([]byte(`{"score":6.8,"checks":[{"name":"Maintained","score":6}]}`))
 		default:
@@ -64,7 +67,22 @@ func TestTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", auth.APIKeyMiddleware(tdb.App, 100, 100, Handler(tdb.App, enr)))
+	// Policy stand-in: lodash below 4.17.21 is blocked.
+	check := func(_ context.Context, tenant string, req engine.CheckRequest) (*engine.CheckResult, error) {
+		if tenant != "ta" {
+			t.Errorf("tenant %q", tenant)
+		}
+		res := &engine.CheckResult{Decision: engine.DecisionAllow, BlockMode: true, Checked: len(req.Packages)}
+		for _, p := range req.Packages {
+			if p.Name == "lodash" && p.Version == "4.17.20" {
+				res.Decision = engine.DecisionBlock
+				res.Packages = append(res.Packages, engine.CheckVerdict{CheckPackage: p, Decision: engine.DecisionBlock,
+					Findings: []engine.CheckFinding{{Rule: "critical-or-high-vulns", Severity: "high", Blocking: true, Summary: "GHSA-high: ReDoS in lodash", FixedIn: "4.17.21"}}})
+			}
+		}
+		return res, nil
+	}
+	mux.Handle("/mcp", auth.APIKeyMiddleware(tdb.App, 100, 100, Handler(tdb.App, enr, check)))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -89,7 +107,7 @@ func TestTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	lt, err := c.ListTools(ctx, mcp.ListToolsRequest{})
-	if err != nil || len(lt.Tools) != 4 {
+	if err != nil || len(lt.Tools) != 5 {
 		t.Fatalf("tools: %v %v", err, lt)
 	}
 	call := func(tool, eco, name, ver string) map[string]any {
@@ -127,6 +145,35 @@ func TestTools(t *testing.T) {
 	}
 	if l := call("get_license_info", "npm", "lodash", "4.17.20"); mustJSON(l["licenses"]) != `["MIT"]` {
 		t.Fatalf("license: %v", l)
+	}
+	checkPkgs := func(pkgs ...map[string]any) map[string]any {
+		t.Helper()
+		req := mcp.CallToolRequest{}
+		req.Params.Name = "check_packages"
+		req.Params.Arguments = map[string]any{"packages": pkgs}
+		r, err := c.CallTool(ctx, req)
+		if err != nil || r.IsError {
+			t.Fatalf("check_packages: %v %v", err, r)
+		}
+		var out map[string]any
+		b, _ := json.Marshal(r.StructuredContent)
+		json.Unmarshal(b, &out)
+		return out
+	}
+	r := checkPkgs(map[string]any{"ecosystem": "npm", "name": "lodash", "version": "4.17.20"})
+	first := r["packages"].([]any)[0].(map[string]any)
+	if r["decision"] != "block" || first["safer_version"] != "4.17.21" ||
+		!strings.Contains(r["agent_instruction"].(string), "BLOCKED lodash@4.17.20: GHSA-high: ReDoS in lodash. Do not install it. Use lodash@4.17.21 instead") {
+		t.Fatalf("blocked: %v", r)
+	}
+	// No version → latest release; unknown names are reported as possibly hallucinated.
+	r = checkPkgs(map[string]any{"ecosystem": "npm", "name": "lodash"})
+	if r["decision"] != "allow" || r["packages"].([]any)[0].(map[string]any)["version"] != "4.17.21" {
+		t.Fatalf("latest: %v", r)
+	}
+	r = checkPkgs(map[string]any{"ecosystem": "npm", "name": "lodahs-made-up"})
+	if r["decision"] != "block" || !strings.Contains(r["agent_instruction"].(string), "may not exist") {
+		t.Fatalf("unknown package: %v", r)
 	}
 	sc := call("get_package_scorecard", "npm", "lodash", "4.17.20")
 	if !strings.Contains(mustJSON(sc), `"score":6.8`) || !strings.Contains(mustJSON(sc), "github.com/lodash/lodash") {

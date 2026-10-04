@@ -141,7 +141,7 @@ func run(ctx context.Context, log *slog.Logger, migrate bool) error {
 		Redeliver:        func(ctx context.Context, id string) error { return ghapp.Redeliver(ctx, ghCfg, id) },
 		FeedsStatus:      func(ctx context.Context) (any, error) { return feeds.Status(ctx, pool) },
 		Webhook:          ghapp.NewWebhookHandler(ghapp.Deps{Pool: pool, River: jobs, Config: ghCfg, Logger: log}),
-		MCP:              mcpserver.Handler(pool, enr),
+		MCP:              mcpserver.Handler(pool, enr, checker.CheckPackages),
 		RiverUI:          ui,
 	})
 
