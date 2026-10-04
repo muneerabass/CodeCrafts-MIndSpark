@@ -314,15 +314,16 @@ func (t *tools) checkPackages(ctx context.Context, req mcp.CallToolRequest) (*mc
 				why = append(why, f.Summary)
 			}
 			label := c.Name + "@" + c.Version
+			reason := strings.TrimRight(strings.Join(why, "; "), ". ")
 			switch v.Decision {
 			case engine.DecisionBlock:
-				l := "BLOCKED " + label + ": " + strings.Join(why, "; ") + ". Do not install it."
+				l := "BLOCKED " + label + ": " + reason + ". Do not install it."
 				if alt := safer[c.Ecosystem+"/"+c.Name]; alt != "" {
 					l += " Use " + c.Name + "@" + alt + " instead (passes the policy)."
 				}
 				lines = append(lines, l)
 			case engine.DecisionWarn:
-				lines = append(lines, "WARNING "+label+": "+strings.Join(why, "; ")+". Allowed, but tell the user.")
+				lines = append(lines, "WARNING "+label+": "+reason+". Allowed, but tell the user.")
 			}
 			if v.Decision == engine.DecisionBlock || (v.Decision == engine.DecisionWarn && decision == engine.DecisionAllow) {
 				decision = v.Decision
