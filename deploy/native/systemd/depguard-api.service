@@ -8,6 +8,7 @@ Requires=postgresql.service
 User=depguard
 Group=depguard
 EnvironmentFile=/etc/depguard/depguard.env
+EnvironmentFile=-/etc/depguard/ai.env
 Environment=HTTP_ADDR=127.0.0.1:8080
 ExecStart=/opt/depguard/bin/api
 Restart=always

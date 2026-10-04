@@ -106,8 +106,9 @@ CHECK_RUN_NAME=${CHECK_RUN_NAME:-depguard: Supply Chain Security}
 GUARDDOG_BIN=/opt/depguard/guarddog/bin/guarddog
 DEPGUARD_DATA_DIR=/var/lib/depguard
 LOG_LEVEL=info
-AI_REVIEW_CONFIGURED=$([ -n "${AWS_BEARER_TOKEN_BEDROCK:-}" ] && echo 1 || echo 0)
+AI_REVIEW_CONFIGURED=$([ -n "${GEMINI_API_KEY:-}${AWS_BEARER_TOKEN_BEDROCK:-}" ] && echo 1 || echo 0)
 DEPGUARD_AI_MODELS=${DEPGUARD_AI_MODELS:-}
+DEPGUARD_GEMINI_MODELS=${DEPGUARD_GEMINI_MODELS:-}
 # Encrypts team secrets stored in the database (Slack webhook, Jira token).
 DEPGUARD_SECRET_KEY=$DEPGUARD_SECRET_KEY
 # Alert and digest emails (same mailbox as the web app's invitations).
@@ -117,8 +118,9 @@ SMTP_USER=${SMTP_USER:-}
 SMTP_PASS=${SMTP_PASS:-}
 SMTP_FROM="${SMTP_FROM:-depguard <no-reply@$APP_HOST>}"
 ENV
-# The Bedrock API key is read by the worker only (AI review of pull requests).
+# AI keys (PR review in the worker, "Ask depguard" in the API). Gemini wins when set.
 cat > /etc/depguard/ai.env <<ENV
+GEMINI_API_KEY=${GEMINI_API_KEY:-}
 AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK:-}
 ENV
 chown root:depguard /etc/depguard/ai.env; chmod 640 /etc/depguard/ai.env

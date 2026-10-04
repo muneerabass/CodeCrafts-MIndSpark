@@ -86,6 +86,10 @@ func (w *cleanupWorker) deleteOne(ctx context.Context, tenant, sql string) error
 	if _, err := tx.Exec(ctx, `DELETE FROM audit_log WHERE created_at < now() - $1::interval`, auditRetention.String()); err != nil {
 		return err
 	}
+	// Assistant conversations are private and kept for 30 days.
+	if _, err := tx.Exec(ctx, `DELETE FROM assistant_conversations WHERE updated_at < now() - interval '30 days'`); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
 }
 

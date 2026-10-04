@@ -26,7 +26,11 @@ SMTP_USER=
 SMTP_PASS=
 SMTP_FROM="depguard <no-reply@example.com>"
 
-# AI security review of pull requests (optional): an Amazon Bedrock API key. Only the worker reads it.
-# Without it the rule-based review still runs. Models are tried in order; default: Qwen3 Coder 30B in several regions.
+# AI (optional): powers the AI review of pull requests and the "Ask depguard" assistant.
+# Without a key the rule-based review still runs and the assistant shows "AI is not configured".
+# Preferred: a Gemini API key (Google AI Studio). Flash-Lite answers by default, Flash takes harder questions.
+GEMINI_API_KEY=
+DEPGUARD_GEMINI_MODELS=   # default: gemini-flash-lite-latest,gemini-flash-latest
+# Or an Amazon Bedrock API key (used only when GEMINI_API_KEY is empty). Models are tried in order.
 AWS_BEARER_TOKEN_BEDROCK=
 DEPGUARD_AI_MODELS=   # e.g. eu-west-1/qwen.qwen3-coder-30b-a3b-v1:0,us-east-1/qwen.qwen3-coder-30b-a3b-v1:0

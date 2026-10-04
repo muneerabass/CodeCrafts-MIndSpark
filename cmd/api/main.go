@@ -24,6 +24,7 @@ import (
 	"github.com/depguard/depguard/internal/httpapi"
 	"github.com/depguard/depguard/internal/httpapi/riverdb"
 	"github.com/depguard/depguard/internal/ids"
+	"github.com/depguard/depguard/internal/llm"
 	"github.com/depguard/depguard/internal/malysis"
 	"github.com/depguard/depguard/internal/mcpserver"
 	"github.com/depguard/depguard/internal/query"
@@ -133,15 +134,19 @@ func run(ctx context.Context, log *slog.Logger, migrate bool) error {
 	}
 	checker := engine.Deps{Pool: pool, Enricher: enr, Checkers: engine.StandardCheckers(pool, enr), Malysis: mal, Logger: log}
 
-	api := httpapi.New(httpapi.Deps{
-		CheckPackages: checker.CheckPackages,
-		Pool:          pool, Jobs: jobs, JobOpts: ghapp.JobOpts, Query: &query.Executor{Pool: qpool}, JWTSecret: []byte(secret),
+	ai := llm.FromEnv()
+	aiSQL := &query.Executor{Pool: qpool, Role: "depguard_ai"}
+	var api http.Handler
+	lateAPI := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { api.ServeHTTP(w, r) }) // MCP is built before the API it reads
+	api = httpapi.New(httpapi.Deps{
+		CheckPackages: checker.CheckPackages, AI: ai, AISQL: aiSQL,
+		Pool: pool, Jobs: jobs, JobOpts: ghapp.JobOpts, Query: &query.Executor{Pool: qpool}, JWTSecret: []byte(secret),
 		PublicURL: env("PUBLIC_URL", "http://localhost:3000"), PublicAPIURL: os.Getenv("PUBLIC_API_URL"), Logger: log,
 		GitHubInstallURL: func() string { return ghapp.InstallURL(ghCfg) },
 		Redeliver:        func(ctx context.Context, id string) error { return ghapp.Redeliver(ctx, ghCfg, id) },
 		FeedsStatus:      func(ctx context.Context) (any, error) { return feeds.Status(ctx, pool) },
 		Webhook:          ghapp.NewWebhookHandler(ghapp.Deps{Pool: pool, River: jobs, Config: ghCfg, Logger: log}),
-		MCP:              mcpserver.Handler(pool, enr, checker.CheckPackages),
+		MCP:              mcpserver.Handler(pool, enr, checker.CheckPackages, &mcpserver.Workspace{API: lateAPI, SQL: aiSQL}),
 		RiverUI:          ui,
 	})
 

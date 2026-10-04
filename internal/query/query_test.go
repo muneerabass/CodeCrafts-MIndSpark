@@ -123,4 +123,39 @@ func TestExecutor(t *testing.T) {
 			t.Errorf("unexpected table %+v", tb)
 		}
 	}
+
+	// AI queries run as depguard_ai: views and their columns only.
+	ai := &Executor{Pool: tdb.Query, Timeout: time.Second, Role: "depguard_ai"}
+	if _, err := tdb.Owner.Exec(ctx, `
+		INSERT INTO project_versions (id, tenant_id, project_id, name) VALUES ('pv1','ta','pa','main');
+		INSERT INTO scans (id, tenant_id, project_id, project_version_id, trigger, status, report_md) VALUES ('s1','ta','pa','pv1','cli','succeeded','secret report');
+		INSERT INTO vault_items (id, tenant_id, project_id, name, key_version, iv, ciphertext, fingerprints)
+		  VALUES ('v1','ta','pa','.env',1,'iv','CIPHER','[{"name":"STRIPE_KEY","sha256":"HASH"}]'),
+		         ('v2','tb','pb','.env',1,'iv','CIPHER','[]');`); err != nil {
+		t.Fatal(err)
+	}
+	res, err = ai.Run(ctx, "ta", "select p.name, s.status from q_scans s join q_projects p on p.id = s.project_id")
+	if err != nil || len(res.Rows) != 1 || res.Rows[0][0] != "alpha" {
+		t.Fatalf("ai view join: %v %+v", err, res)
+	}
+	res, err = ai.Run(ctx, "ta", "select id, status from scans")
+	if err != nil || len(res.Rows) != 1 {
+		t.Fatalf("ai granted base columns: %v %+v", err, res)
+	}
+	res, err = ai.Run(ctx, "ta", "select name, key_names::text from q_vault_items")
+	if err != nil || len(res.Rows) != 1 || res.Rows[0][1] != `["STRIPE_KEY"]` {
+		t.Fatalf("ai vault metadata: %v %+v", err, res)
+	}
+	for _, q := range []string{
+		"select report_md from scans", "select * from scans", "select payload from agent_events",
+		"select ciphertext from vault_items", "select fingerprints from vault_items", "select * from tenant_secrets",
+		"select * from audit_log", "select * from api_keys",
+	} {
+		if _, err := ai.Run(ctx, "ta", q); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Errorf("ai can run %q: %v", q, err)
+		}
+	}
+	if _, err := ai.Run(ctx, "ta", "select 1 from q_projects where false union all select 1 from (select set_config('role','depguard_query',true)) x"); err == nil {
+		t.Error("ai changed its role")
+	}
 }

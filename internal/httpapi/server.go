@@ -12,6 +12,7 @@ import (
 
 	"github.com/depguard/depguard/internal/auth"
 	"github.com/depguard/depguard/internal/db"
+	"github.com/depguard/depguard/internal/llm"
 	"github.com/depguard/depguard/internal/query"
 	"github.com/depguard/depguard/skills"
 	"github.com/jackc/pgx/v5"
@@ -26,6 +27,8 @@ type Deps struct {
 	Jobs         *river.Client[pgx.Tx] // insert-only River client
 	JobOpts      *river.InsertOpts     // scan job options (ghapp.JobOpts); nil means MaxAttempts 5
 	Query        *query.Executor       // depguard_query pool
+	AISQL        *query.Executor       // depguard_query pool as depguard_ai (assistant SQL)
+	AI           llm.Model             // assistant model; nil or disabled answers 503
 	JWTSecret    []byte
 	PublicURL    string // web base URL, for scan links
 	PublicAPIURL string // machine API base URL, surfaced in /integrations for setup guides
@@ -49,6 +52,7 @@ type Deps struct {
 type Server struct {
 	d   Deps
 	log *slog.Logger
+	api http.Handler // the routes below, for the assistant's in-process reads
 }
 
 const (
@@ -69,6 +73,7 @@ func New(d Deps) http.Handler {
 	}
 	s := &Server{d: d, log: d.Logger}
 	mux := http.NewServeMux()
+	s.api = mux
 
 	jwt := func(h http.Handler) http.Handler { return auth.JWTMiddleware(d.JWTSecret, h) }
 	read := func(h handler) http.Handler {
@@ -167,6 +172,13 @@ func New(d Deps) http.Handler {
 	mux.Handle("DELETE /api/v1/exclusions/{id}", write(s.deleteExclusion))
 	mux.Handle("GET /api/v1/integrations", read(s.integrations))
 	mux.Handle("GET /api/v1/audit-log", write(s.listAudit))
+	mux.Handle("POST /api/v1/assistant/chat", read(s.assistantChat))
+	mux.Handle("GET /api/v1/assistant/briefing", read(s.assistantBriefing))
+	mux.Handle("GET /api/v1/assistant/conversations", read(s.listConversations))
+	mux.Handle("GET /api/v1/assistant/conversations/{id}", read(s.getConversation))
+	mux.Handle("DELETE /api/v1/assistant/conversations/{id}", read(s.deleteConversation))
+	mux.Handle("GET /api/v1/settings/assistant", read(s.getAssistantSettings))
+	mux.Handle("PUT /api/v1/settings/assistant", write(s.putAssistantSettings))
 	mux.Handle("POST /api/v1/audit", write(s.recordAudit))
 
 	// Super-admin.

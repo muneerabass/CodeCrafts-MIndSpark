@@ -41,6 +41,15 @@ func WithPrincipal(ctx context.Context, p *Principal) context.Context {
 	return context.WithValue(ctx, ctxKey{}, p)
 }
 
+type internalKey struct{}
+
+// WithInternal marks an in-process API call made on behalf of p (the
+// assistant reading the API as the asking user). JWTMiddleware accepts it in
+// place of a token; only server code can put it in a request context.
+func WithInternal(ctx context.Context, p *Principal) context.Context {
+	return context.WithValue(ctx, internalKey{}, p)
+}
+
 // FromContext returns the request principal, or nil.
 func FromContext(ctx context.Context) *Principal {
 	p, _ := ctx.Value(ctxKey{}).(*Principal)
@@ -111,6 +120,10 @@ func JSONError(w http.ResponseWriter, code int, msg string) {
 // JWTMiddleware authenticates service JWTs. Non-admin requests need a tenant.
 func JWTMiddleware(secret []byte, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if p, _ := r.Context().Value(internalKey{}).(*Principal); p != nil && !p.SA {
+			next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), p)))
+			return
+		}
 		tok := bearer(r)
 		if tok == "" {
 			JSONError(w, http.StatusUnauthorized, "missing bearer token")

@@ -463,9 +463,9 @@ func (w *aiReviewWorker) Work(ctx context.Context, job *river.Job[jobs.ReviewPul
 			return err
 		})
 	}
-	if !ps.AIReview.Enabled || !d.LLM.Enabled() {
+	if !ps.AIReview.Enabled || !llm.On(d.LLM) {
 		note := "turned off in Settings → Pull requests"
-		if !d.LLM.Enabled() {
+		if !llm.On(d.LLM) {
 			note = "no AI model is configured on the server"
 		}
 		_ = setStatus("skipped", note)

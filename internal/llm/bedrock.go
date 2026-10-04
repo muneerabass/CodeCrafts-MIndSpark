@@ -1,7 +1,7 @@
-// Package llm calls models on Amazon Bedrock (Converse API) with a Bedrock API
-// key, trying a list of region/model targets in order: a target that is out of
-// quota or unavailable is skipped until it can work again, so one exhausted
-// region never stops reviews.
+// Package llm calls AI models: Google Gemini (gemini.go) when GEMINI_API_KEY is
+// set, otherwise Amazon Bedrock (Converse API) with a Bedrock API key, trying a
+// list of region/model targets in order: a target that is out of quota or
+// unavailable is skipped until it can work again.
 package llm
 
 import (
@@ -172,7 +172,9 @@ type converseResp struct {
 			Content []struct {
 				Text    string `json:"text"`
 				ToolUse *struct {
-					Input json.RawMessage `json:"input"`
+					ToolUseID string          `json:"toolUseId"`
+					Name      string          `json:"name"`
+					Input     json.RawMessage `json:"input"`
 				} `json:"toolUse"`
 			} `json:"content"`
 		} `json:"message"`
@@ -184,7 +186,8 @@ type converseResp struct {
 	Message string `json:"message"`
 }
 
-func (c *Client) call(ctx context.Context, t Target, payload []byte) (*Result, error) {
+// converse sends one Converse request to a target, applying its back-off rules.
+func (c *Client) converse(ctx context.Context, t Target, payload []byte) (*converseResp, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", c.endpoint(t), bytes.NewReader(payload))
 	if err != nil {
 		return nil, err
@@ -216,6 +219,14 @@ func (c *Client) call(ctx context.Context, t Target, payload []byte) (*Result, e
 	case res.StatusCode >= 300:
 		c.block(t, time.Minute, fmt.Sprintf("HTTP %d", res.StatusCode))
 		return nil, fmt.Errorf("HTTP %d: %s", res.StatusCode, firstN(r.Message+string(raw), 200))
+	}
+	return &r, nil
+}
+
+func (c *Client) call(ctx context.Context, t Target, payload []byte) (*Result, error) {
+	r, err := c.converse(ctx, t, payload)
+	if err != nil {
+		return nil, err
 	}
 	out := &Result{Model: t.Model, InputTokens: r.Usage.InputTokens, OutputTokens: r.Usage.OutputTokens}
 	var text strings.Builder

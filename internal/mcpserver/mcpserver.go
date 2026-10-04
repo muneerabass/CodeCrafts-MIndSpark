@@ -11,10 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/depguard/depguard/internal/assist"
 	"github.com/depguard/depguard/internal/auth"
 	"github.com/depguard/depguard/internal/db"
 	"github.com/depguard/depguard/internal/engine"
 	"github.com/depguard/depguard/internal/enrich"
+	"github.com/depguard/depguard/internal/query"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -41,10 +43,18 @@ Before you install, add or upgrade ANY dependency (npm/pnpm/yarn/bun, pip/uv/poe
 - decision "block": do NOT install it. Tell the user it was blocked and why, and offer the suggested safer version or an alternative.
 - decision "warn": you may install it, but tell the user the warning in one line.
 - decision "allow": install it; no need to mention depguard.
-Never work around a block (other registries, vendoring, copying the code). Only the user can override it, from depguard.`
+Never work around a block (other registries, vendoring, copying the code). Only the user can override it, from depguard.
+
+For questions about this team's workspace - what to fix first, why a pull request is blocked, where a package or vulnerability is used, policy, deadlines, leaked vault secrets - use the "Workspace:" tools (workspace_overview, fix_queue, search_components, list_pull_requests, run_sql, ...) instead of guessing. They are read-only; tell the user which depguard page to use for changes.`
 
 // NewServer builds the MCP server with depguard's tools; check may be nil (no check_packages).
-func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc) *server.MCPServer {
+// Workspace gives MCP clients the assistant's read-only workspace tools.
+type Workspace struct {
+	API http.Handler    // the REST API, read in-process as a member
+	SQL *query.Executor // depguard_ai
+}
+
+func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc, ws *Workspace) *server.MCPServer {
 	t := &tools{pool: pool, enr: enr, check: check}
 	s := server.NewMCPServer("depguard", Version, server.WithToolCapabilities(false), server.WithRecovery(), server.WithInstructions(Instructions))
 	if check != nil {
@@ -72,12 +82,36 @@ func NewServer(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc) *serve
 	s.AddTool(tool("get_malware_verdict", "Malware verdict for a package version from OSV malicious-package advisories and this tenant's package analyses."), t.malware)
 	s.AddTool(tool("get_license_info", "SPDX licenses declared by a package version."), t.licenses)
 	s.AddTool(tool("get_package_scorecard", "OpenSSF Scorecard and repository popularity for a package's source repository."), t.scorecard)
+	if ws != nil {
+		addWorkspace(s, ws)
+	}
 	return s
 }
 
 // Handler serves MCP over streamable HTTP (stateless; each request carries its API key).
-func Handler(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc) http.Handler {
-	return http.MaxBytesHandler(server.NewStreamableHTTPServer(NewServer(pool, enr, check), server.WithStateLess(true)), 1<<20)
+func Handler(pool *pgxpool.Pool, enr *enrich.Enricher, check CheckFunc, ws *Workspace) http.Handler {
+	return http.MaxBytesHandler(server.NewStreamableHTTPServer(NewServer(pool, enr, check, ws), server.WithStateLess(true)), 1<<20)
+}
+
+// addWorkspace registers the assistant tools an API key (member level) may use.
+func addWorkspace(s *server.MCPServer, ws *Workspace) {
+	for _, at := range assist.For(assist.Env{P: &auth.Principal{Role: auth.RoleMember}}, true) {
+		schema, _ := json.Marshal(at.Spec().Schema)
+		tool := mcp.NewToolWithRawSchema(at.Name, "Workspace: "+at.Description, schema)
+		tool.Annotations.ReadOnlyHint = mcp.ToBoolPtr(true)
+		s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			p := auth.FromContext(ctx)
+			if p == nil || p.TenantID == "" {
+				return mcp.NewToolResultError("unauthorized"), nil
+			}
+			e := assist.Env{P: &auth.Principal{TenantID: p.TenantID, APIKeyID: p.APIKeyID, Role: auth.RoleMember}, API: ws.API, SQL: ws.SQL}
+			out := assist.Run(ctx, e, at, req.GetArguments())
+			if strings.HasPrefix(string(out), `{"error"`) {
+				return mcp.NewToolResultError(string(out)), nil
+			}
+			return mcp.NewToolResultText(string(out)), nil
+		})
+	}
 }
 
 var ecosystems = map[string]string{

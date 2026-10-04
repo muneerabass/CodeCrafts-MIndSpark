@@ -88,7 +88,7 @@ var schema = map[string]any{
 }
 
 // Review sends the diff to the model and validates the answer.
-func Review(ctx context.Context, c *llm.Client, req Request) (*Result, error) {
+func Review(ctx context.Context, c llm.Model, req Request) (*Result, error) {
 	diff, files, truncated := formatDiff(req.Files, req.MaxBytes)
 	if files == 0 {
 		return &Result{Summary: "No reviewable code changes.", Risk: "none"}, nil

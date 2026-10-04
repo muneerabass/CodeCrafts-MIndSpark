@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/depguard/depguard/internal/llm"
 	"strings"
 	"time"
 
@@ -250,12 +251,12 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 	if err != nil {
 		return fmt.Errorf("list PR diff: %w", err)
 	}
-	aiOn := ps.AIReview.Enabled && d.LLM.Enabled()
+	aiOn := ps.AIReview.Enabled && llm.On(d.LLM)
 	aiNote := ""
 	switch {
 	case !ps.AIReview.Enabled:
 		aiNote = "turned off in Settings → Pull requests"
-	case !d.LLM.Enabled():
+	case !llm.On(d.LLM):
 		aiNote = "no AI model is configured on the server"
 	}
 	rv, err := d.storeRulesReview(ctx, s.tenant, prID, s.scanID, a.HeadSHA, diffFiles, aiOn, aiNote)

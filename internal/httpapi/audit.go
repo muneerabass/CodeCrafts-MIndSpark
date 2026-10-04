@@ -36,7 +36,9 @@ var pathParam = regexp.MustCompile(`\{(\w+)(?:\.\.\.)?\}`)
 // what (path parameters) and handler-provided details. Bodies are not stored.
 func (s *Server) audited(next http.Handler, kind string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Pattern == "POST /api/v1/audit" || r.Pattern == "POST /api/v1/policy/test" {
+		// Assistant questions and chat deletions are private (settings changes are audited).
+		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Pattern == "POST /api/v1/audit" || r.Pattern == "POST /api/v1/policy/test" ||
+			strings.HasPrefix(r.Pattern, "POST /api/v1/assistant/") || strings.HasPrefix(r.Pattern, "DELETE /api/v1/assistant/") {
 			next.ServeHTTP(w, r)
 			return
 		}

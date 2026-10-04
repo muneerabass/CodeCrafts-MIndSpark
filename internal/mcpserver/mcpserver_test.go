@@ -13,7 +13,9 @@ import (
 	"github.com/depguard/depguard/internal/engine"
 	"github.com/depguard/depguard/internal/enrich"
 	"github.com/depguard/depguard/internal/feeds"
+	"github.com/depguard/depguard/internal/httpapi"
 	"github.com/depguard/depguard/internal/httpapi/pgtest"
+	"github.com/depguard/depguard/internal/query"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -41,7 +43,10 @@ func TestTools(t *testing.T) {
 	}
 	_, err = tdb.Owner.Exec(ctx, `
 		INSERT INTO components (id, tenant_id, ecosystem, name, version, purl) VALUES ('c1','ta','npm','sus','1.0.0','pkg:npm/sus@1.0.0');
-		INSERT INTO package_analyses (id, tenant_id, component_id, status, source) VALUES ('a1','ta','c1','suspicious','guarddog')`)
+		INSERT INTO package_analyses (id, tenant_id, component_id, status, source) VALUES ('a1','ta','c1','suspicious','guarddog');
+		INSERT INTO tenant_settings (tenant_id, domain) VALUES ('ta','a.test'), ('tb','b.test');
+		INSERT INTO projects (id, tenant_id, source, name) VALUES ('pa','ta','cli','alpha'), ('pb','tb','cli','beta');
+		INSERT INTO audit_log (id, tenant_id, actor_kind, action) VALUES ('al1','ta','user','PUT /policy')`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +87,9 @@ func TestTools(t *testing.T) {
 		}
 		return res, nil
 	}
-	mux.Handle("/mcp", auth.APIKeyMiddleware(tdb.App, 100, 100, Handler(tdb.App, enr, check)))
+	aiSQL := &query.Executor{Pool: tdb.Query, Role: "depguard_ai"}
+	ws := &Workspace{API: httpapi.New(httpapi.Deps{Pool: tdb.App, JWTSecret: []byte("unused-secret-unused-secret-0000")}), SQL: aiSQL}
+	mux.Handle("/mcp", auth.APIKeyMiddleware(tdb.App, 100, 100, Handler(tdb.App, enr, check, ws)))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
@@ -107,8 +114,40 @@ func TestTools(t *testing.T) {
 		t.Fatal(err)
 	}
 	lt, err := c.ListTools(ctx, mcp.ListToolsRequest{})
-	if err != nil || len(lt.Tools) != 5 {
-		t.Fatalf("tools: %v %v", err, lt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]int{}
+	for _, tl := range lt.Tools {
+		names[tl.Name]++
+	}
+	for _, want := range []string{"check_packages", "get_malware_verdict", "workspace_overview", "fix_queue", "list_projects", "run_sql", "secrets_overview"} {
+		if names[want] != 1 {
+			t.Errorf("tool %s listed %d times", want, names[want])
+		}
+	}
+	if names["audit_log"] != 0 {
+		t.Error("audit_log must not be offered to API keys")
+	}
+	// Workspace tools read as a member of the key's tenant only.
+	wsCall := func(tool string, args map[string]any) (string, bool) {
+		t.Helper()
+		req := mcp.CallToolRequest{}
+		req.Params.Name, req.Params.Arguments = tool, args
+		r, err := c.CallTool(ctx, req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return mcpText(r), r.IsError
+	}
+	if out, isErr := wsCall("list_projects", nil); isErr || !strings.Contains(out, "alpha") || strings.Contains(out, "beta") {
+		t.Fatalf("list_projects: %s", out)
+	}
+	if out, isErr := wsCall("run_sql", map[string]any{"sql": "select name from q_projects"}); isErr || !strings.Contains(out, "alpha") || strings.Contains(out, "beta") {
+		t.Fatalf("run_sql: %s", out)
+	}
+	if out, isErr := wsCall("run_sql", map[string]any{"sql": "select report_md from scans"}); !isErr || !strings.Contains(out, "permission denied") {
+		t.Fatalf("run_sql hidden column: %s", out)
 	}
 	call := func(tool, eco, name, ver string) map[string]any {
 		t.Helper()
@@ -179,6 +218,16 @@ func TestTools(t *testing.T) {
 	if !strings.Contains(mustJSON(sc), `"score":6.8`) || !strings.Contains(mustJSON(sc), "github.com/lodash/lodash") {
 		t.Fatalf("scorecard: %v", sc)
 	}
+}
+
+func mcpText(r *mcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range r.Content {
+		if tc, ok := c.(mcp.TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
 }
 
 func mustJSON(v any) string {

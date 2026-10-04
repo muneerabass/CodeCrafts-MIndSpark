@@ -41,6 +41,7 @@ type Result struct {
 type Executor struct {
 	Pool    *pgxpool.Pool
 	Timeout time.Duration // zero means DefaultTimeout
+	Role    string        // optional SET LOCAL ROLE (e.g. depguard_ai for AI-written queries)
 }
 
 // ErrInvalid wraps statement validation failures (HTTP 400).
@@ -102,6 +103,11 @@ func (e *Executor) Run(ctx context.Context, tenantID, sql string) (*Result, erro
 		}
 		if _, err := tx.Exec(ctx, "SET LOCAL app.tenant = "+quoteLiteral(tenantID)); err != nil {
 			return err
+		}
+		if e.Role != "" {
+			if _, err := tx.Exec(ctx, "SET LOCAL ROLE "+pgx.Identifier{e.Role}.Sanitize()); err != nil {
+				return err
+			}
 		}
 		// Wrapping as a subquery forces a single SELECT and lets the server stop at the cap.
 		rows, err := tx.Query(ctx, fmt.Sprintf("SELECT * FROM (%s\n) q LIMIT %d", stmt, MaxRows+1))

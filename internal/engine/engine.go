@@ -61,7 +61,7 @@ type Deps struct {
 	// Malysis adds SafeDep's community malware verdicts to scans and pre-install checks; nil skips it.
 	Malysis *malysis.Client
 	// LLM runs the AI security review of pull requests; nil or keyless disables it.
-	LLM *llm.Client
+	LLM llm.Model
 	// SMTP sends alert and digest emails; unconfigured sends Slack only.
 	SMTP   notify.SMTP
 	Logger *slog.Logger

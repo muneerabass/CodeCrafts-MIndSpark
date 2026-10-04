@@ -93,8 +93,9 @@ func run(log *slog.Logger) error {
 			log.Warn("malware analysis client disabled", "err", err)
 		}
 	}
-	if os.Getenv("AWS_BEARER_TOKEN_BEDROCK") == "" {
-		log.Info("AI review disabled: AWS_BEARER_TOKEN_BEDROCK is not set (rule-based PR review still runs)")
+	ai := llm.FromEnv()
+	if !ai.Enabled() {
+		log.Info("AI review disabled: neither GEMINI_API_KEY nor AWS_BEARER_TOKEN_BEDROCK is set (rule-based PR review still runs)")
 	}
 	engine.AddWorkers(workers, engine.Deps{
 		Pool:                   pool,
@@ -113,7 +114,7 @@ func run(log *slog.Logger) error {
 		PrioritizeGuarddog: suspicious.Prioritize,
 		MaxGuarddogJobs:    guarddogJobs,
 		Malysis:            mal,
-		LLM:                llm.New(os.Getenv("AWS_BEARER_TOKEN_BEDROCK"), llm.ParseTargets(os.Getenv("DEPGUARD_AI_MODELS"))),
+		LLM:                ai,
 		SMTP:               notify.SMTPFromEnv(),
 		Logger:             log,
 	})
