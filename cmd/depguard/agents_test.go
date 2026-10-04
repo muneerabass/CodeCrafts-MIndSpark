@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -14,7 +16,15 @@ func TestSetupAgents(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", t.TempDir()) // no claude CLI
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-	t.Setenv("DEPGUARD_API_URL", "https://api.example")
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/agent/SKILL.md" {
+			w.Write([]byte("---\nname: depguard\ndescription: x\n---\nserved by the depguard server\n"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer api.Close()
+	t.Setenv("DEPGUARD_API_URL", api.URL)
 	t.Setenv("DEPGUARD_API_KEY", "dg_testkey")
 	var buf bytes.Buffer
 	out = &buf
@@ -37,19 +47,19 @@ func TestSetupAgents(t *testing.T) {
 	}
 	var cursor map[string]map[string]map[string]any
 	json.Unmarshal([]byte(read(".cursor/mcp.json")), &cursor)
-	if cursor["mcpServers"]["other"] == nil || cursor["mcpServers"]["depguard"]["url"] != "https://api.example/mcp" ||
+	if cursor["mcpServers"]["other"] == nil || cursor["mcpServers"]["depguard"]["url"] != api.URL+"/mcp" ||
 		cursor["mcpServers"]["depguard"]["headers"].(map[string]any)["Authorization"] != "Bearer dg_testkey" {
 		t.Fatalf("cursor: %s", read(".cursor/mcp.json"))
 	}
-	if g := read(".gemini/settings.json"); !strings.Contains(g, `"theme": "dark"`) || !strings.Contains(g, `"httpUrl": "https://api.example/mcp"`) {
+	if g := read(".gemini/settings.json"); !strings.Contains(g, `"theme": "dark"`) || !strings.Contains(g, `"httpUrl": "`+api.URL+`/mcp"`) {
 		t.Fatalf("gemini: %s", g)
 	}
 	codex := read(".codex/config.toml")
-	if strings.Count(codex, "[mcp_servers.depguard]") != 1 || !strings.HasPrefix(codex, "model = \"o4\"") || !strings.Contains(codex, `url = "https://api.example/mcp"`) {
+	if strings.Count(codex, "[mcp_servers.depguard]") != 1 || !strings.HasPrefix(codex, "model = \"o4\"") || !strings.Contains(codex, `url = "`+api.URL+`/mcp"`) {
 		t.Fatalf("codex: %s", codex)
 	}
 	for _, s := range []string{".claude/skills/depguard/SKILL.md", ".codex/skills/depguard/SKILL.md"} {
-		if !strings.Contains(read(s), "name: depguard") {
+		if !strings.Contains(read(s), "served by the depguard server") { // downloaded, not the built-in copy
 			t.Fatalf("skill %s missing", s)
 		}
 	}

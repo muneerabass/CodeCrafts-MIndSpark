@@ -5,11 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/depguard/depguard/skills"
 )
@@ -25,14 +28,30 @@ type agentTarget struct {
 
 type mcpConn struct{ url, auth string }
 
-func agentTargets() []agentTarget {
+// fetchSkill downloads the current depguard skill from the server, falling
+// back to the copy built into this CLI when the server is unreachable.
+func fetchSkill(apiURL string) (string, string) {
+	if apiURL != "" {
+		cl := &http.Client{Timeout: 15 * time.Second}
+		if res, err := cl.Get(strings.TrimRight(apiURL, "/") + "/agent/SKILL.md"); err == nil {
+			defer res.Body.Close()
+			b, _ := io.ReadAll(io.LimitReader(res.Body, 256<<10))
+			if res.StatusCode == 200 && strings.HasPrefix(string(b), "---\nname: depguard") {
+				return string(b), "from " + strings.TrimRight(apiURL, "/")
+			}
+		}
+	}
+	return skills.Depguard, "built-in copy (server unreachable)"
+}
+
+func agentTargets(skillMD string) []agentTarget {
 	skill := func(dir string) func(home string) error {
 		return func(home string) error {
 			p := filepath.Join(home, dir, "depguard", "SKILL.md")
 			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 				return err
 			}
-			return writeFileAtomic(p, []byte(skills.Depguard), 0o644)
+			return writeFileAtomic(p, []byte(skillMD), 0o644)
 		}
 	}
 	rmSkill := func(home, dir string) { _ = os.RemoveAll(filepath.Join(home, dir, "depguard")) }
@@ -206,8 +225,8 @@ func runSetupAgents(args []string) error {
 	if err != nil {
 		return err
 	}
-	targets := agentTargets()
 	if *remove {
+		targets := agentTargets("")
 		for _, t := range targets {
 			if err := t.remove(home); err != nil {
 				fmt.Fprintf(out, "  %s %-18s %v\n", yellow("!"), t.name, err)
@@ -229,7 +248,9 @@ func runSetupAgents(args []string) error {
 			conn.url, strings.TrimRight(c.base, "/"), claudeAdd(conn))
 		return nil
 	}
-	fmt.Fprintf(out, "%s connecting your AI coding agents\n", brand())
+	skillMD, from := fetchSkill(c.base)
+	targets := agentTargets(skillMD)
+	fmt.Fprintf(out, "%s connecting your AI coding agents (skill %s)\n", brand(), from)
 	n := 0
 	for _, t := range targets {
 		if !t.present(home) {

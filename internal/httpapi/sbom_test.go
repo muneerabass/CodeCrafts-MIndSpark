@@ -59,3 +59,10 @@ func TestAgentSkillServed(t *testing.T) {
 		t.Fatalf("%d %s", r.code, r.raw[:80])
 	}
 }
+
+func TestAgentInstallScript(t *testing.T) {
+	r := do(t, "GET", "/agent/install.sh", "", nil)
+	if r.code != 200 || strings.Contains(r.raw, "__API_URL__") || !strings.Contains(r.raw, "/agent/SKILL.md") {
+		t.Fatalf("%d %s", r.code, r.raw)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/depguard/depguard/internal/engine"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/depguard/depguard/internal/auth"
 	"github.com/depguard/depguard/internal/db"
@@ -177,6 +178,15 @@ func New(d Deps) http.Handler {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 		w.Write([]byte(skills.Depguard))
+	})
+
+	mux.HandleFunc("GET /agent/install.sh", func(w http.ResponseWriter, r *http.Request) {
+		base := strings.TrimRight(d.PublicAPIURL, "/")
+		if base == "" {
+			base = "https://" + r.Host
+		}
+		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		w.Write([]byte(strings.ReplaceAll(skills.InstallScript, "__API_URL__", base)))
 	})
 
 	// Machine (API key).

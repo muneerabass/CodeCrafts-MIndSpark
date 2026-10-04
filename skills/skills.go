@@ -8,3 +8,8 @@ import _ "embed"
 //
 //go:embed depguard/SKILL.md
 var Depguard string
+
+// InstallScript is skills/install.sh; __API_URL__ is replaced with the API's public URL.
+//
+//go:embed install.sh
+var InstallScript string
