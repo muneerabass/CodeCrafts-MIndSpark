@@ -6,7 +6,7 @@ async function columns(page: Page, names: string[]) {
   for (const n of names) await expect(page.getByRole('columnheader', { name: n, exact: true }).first()).toBeVisible();
 }
 
-test('shell: sidebar groups, tenant switcher, user card, plan badge', async ({ page }) => {
+test('shell: sidebar groups, tenant switcher, user card', async ({ page }) => {
   await page.goto('/dashboard');
   const nav = page.locator('[data-sidebar="sidebar"]').first();
   for (const l of ['Dashboard', 'Inventory', 'Projects', 'Components', 'Query', 'Scans', 'Threat & Compliance', 'Package Analysis', 'Vulnerabilities', 'Policy Violations', 'Endpoints', 'Settings', 'Setup']) {
@@ -14,7 +14,6 @@ test('shell: sidebar groups, tenant switcher, user card, plan badge', async ({ p
   }
   await expect(nav.getByText('acme.depguard.dev')).toBeVisible();
   await expect(nav.getByText('ada@acme.dev')).toBeVisible();
-  await expect(nav.getByText('Free plan')).toBeVisible();
   await expect(page.getByRole('link', { name: /Set up more integrations/ })).toBeVisible();
 });
 

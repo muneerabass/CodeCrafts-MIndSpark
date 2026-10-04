@@ -18,7 +18,6 @@ import {
   FileSearch,
   FileSliders,
   FolderGit2,
-  Gem,
   GitPullRequest,
   Hexagon,
   KeyRound,
@@ -229,21 +228,6 @@ export function AppSidebar({ mode, ctx }: { mode: 'app' | 'settings' | 'admin'; 
               <ThemeSwitcher />
             </SidebarMenuItem>
           </SidebarMenu>
-          <Link
-            href="/settings/billing"
-            className="group/plan flex items-center gap-2.5 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/20 via-primary/5 to-transparent p-2.5 transition-colors hover:border-primary/60 group-data-[collapsible=icon]:hidden"
-          >
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Gem className="size-4" />
-            </span>
-            <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-sm font-semibold">Free plan</span>
-              <span className="block truncate text-xs text-muted-foreground">Current plan</span>
-            </span>
-            <span className="shrink-0 text-xs font-medium whitespace-nowrap text-primary">
-              Upgrade <span className="inline-block transition-transform group-hover/plan:translate-x-0.5">→</span>
-            </span>
-          </Link>
           <UserCard ctx={ctx} />
         </SidebarFooter>
       )}
