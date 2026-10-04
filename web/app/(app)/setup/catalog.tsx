@@ -13,7 +13,7 @@ export const guides: Record<string, GuideMeta> = {
   container: { title: 'Container images', desc: 'Scan the packages inside a Docker or OCI image, or upload an SBOM from any tool, and track the image as a project.', Icon: ContainerIcon },
   cli: { title: 'CLI', desc: 'Scan any project from your terminal and upload the results to your tenant.', Icon: Terminal },
   pmg: { title: 'PMG', desc: 'Stop malicious packages at install time on laptops and CI runners with Package Manager Guard.', Icon: ShieldCheck },
-  mcp: { title: 'MCP Server', desc: 'Give AI coding agents a tool to check packages for malware and vulnerabilities before they install them.', Icon: Server },
+  mcp: { title: 'AI agents: MCP server + skill', desc: 'One command connects Claude Code, Cursor, VS Code, Windsurf, Gemini CLI and Codex: agents check every package with depguard before installing it.', Icon: Server },
   'ai-tools': { title: 'AI Tools Discovery', desc: 'Find the coding agents, MCP servers, agent skills and IDE extensions in use on your machines and track them under Endpoints.', Icon: Bot },
 };
 

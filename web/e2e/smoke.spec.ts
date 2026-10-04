@@ -209,12 +209,15 @@ test('suspicious findings and violation filters', async ({ page }) => {
 
 test('setup integrations and guides', async ({ page }) => {
   await page.goto('/setup/integrations');
-  for (const t of ['Source Control', 'GitHub App', 'Bitbucket App', 'CI/CD Pipelines', 'GitHub Actions', 'GitLab CI', 'Bitbucket Pipes', 'Developer Tools', 'PMG', 'MCP Server', 'AI Governance & Endpoints', 'AI Tools Discovery']) {
+  for (const t of ['Source Control', 'GitHub App', 'Bitbucket App', 'CI/CD Pipelines', 'GitHub Actions', 'GitLab CI', 'Bitbucket Pipes', 'Developer Tools', 'PMG', 'AI agents: MCP server + skill', 'AI Governance & Endpoints', 'AI Tools Discovery']) {
     await expect(page.getByText(t).first()).toBeVisible();
   }
   await expect(page.getByText('Connected').first()).toBeVisible();
   await page.goto('/setup/guides/mcp');
   await expect(page.getByText('/mcp').first()).toBeVisible();
+  await expect(page.getByText(/depguard setup agents/).first()).toBeVisible();
+  for (const t of ['Cursor', 'VS Code (Copilot agent mode)', 'Windsurf', 'Gemini CLI', 'Codex']) await expect(page.getByText(t, { exact: true })).toBeVisible();
+  await expect(page.getByText(/\/agent\/SKILL\.md/).first()).toBeVisible();
   await page.goto('/setup/guides/github-actions');
   await expect(page.getByText(/--fail-on-violation/).first()).toBeVisible();
   await page.goto('/setup/integrations');

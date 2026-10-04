@@ -211,18 +211,39 @@ pipelines:
         { title: 'Ship PMG events to depguard', body: <>The depguard agent tails PMG&apos;s daily event log and reports allowed and blocked installs under Endpoints → Package Events. {keyNote}</>, code: `${install}\nexport DEPGUARD_API_URL=${apiUrl}\nexport DEPGUARD_API_KEY=dg_your_key_here\ndepguard agent` },
         { title: 'In CI', body: 'Use the same commands on CI runners; prefix install steps with pmg and run the agent once at the end of the job with --once.', code: 'pmg npm ci\ndepguard agent --once' },
       ];
-    case 'mcp':
+    case 'mcp': {
+      const auth = { Authorization: 'Bearer dg_your_key_here' };
+      const skillUrl = `${apiUrl}/agent/SKILL.md`;
       return [
         { title: 'Create an API key', body: keyNote },
         {
-          title: 'Add the server to your MCP client',
-          body: 'Most clients (Claude Desktop, Cursor, VS Code) accept this JSON. Tools: get_package_vulnerabilities, get_malware_verdict, get_license_info, get_package_scorecard.',
-          file: 'mcp.json',
-          code: JSON.stringify({ mcpServers: { depguard: { type: 'http', url: `${mcpUrl}`, headers: { Authorization: 'Bearer dg_your_key_here' } } } }, null, 2),
+          title: 'One command for every agent on this machine (recommended)',
+          body: 'Installs the depguard CLI, signs in, then connects Claude Code, Cursor, VS Code (Copilot), Windsurf, Gemini CLI and Codex: the MCP server for each, and the depguard skill where the agent supports skills. Run it again any time; depguard setup agents --remove undoes it.',
+          code: `${install}\ndepguard login --api-url ${apiUrl} --api-key dg_your_key_here\ndepguard setup agents`,
         },
-        { title: 'Claude Code', code: `claude mcp add --transport http depguard ${mcpUrl} \\\n  --header "Authorization: Bearer dg_your_key_here"` },
-        { title: 'Ask your agent to check packages', body: 'For example: "Before adding a dependency, check it with depguard for malware and known vulnerabilities."' },
+        {
+          title: 'What your agent gets',
+          body: (
+            <>
+              <b>check_packages</b> returns allow, warn or block for every package the agent wants to add, using your team policy, with the reason and a safer version. Package names that do not exist in the registry (typos, hallucinated names) are blocked.
+              Also: get_package_vulnerabilities, get_malware_verdict, get_license_info, get_package_scorecard. The server tells every agent to check before installing; the skill makes Claude Code and Codex do it reliably.
+            </>
+          ),
+        },
+        { title: 'Or by hand: Claude Code', code: `claude mcp add -s user --transport http depguard ${mcpUrl} \\\n  --header "Authorization: Bearer dg_your_key_here"\nmkdir -p ~/.claude/skills/depguard && curl -fsSL ${skillUrl} -o ~/.claude/skills/depguard/SKILL.md` },
+        { title: 'Cursor', file: '~/.cursor/mcp.json', code: JSON.stringify({ mcpServers: { depguard: { url: mcpUrl, headers: auth } } }, null, 2) },
+        { title: 'VS Code (Copilot agent mode)', file: 'mcp.json (Command palette → MCP: Open User Configuration)', code: JSON.stringify({ servers: { depguard: { type: 'http', url: mcpUrl, headers: auth } } }, null, 2) },
+        { title: 'Windsurf', file: '~/.codeium/windsurf/mcp_config.json', code: JSON.stringify({ mcpServers: { depguard: { serverUrl: mcpUrl, headers: auth } } }, null, 2) },
+        { title: 'Gemini CLI', file: '~/.gemini/settings.json', code: JSON.stringify({ mcpServers: { depguard: { httpUrl: mcpUrl, headers: auth } } }, null, 2) },
+        {
+          title: 'Codex',
+          file: '~/.codex/config.toml',
+          code: `[mcp_servers.depguard]\nurl = "${mcpUrl}"\nhttp_headers = { "Authorization" = "Bearer dg_your_key_here" }\n\n# skill: mkdir -p ~/.codex/skills/depguard && curl -fsSL ${skillUrl} -o ~/.codex/skills/depguard/SKILL.md`,
+        },
+        { title: 'Any other MCP client', body: <>Streamable HTTP at <code>{mcpUrl}</code> with the header <code>Authorization: Bearer dg_…</code>. The skill (plain Markdown, works as agent rules too): <a className="text-primary underline" href={skillUrl}>{skillUrl}</a>.</> },
+        { title: 'Try it', body: 'Ask your agent: "Add lodash 4.17.15 to this project." It checks with depguard, refuses the vulnerable version and offers 4.17.21 instead.' },
       ];
+    }
     case 'ai-tools':
       return [
         { title: 'Install the depguard agent on each machine', code: install },

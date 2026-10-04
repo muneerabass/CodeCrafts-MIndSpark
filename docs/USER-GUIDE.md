@@ -13,7 +13,7 @@ Live deployment: **https://app.16-4-42-122.sslip.io** (dashboard) · **https://a
 | Policy | decide what blocks and what only warns | [4](#4-policy-what-blocks-and-what-warns) |
 | `depguard` CLI | install guard, project check, full scans from a laptop or CI | [5](#5-the-depguard-cli) |
 | CI integrations | GitHub Actions, GitLab CI, Bitbucket Pipelines | [6](#6-ci-pipelines) |
-| MCP server | let AI coding agents check packages before adding them | [7](#7-mcp-server-for-ai-coding-agents) |
+| AI agents (MCP + skill) | Claude Code, Cursor, VS Code, Windsurf, Gemini, Codex check packages before adding them | [7](#7-ai-coding-agents-mcp-server--skill) |
 | Endpoint agent | inventory of AI tools on developer machines + install events | [8](#8-endpoint-agent) |
 | Admin panel | platform administration (super-admins) | [9](#9-admin-panel-super-admins) |
 
@@ -308,18 +308,29 @@ the GitHub App installed are already scanned on every PR without any CI step.
 
 ---
 
-## 7. MCP server for AI coding agents
+## 7. AI coding agents: MCP server + skill
 
-Gives agents (Claude Code, Cursor, VS Code, Claude Desktop) tools to check packages before adding them:
-`get_package_vulnerabilities`, `get_malware_verdict`, `get_license_info`, `get_package_scorecard`.
+One command connects every AI coding agent on the machine (Claude Code, Cursor, VS Code Copilot, Windsurf, Gemini CLI,
+Codex) to depguard, so agents check each package before installing it:
 
 ```sh
-claude mcp add --transport http depguard https://api.16-4-42-122.sslip.io/mcp \
-  --header "Authorization: Bearer dg_your_key"
+curl -fsSL https://app.16-4-42-122.sslip.io/install.sh | sh
+depguard login --api-key dg_your_key
+depguard setup agents          # --print shows the config for other clients, --remove undoes it
 ```
 
-Other clients: add `https://api.16-4-42-122.sslip.io/mcp` with header `Authorization: Bearer dg_…` (Setup → MCP Server
-shows the JSON). Then ask the agent: *"Before adding a dependency, check it with depguard."*
+It adds the depguard MCP server (`https://api.16-4-42-122.sslip.io/mcp`, header `Authorization: Bearer dg_…`) to each
+agent's config and installs the depguard skill (`~/.claude/skills/depguard`, `~/.codex/skills/depguard`). Config files
+with comments are never rewritten; the command tells you to add the server by hand instead.
+
+Tools:
+- `check_packages`: allow / warn / block per package from your team policy, the reasons and a safer version. Omit the
+  version to check the latest release; names that do not exist in the registry (typos, hallucinated packages) are blocked.
+- `get_package_vulnerabilities`, `get_malware_verdict`, `get_license_info`, `get_package_scorecard`.
+
+The server's instructions tell every agent to call `check_packages` before installing; the skill
+(`https://api.16-4-42-122.sslip.io/agent/SKILL.md`) makes skill-aware agents do it reliably and falls back to
+`depguard --dry-run npm install x` when MCP is not connected. Per-client JSON is in **Setup → AI agents**.
 
 ---
 
