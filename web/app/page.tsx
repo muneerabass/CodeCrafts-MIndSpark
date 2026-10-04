@@ -1,550 +1,396 @@
-import './landing.css';
+import './home.css';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { landingFonts } from '@/lib/landing-fonts';
+import { Inter, JetBrains_Mono } from 'next/font/google';
+import { ArrowRight, Bot, Bug, Check, ChevronRight, CircleCheck, CircleX, Container, Database, GitPullRequest, Laptop, OctagonX, Scale, Skull, SpellCheck, Terminal, TriangleAlert, Workflow } from 'lucide-react';
+import { GitHubIcon, GitLabIcon } from '@/components/icons';
 import { MobileNav } from '@/components/landing/mobile-nav';
-import { ArrowRight, ArrowUpRight, Bot, Check, ChevronRight, Database, GitPullRequest, Laptop, Workflow } from 'lucide-react';
-import { Logo, GitHubIcon } from '@/components/icons';
-import { Layers } from '@/components/landing/layers';
-import { HeroPRCard, HeroTerminal } from '@/components/landing/hero-flow';
-import { ThreatSphere } from '@/components/landing/threat-sphere';
-import { TryIt } from '@/components/landing/try-it';
-import { Incidents } from '@/components/landing/incidents';
+import { TryDemo } from '@/components/landing/try-it';
+import { CopyCommand, LandingMotion } from '@/components/landing/motion';
 import { getCtx } from '@/lib/session';
 
-// Pulse timing: the sweep crosses the rail in 70% of the 5s loop, so each of the 4 gaps takes 0.875s.
-const STEP = (5 * 0.7) / 4;
+// Landing page, implemented from the "depguard Landing" design. Inline styles follow the design 1:1;
+// hover states and the phone layout live in home.css, motion in components/landing/motion.tsx.
 
-const SIGN_IN = '/sign-in';
-const SIGN_UP = '/sign-in?mode=signup';
+const sans = Inter({ subsets: ['latin'], weight: ['300', '400', '500', '600', '700'], variable: '--home-sans' });
+const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '600'], variable: '--home-mono' });
 
 export const metadata = {
   title: { absolute: 'depguard · Supply-chain security for every dependency you install' },
 };
 
+const SIGN_IN = '/sign-in';
+const SIGN_UP = '/sign-in?mode=signup';
 const REPO = process.env.GITHUB_REPO_URL ?? 'https://github.com/Muneerabbas/CodeCrafts-MIndSpark';
 const DOCS = `${REPO}/tree/master/docs`;
-
-const ECOSYSTEMS = ['npm', 'PyPI', 'Go', 'Maven', 'crates.io', 'RubyGems', 'NuGet', 'Packagist'];
-
-const STATS = [
-  ['8', 'package ecosystems'],
-  ['6', 'suspicious-package checks'],
-  ['0–100', 'risk score on every attack path'],
-  ['1', 'policy for PRs, CI and laptops'],
-] as const;
-
-const SIGNALS = [
-  { kind: 'Malware', eco: 'npm', title: 'Install script reads cloud credentials', detail: 'A postinstall hook opens ~/.aws/credentials and posts it to a remote host.', action: 'Block install' },
-  { kind: 'Typosquat', eco: 'PyPI', title: 'Package name one keystroke from a popular library', detail: 'Published last week by a new author, with a near-identical README.', action: 'Flag on PR' },
-  { kind: 'CVE', eco: 'npm', title: 'Known vulnerability, three levels deep', detail: 'Matched against OSV, with the direct dependency that pulls it in.', action: 'Bump express' },
-  { kind: 'License', eco: 'Maven', title: 'Copyleft license in a proprietary service', detail: 'Violates your no-copyleft rule. Shown as a policy violation.', action: 'Policy violation' },
+const RISK = `${REPO}/blob/master/docs/RISK-MODEL.md`;
+const INSTALL = `curl -fsSL ${process.env.PUBLIC_URL ?? 'https://app.16-4-42-122.sslip.io'}/install.sh | sh`;
+const MENU: [string, string][] = [
+  ['Try it', '#try'],
+  ['What it catches', '#signals'],
+  ['Attack paths', '#paths'],
+  ['Real attacks', '#incidents'],
+  ['How it works', '#how'],
+  ['Docs', DOCS],
 ];
-
-const SOURCES = [
-  ['OSV', 'advisories'],
-  ['deps.dev', 'metadata'],
-  ['static', 'package heuristics'],
-  ['SPDX', 'licenses'],
-];
-
-const STAGES = [
-  { n: '01', name: 'Developer machine', icon: Laptop, gets: ['npm / pip installs', 'IDE extensions', 'MCP servers'] },
-  { n: '02', name: 'AI coding agent', icon: Bot, gets: ['packages it adds', 'plugins', 'tools it runs'] },
-  { n: '03', name: 'Pull request', icon: GitPullRequest, gets: ['new dependencies', 'version bumps', 'transitive deps'] },
-  { n: '04', name: 'CI/CD pipeline', icon: Workflow, gets: ['build-time pulls', 'base images'] },
-  { n: '05', name: 'Org-wide', icon: Database, gets: ['every repo', 'shared caches'] },
-];
-
-const ANSWERS = [
-  { n: '01', name: 'Dev machine', head: 'Seen on install', sub: 'endpoint agent inventory' },
-  { n: '02', name: 'AI agent', head: 'Same inventory', sub: 'agent changes, same checks' },
-  { n: '03', name: 'Pull request', head: 'Checked on PR', sub: 'GitHub App policy check' },
-  { n: '04', name: 'CI/CD', head: 'Gated in CI', sub: 'CLI fails the build' },
-  { n: '05', name: 'Org-wide', head: 'One policy', sub: 'one inventory, every team' },
-];
-
-const STEPS = [
-  { n: '01', title: 'Connect', body: 'Install the GitHub App or run the CLI against a repository. Invite your team into a private workspace.' },
-  { n: '02', title: 'Scan', body: 'depguard resolves the dependency graph, matches advisories, inspects package contents and scores risk per project.' },
-  { n: '03', title: 'Enforce', body: 'Write policy once. New risky dependencies are flagged on the pull request, before they merge.' },
-];
-
-const FOOTER = [
-  {
-    h: 'Product',
-    links: [
-      ['Repositories', '#layers'],
-      ['Malicious packages', '#layers'],
-      ['Attack paths', '#layers'],
-      ['Endpoints', '#layers'],
-      ['Policy', '#layers'],
-    ],
-  },
-  {
-    h: 'Platform',
-    links: [
-      ['How it works', '#how'],
-      ['What it catches', '#signals'],
-      ['Sign in', SIGN_IN],
-      ['Get started', SIGN_UP],
-    ],
-  },
-  {
-    h: 'Resources',
-    links: [
-      ['Documentation', DOCS],
-      ['Risk model', `${REPO}/blob/master/docs/RISK-MODEL.md`],
-      ['GitHub', REPO],
-    ],
-  },
-  { h: 'Legal', links: [['Attributions', '/attributions']] },
-];
-
-function Eyebrow({ children, tone = 'teal' }: { children: React.ReactNode; tone?: 'teal' | 'red' | 'dim' }) {
-  const c = tone === 'red' ? 'text-[var(--lp-red)]' : tone === 'dim' ? 'text-[var(--lp-dim)]' : 'text-[var(--lp-teal)]';
-  return <p className={`lp-eyebrow ${c}`}>{children}</p>;
-}
-
-function SectionHead({ eyebrow, tone, a, b, bTone = 'dim', body }: { eyebrow: string; tone?: 'teal' | 'red'; a: string; b: string; bTone?: 'dim' | 'teal'; body: string }) {
-  return (
-    <div className="grid gap-8 md:grid-cols-2 md:items-end">
-      <div>
-        <Eyebrow tone={tone}>{eyebrow}</Eyebrow>
-        <h2 className="lp-display mt-5 text-[34px] leading-[1.15] md:text-[40px]">
-          {a}
-          <br />
-          <span className={bTone === 'teal' ? 'text-[var(--lp-teal)]' : 'text-[var(--lp-dim)]'}>{b}</span>
-        </h2>
-      </div>
-      <p className="text-[17px] leading-relaxed text-[var(--lp-muted)]">{body}</p>
-    </div>
-  );
-}
 
 export default async function Home() {
   const ctx = await getCtx().catch(() => null);
   if (ctx) redirect(ctx.org ? '/dashboard' : '/onboarding');
 
   return (
-    <div className={`lp ${landingFonts} min-h-dvh`}>
-      {/* Announcement */}
-      <div className="border-b border-[var(--lp-line)]">
-        <a href="#layers" className="lp-frame lp-pad flex items-center justify-center gap-3 py-2.5 text-sm text-[var(--lp-fg)] hover:text-white">
-          <span className="size-1.5 rounded-full bg-[var(--lp-teal)]" />
-          New: attack paths show which direct dependency pulls in each finding
-          <ChevronRight className="size-4 text-[var(--lp-dim)]" />
-        </a>
-      </div>
+    <>
+      <LandingMotion />
+    <div className={`home ${sans.variable} ${mono.variable}`} style={{ position: "relative", background: "#000", color: "rgb(229 236 246)", fontFamily: "var(--home-sans),ui-sans-serif,system-ui,sans-serif", letterSpacing: "-.011em", WebkitFontSmoothing: "antialiased", overflowX: "clip" }}>
 
-      {/* Nav */}
-      <header className="sticky top-0 z-30 border-b border-[var(--lp-line)] bg-black lg:bg-black/80 lg:backdrop-blur-md">
-        <div className="lp-frame lp-pad flex h-16 items-center gap-10">
-          <Link href="/" className="flex items-center gap-2">
-            <Logo className="size-6" />
-            <span className="lp-display text-xl">depguard</span>
+      <div id="home-prog" style={{ position: "fixed", top: "0", left: "0", right: "0", height: "2px", zIndex: "60", background: "linear-gradient(90deg,#7c3aed,#c4b5fd,#f0abfc)", transformOrigin: "left", transform: "scaleX(0)" }}></div>
+      <div className="home-cursor" id="home-cursor" style={{ position: "fixed", left: "0", top: "0", width: "520px", height: "520px", margin: "-260px 0 0 -260px", borderRadius: "50%", pointerEvents: "none", zIndex: "1", background: "radial-gradient(circle,rgb(139 92 246 / 16%),transparent 62%)", mixBlendMode: "screen", transform: "translate3d(-999px,-999px,0)" }}></div>
+
+      <a href="#paths" style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", padding: "10px 20px", borderBottom: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "rgb(229 236 246)", position: "relative", zIndex: "2" }}><span style={{ position: "relative", width: "8px", height: "8px" }}><span style={{ position: "absolute", inset: "0", borderRadius: "50%", background: "#a78bfa", animation: "lpPing 2s cubic-bezier(0,0,.2,1) infinite" }}></span><span style={{ position: "absolute", inset: "0", borderRadius: "50%", background: "#a78bfa" }}></span></span>New: attack paths show which direct dependency pulls in each finding<ChevronRight size={15} strokeWidth={2} style={{ flexShrink: 0, color: "#6b7280" }} aria-hidden /></a>
+
+      <header id="home-nav" style={{ position: "sticky", top: "0", zIndex: "50", borderBottom: "1px solid rgb(255 255 255 / 8%)", background: "rgb(0 0 0 / 60%)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)", transition: "background .3s" }}>
+        <div className="home-sec" style={{ maxWidth: "1200px", margin: "0 auto", height: "64px", padding: "0 32px", display: "flex", alignItems: "center", gap: "40px" }}>
+          <Link href="/" aria-label="depguard home" style={{ display: "flex", alignItems: "center", gap: "9px", color: "#fff" }}>
+            <svg viewBox="0 0 32 32" width="26" height="26" fill="none"><defs><linearGradient id="lplg" x1="4" y1="2" x2="28" y2="30" gradientUnits="userSpaceOnUse"><stop stopColor="#c4b5fd"></stop><stop offset="1" stopColor="#6d28d9"></stop></linearGradient></defs><path d="M16 2.5 27 6.6v8.2c0 6.9-4.6 12.2-11 14.7C9.6 27 5 21.7 5 14.8V6.6L16 2.5Z" fill="url(#lplg)"></path><path d="M11 11.5 16 19l5-7.5M16 19v-7.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round"></path><circle cx="11" cy="11.5" r="2" fill="#fff"></circle><circle cx="21" cy="11.5" r="2" fill="#fff"></circle><circle cx="16" cy="11.5" r="1.6" fill="#fff"></circle><circle cx="16" cy="20" r="2.4" fill="#fff"></circle></svg>
+            <span style={{ fontSize: "19px", fontWeight: "600", letterSpacing: "-.03em" }}>depguard</span>
           </Link>
-          <nav className="hidden items-center gap-8 text-[15px] text-[var(--lp-fg)] lg:flex">
-            <a href="#try" className="hover:text-white">
-              Try it
-            </a>
-            <a href="#incidents" className="hover:text-white">
-              Real attacks
-            </a>
-            <a href="#signals" className="hover:text-white">
-              What it catches
-            </a>
-            <a href="#layers" className="hover:text-white">
-              Product
-            </a>
-            <a href="#how" className="hover:text-white">
-              How it works
-            </a>
-            <a href={DOCS} className="hover:text-white">
-              Docs
-            </a>
+          <nav className="home-navlinks" style={{ display: "flex", gap: "26px", fontSize: "15px", whiteSpace: "nowrap", overflow: "hidden", minWidth: "0", flex: "0 1 auto" }}>
+            <a href="#try" style={{ color: "rgb(229 236 246)" }}>Try it</a><a href="#signals" style={{ color: "rgb(229 236 246)" }}>What it catches</a><a href="#paths" style={{ color: "rgb(229 236 246)" }}>Attack paths</a><a href="#incidents" style={{ color: "rgb(229 236 246)" }}>Real attacks</a>
           </nav>
-          <div className="ml-auto flex items-center gap-3 text-[15px]">
-            <Link href={SIGN_IN} className="hidden px-2 hover:text-white sm:block">
-              Sign in
-            </Link>
-            <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-3 py-2 text-sm">
-              Get started
-            </Link>
-            <a href={REPO} aria-label="GitHub repository" className="lp-btn border border-[var(--lp-line-2)] px-3 py-2 text-sm hover:border-[var(--lp-dim)] max-sm:!hidden">
-              <GitHubIcon /> GitHub
-            </a>
-            <MobileNav
-              links={[
-                ['Try it', '#try'],
-                ['Real attacks', '#incidents'],
-                ['What it catches', '#signals'],
-                ['The problem', '#problem'],
-                ['Product', '#layers'],
-                ['How it works', '#how'],
-                ['Docs', DOCS],
-              ]}
-              signIn={SIGN_IN}
-              signUp={SIGN_UP}
-            />
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "12px", fontSize: "15px", whiteSpace: "nowrap", flex: "none" }}>
+            <Link className="home-hide-sm" href={SIGN_IN} style={{ color: "rgb(229 236 246)", padding: "0 6px" }}>Sign in</Link>
+            <Link className="hh0" href={SIGN_UP} style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "9px 14px", borderRadius: "8px", background: "#7c3aed", color: "#fff", fontWeight: "500", boxShadow: "inset 0 -1px 0 rgb(0 0 0 / 20%),0 1px 0 #c4b5fd,0 8px 24px -8px #7c3aed", transition: "transform .15s" }}>Get started<ArrowRight size={15} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></Link>
+            <MobileNav links={MENU} signIn={SIGN_IN} signUp={SIGN_UP} />
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden border-b border-[var(--lp-line)]">
-        <div aria-hidden className="lp-streaks pointer-events-none absolute inset-0" />
-        <div className="lp-frame relative bg-black">
-          <div aria-hidden className="lp-aurora pointer-events-none absolute inset-0" />
-          <div aria-hidden className="lp-grid pointer-events-none absolute inset-0" />
-          <div className="lp-pad relative grid items-center gap-14 pt-16 pb-16 lg:min-h-[82vh] lg:grid-cols-[1fr_1.1fr] lg:pt-20">
-            <div>
-              <a
-                href="#signals"
-                className="inline-flex w-fit items-center gap-3 rounded-full border border-[var(--lp-line-2)] bg-white/[0.04] px-3.5 py-1.5 text-sm backdrop-blur hover:border-[var(--lp-dim)]"
-              >
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-[var(--lp-teal)] opacity-60" />
-                  <span className="relative inline-flex size-2 rounded-full bg-[var(--lp-teal)]" />
-                </span>
-                <span className="text-[13px] text-[var(--lp-fg)]">Now with AI security review on every pull request</span>
-                <ChevronRight className="size-3.5" />
-              </a>
-              <h1 className="lp-display mt-7 text-[44px] leading-[1.04] md:text-[66px]">
-                Your software supply chain is your <span className="lp-gradient-text">attack surface.</span>
-              </h1>
-              <p className="mt-6 max-w-xl text-[18px] leading-relaxed text-[var(--lp-fg)]/90">
-                Every dependency is a potential entry point. depguard maps the paths into your codebase, catches malicious packages before execution, and gives security teams the control to stop them.
-              </p>
-              <ul className="mt-7 flex max-w-xl flex-wrap gap-2">
-                {['Malware', 'CVEs & attack paths', 'Typosquats', 'Licenses', 'AI code review'].map((c) => (
-                  <li key={c} className="inline-flex items-center gap-1.5 rounded-full border border-[var(--lp-line-2)] bg-white/[0.03] px-3 py-1 text-[13px] text-[var(--lp-fg)]">
-                    <Check className="size-3.5 text-[var(--lp-teal)]" /> {c}
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-9 flex flex-wrap items-center gap-4">
-                <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-6 py-3.5 text-[16px]">
-                  Start scanning <ArrowRight className="size-4" />
-                </Link>
-                <Link href={`${SIGN_IN}?provider=github`} className="lp-btn lp-btn-ghost px-5 py-3.5 text-[16px]">
-                  <GitHubIcon /> Sign in with GitHub
-                </Link>
-              </div>
-              <p className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--lp-dim)]">
-                <span>GitHub App + CLI</span>
-                <span aria-hidden>·</span>
-                <span>Private, invite-only workspaces</span>
-                <span aria-hidden>·</span>
-                <a href="#how" className="lp-nudge inline-flex items-center gap-1 text-[var(--lp-fg)] hover:text-white">
-                  How it works <ArrowRight className="size-3.5" />
-                </a>
-              </p>
-            </div>
-
-            <div className="relative mx-auto w-full max-w-[640px] lg:mx-0 xl:pt-[2rem]">
-              <div className="absolute top-0 right-0 z-10 hidden xl:block">
-                <HeroPRCard />
-              </div>
-              <ThreatSphere />
-              <div className="relative z-10 -mt-20 flex justify-center lg:justify-start">
-                <HeroTerminal />
-              </div>
-            </div>
+      <section id="lp-hero" style={{ position: "relative", borderBottom: "1px solid rgb(255 255 255 / 8%)", overflow: "hidden" }}>
+        <div aria-hidden style={{ position: "absolute", inset: "0", pointerEvents: "none", backgroundImage: "radial-gradient(rgb(255 255 255 / 10%) 1px,transparent 1px)", backgroundSize: "22px 22px", WebkitMaskImage: "radial-gradient(60% 60% at 50% 30%,#000,transparent 75%)", maskImage: "radial-gradient(60% 60% at 50% 30%,#000,transparent 75%)" }}></div>
+        <div aria-hidden style={{ position: "absolute", left: "50%", top: "-180px", width: "900px", height: "520px", transform: "translateX(-50%)", pointerEvents: "none", background: "radial-gradient(closest-side,rgb(124 58 237 / 20%),transparent)" }}></div>
+        <div className="home-sec" style={{ position: "relative", zIndex: "2", maxWidth: "1200px", margin: "0 auto", padding: "104px 32px 88px", borderInline: "1px solid rgb(255 255 255 / 8%)", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+          <a className="home-chip hh1" data-r="up" href="#incidents" style={{ display: "inline-flex", alignItems: "center", gap: "10px", padding: "5px 12px 5px 5px", borderRadius: "999px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(10 10 14 / 80%)", fontSize: "13px", color: "rgb(229 236 246)", whiteSpace: "nowrap", transition: "border-color .15s" }}><span style={{ padding: "3px 9px", borderRadius: "999px", background: "rgb(167 139 250 / 14%)", color: "#ddd6fe", font: "500 11px var(--home-mono),ui-monospace,monospace", letterSpacing: ".06em" }}>NEW</span>AI security review on every pull request<ArrowRight size={14} strokeWidth={2} style={{ flexShrink: 0, color: "#6b7280" }} aria-hidden /></a>
+          <h1 data-r="up" data-d="80" style={{ margin: "32px 0 0", maxWidth: "960px", fontSize: "clamp(46px,6.6vw,88px)", lineHeight: ".98", fontWeight: "600", letterSpacing: "-.05em", color: "#fff", textWrap: "balance" }}>Ship dependencies<br />you can <span style={{ background: "linear-gradient(92deg,#c4b5fd,#a78bfa 45%,#f0abfc)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>actually trust.</span></h1>
+          <p data-r="up" data-d="160" style={{ margin: "28px 0 0", maxWidth: "620px", fontSize: "19px", lineHeight: "1.6", color: "#9ca3af", textWrap: "pretty" }}>depguard checks every package your team and your AI agents install for malware, known CVEs and lookalike names, and stops the bad ones on laptops, pull requests and CI.</p>
+          <div data-r="up" data-d="240" style={{ marginTop: "38px", display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "12px" }}>
+            <Link className="hh2" href={SIGN_UP} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "14px 22px", whiteSpace: "nowrap", borderRadius: "9px", background: "#fff", color: "#000", fontWeight: "500", fontSize: "15.5px", transition: "background .15s,transform .15s" }}>Start for free<ArrowRight size={15} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></Link>
+            <Link className="hh3" href="/sign-in?provider=github" style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "14px 20px", whiteSpace: "nowrap", borderRadius: "9px", border: "1px solid rgb(255 255 255 / 16%)", background: "rgb(255 255 255 / 2%)", color: "#fff", fontWeight: "500", fontSize: "15.5px", transition: "border-color .15s" }}><GitHubIcon width={15} height={15} style={{ flexShrink: 0 }} />Install the GitHub App</Link>
           </div>
+          <div className="home-cmd" data-r="up" data-d="300" style={{ marginTop: "20px", display: "inline-flex", alignItems: "center", gap: "12px", padding: "10px 14px", borderRadius: "9px", border: "1px solid rgb(255 255 255 / 8%)", background: "rgb(255 255 255 / 2%)", font: "13.5px var(--home-mono),ui-monospace,monospace", color: "#9ca3af", maxWidth: "100%" }}><span style={{ color: "#a78bfa" }}>$</span><span className="home-cmd-text" style={{ color: "#fff", whiteSpace: "nowrap", overflowX: "auto" }}>{INSTALL}</span><span style={{ width: "1px", height: "14px", background: "rgb(255 255 255 / 12%)", flex: "none" }}></span><CopyCommand cmd={INSTALL} /></div>
+          <div className="home-herocards" style={{ position: "relative", flex: "none", width: "max(100%,1060px)", maxWidth: "1120px", marginTop: "72px", perspective: "1800px" }}>
+            <div aria-hidden style={{ position: "absolute", left: "50%", top: "40%", width: "85%", height: "70%", transform: "translate(-50%,-50%)", background: "radial-gradient(closest-side,rgb(124 58 237 / 35%),transparent)", filter: "blur(20px)", pointerEvents: "none" }}></div>
+            <div className="home-hgrid" style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0,.9fr) minmax(0,1.25fr) minmax(0,.9fr)", gap: "20px", alignItems: "start", textAlign: "left" }}>
 
-          {/* Ecosystems + numbers */}
-          <div className="relative border-t border-[var(--lp-line)]">
-            <div className="lp-marquee-wrap overflow-hidden py-6">
-              <ul className="lp-marquee lp-mono gap-14 pr-14 text-lg text-[var(--lp-muted)]">
-                {[...ECOSYSTEMS, ...ECOSYSTEMS].map((e, i) => (
-                  <li key={i} className="flex items-center gap-14 whitespace-nowrap">
-                    {e} <span className="text-[var(--lp-line-2)]">/</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <dl className="grid grid-cols-2 border-t border-[var(--lp-line)] md:grid-cols-4">
-              {STATS.map(([v, l], i) => (
-                <div key={l} className={`lp-stat px-6 py-7 md:px-8 ${i % 2 ? 'border-l' : ''} ${i > 1 ? 'max-md:border-t' : ''} border-[var(--lp-line)] md:border-l md:first:border-l-0`}>
-                  <dt className="lp-display text-[34px] text-white">{v}</dt>
-                  <dd className="mt-1 text-sm text-[var(--lp-muted)]">{l}</dd>
+              <div data-r="up" data-d="420"><div data-hs="18" style={{ marginTop: "56px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 11%)", background: "#07060c", boxShadow: "0 30px 60px -30px #000", overflow: "hidden", transformOrigin: "right center", transform: "rotateY(18deg)", transition: "transform .1s linear" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "7px", padding: "11px 14px", borderBottom: "1px solid rgb(255 255 255 / 7%)" }}><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#3f3f46" }}></span><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#3f3f46" }}></span><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#3f3f46" }}></span><span style={{ marginLeft: "8px", font: "11.5px var(--home-mono),ui-monospace,monospace", color: "#6b7280", whiteSpace: "nowrap" }}>laptop · zsh</span></div>
+                <div style={{ padding: "16px 16px 20px", font: "12.5px/1.8 var(--home-mono),ui-monospace,monospace", color: "#e5e7eb", whiteSpace: "nowrap", overflow: "hidden" }}>
+                  <div><span style={{ color: "#a78bfa" }}>$</span> npm install lodahs</div>
+                  <div style={{ color: "#6b7280" }}>depguard ▸ checking lodahs@4.17.21</div>
+                  <div style={{ color: "#f87171" }}>✖ blocked · typosquat of lodash</div>
+                  <div style={{ color: "#9ca3af" }}>  published 6 days ago</div>
+                  <div style={{ color: "#c4b5fd" }}>→ npm install lodash</div>
+                  <div style={{ color: "#6b7280" }}>  no install script ran</div>
+                  <div><span style={{ color: "#a78bfa" }}>$</span> <span style={{ display: "inline-block", width: "7px", height: "14px", verticalAlign: "-2px", background: "#a78bfa", animation: "lpBlink 1s steps(1) infinite" }}></span></div>
                 </div>
-              ))}
-            </dl>
-          </div>
-        </div>
-      </section>
+              </div></div>
 
-      {/* Try it */}
-      <section id="try" className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame lp-pad grid gap-12 py-24 lg:grid-cols-[1fr_1.1fr] lg:items-center">
-          <div>
-            <Eyebrow>Try it now</Eyebrow>
-            <h2 className="lp-display mt-5 text-[34px] leading-[1.15] md:text-[40px]">
-              Type a package.
-              <br />
-              <span className="text-[var(--lp-teal)]">See what depguard sees.</span>
-            </h2>
-            <p className="mt-5 max-w-md text-[17px] leading-relaxed text-[var(--lp-muted)]">
-              An instant preview of the checks that run on every install and pull request: known malware, vulnerable versions and lookalike names. No sign-up.
-            </p>
-            <ul className="mt-6 space-y-2 text-[15px] text-[var(--lp-muted)]">
-              {['Malware: blocked before any script runs', 'Vulnerabilities: with the exact fix command', 'Typosquats: one keystroke from a popular name'].map((l) => (
-                <li key={l} className="flex items-center gap-2">
-                  <Check className="size-4 text-[var(--lp-teal)]" /> {l}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <TryIt />
-        </div>
-      </section>
-
-      {/* Signals */}
-      <section id="signals" className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame lp-pad py-24">
-          <SectionHead
-            eyebrow="What it catches"
-            a="A CVE feed isn't enough."
-            b="Look at what packages do."
-            body="Known vulnerabilities are half the picture. depguard also inspects package contents for install-time behaviour, checks licenses against your policy and traces every finding back to the dependency that introduced it."
-          />
-          <div className="mt-16">
-            <div className="lp-eyebrow hidden grid-cols-[120px_90px_1fr_180px] gap-6 pb-4 text-[11px] text-[var(--lp-dim)] md:grid">
-              <span>Signal</span>
-              <span>Registry</span>
-              <span>Example</span>
-              <span className="text-right">Action</span>
-            </div>
-            {SIGNALS.map((s) => (
-              <div key={s.title} className="lp-row grid gap-2 py-6 md:grid-cols-[120px_90px_1fr_180px] md:gap-6">
-                <span className="lp-mono text-[15px] text-[var(--lp-muted)]">{s.kind}</span>
-                <span className="lp-mono text-[15px] text-[var(--lp-dim)]">{s.eco}</span>
-                <div>
-                  <p className="text-[17px] font-medium text-white">{s.title}</p>
-                  <p className="mt-1 text-[15px] text-[var(--lp-muted)]">{s.detail}</p>
+              <div data-r="up" data-d="320"><div style={{ position: "relative", zIndex: "2", borderRadius: "16px", border: "1px solid rgb(255 255 255 / 13%)", background: "linear-gradient(180deg,#0f0d18,#08070d)", boxShadow: "0 40px 90px -30px rgb(0 0 0 / 90%),0 0 0 1px rgb(196 181 253 / 6%) inset", overflow: "hidden" }}>
+                <div aria-hidden style={{ position: "absolute", top: "0", left: "15%", right: "15%", height: "1px", background: "linear-gradient(90deg,transparent,#c4b5fd,transparent)" }}></div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "14px 18px", borderBottom: "1px solid rgb(255 255 255 / 8%)" }}>
+                  <svg viewBox="0 0 32 32" width="24" height="24" fill="none"><path d="M16 2.5 27 6.6v8.2c0 6.9-4.6 12.2-11 14.7C9.6 27 5 21.7 5 14.8V6.6L16 2.5Z" fill="url(#lplg)"></path><path d="M11 11.5 16 19l5-7.5M16 19v-7.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round"></path><circle cx="11" cy="11.5" r="2" fill="#fff"></circle><circle cx="21" cy="11.5" r="2" fill="#fff"></circle><circle cx="16" cy="11.5" r="1.6" fill="#fff"></circle><circle cx="16" cy="20" r="2.4" fill="#fff"></circle></svg>
+                  <span style={{ fontSize: "13.5px", color: "#fff", fontWeight: "500", whiteSpace: "nowrap" }}>depguard</span><span style={{ fontSize: "11px", padding: "1px 6px", borderRadius: "4px", border: "1px solid rgb(255 255 255 / 14%)", color: "#9ca3af" }}>bot</span>
+                  <span style={{ fontSize: "12.5px", color: "#6b7280", whiteSpace: "nowrap" }}>on PR #482</span>
+                  <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: "5px", fontSize: "11.5px", fontWeight: "600", padding: "3px 8px", borderRadius: "999px", background: "rgb(248 113 113 / 12%)", color: "#fca5a5", whiteSpace: "nowrap" }}><OctagonX size={12} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden />Blocking</span>
                 </div>
-                <span className="lp-mono text-[15px] text-[var(--lp-teal)] md:text-right">{s.action}</span>
-              </div>
-            ))}
-            <div className="lp-row flex flex-wrap items-center justify-between gap-6 pt-8">
-              <p className="lp-mono flex flex-wrap gap-x-3 gap-y-2 text-[15px]">
-                {SOURCES.map(([k, v], i) => (
-                  <span key={k}>
-                    <span className="text-white">{k}</span> <span className="text-[var(--lp-dim)]">{v}</span>
-                    {i < SOURCES.length - 1 && <span className="ml-3 text-[var(--lp-dim)]">·</span>}
-                  </span>
-                ))}
-              </p>
-              <a href={`${REPO}/blob/master/docs/RISK-MODEL.md`} className="inline-flex items-center gap-2 text-[16px] text-[var(--lp-teal)] hover:text-white">
-                Read the risk model <ArrowUpRight className="size-4" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Incidents */}
-      <section id="incidents" className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame lp-pad py-24">
-          <SectionHead
-            eyebrow="Real attacks"
-            tone="red"
-            a="Would depguard catch it?"
-            b="Six attacks everyone remembers."
-            body="Supply-chain attacks are not hypothetical. Here is what happened in the best-known ones, and which depguard check answers each, including the one no scanner could see coming."
-          />
-          <Incidents />
-        </div>
-      </section>
-
-      {/* Problem */}
-      <section id="problem" className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame lp-pad py-24">
-          <SectionHead
-            eyebrow="The problem"
-            tone="red"
-            a="Nobody reviews what gets installed."
-            b="It just runs."
-            body="Third-party code enters at every hand-off, from a developer's terminal to a shared build cache. Each arrival executes with real permissions, and almost none of it is read by a human first."
-          />
-
-          <div className="relative mt-20">
-            <div aria-hidden className="hidden lg:block">
-              <div className="lp-rail">
-                <div className="lp-sweep" />
-              </div>
-              <div className="lp-sweep-head">
-                <span>
-                  <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M4 2l6 5-6 5" />
-                  </svg>
-                </span>
-              </div>
-              {[20, 40, 60, 80].map((x, i) => (
-                <ChevronRight key={x} className="lp-chev" style={{ left: `${x}%`, animationDelay: `${(i + 0.5) * STEP}s` }} strokeWidth={1.75} />
-              ))}
-            </div>
-            <div className="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-5">
-              {STAGES.map((s, i) => (
-                <div key={s.n} className="relative flex flex-col items-center">
-                  <span className="lp-mono text-sm text-[var(--lp-dim)]">{s.n}</span>
-                  <span className="lp-tile lp-hit relative mt-4 grid size-[72px] place-items-center border border-[var(--lp-line-2)] bg-[#0a0a0a]" style={{ animationDelay: `${i * STEP}s` }}>
-                    <s.icon className="size-5 text-white" strokeWidth={1.5} />
-                  </span>
-                  <span className="mt-4 text-center text-[17px] text-white">{s.name}</span>
-                  <div className="lp-hit-card mt-8 w-full flex-1 border border-[var(--lp-line-2)] bg-[var(--lp-panel)] p-5" style={{ animationDelay: `${i * STEP}s` }}>
-                    <Eyebrow tone="dim">What gets in</Eyebrow>
-                    <ul className="lp-mono mt-4 space-y-3 text-[15px] text-white">
-                      {s.gets.map((g) => (
-                        <li key={g} className="flex gap-2.5">
-                          <span className="text-[var(--lp-red)]">•</span>
-                          {g}
-                        </li>
-                      ))}
-                    </ul>
+                <div style={{ padding: "18px" }}>
+                  <div style={{ fontSize: "17px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>Fix before merging</div>
+                  <div style={{ fontSize: "13px", color: "#9ca3af", marginTop: "2px" }}>1 blocking issue · 2 warnings in acme/storefront</div>
+                  <div style={{ marginTop: "14px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <div style={{ padding: "12px", borderRadius: "10px", border: "1px solid rgb(248 113 113 / 28%)", background: "rgb(248 113 113 / 6%)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13.5px", color: "#fff" }}><CircleX size={15} strokeWidth={2} style={{ flexShrink: 0, color: "#f87171" }} aria-hidden /><span style={{ fontFamily: "var(--home-mono),ui-monospace,monospace" }}>lodahs@4.17.21</span><span style={{ color: "#9ca3af", whiteSpace: "nowrap" }}>typosquat of lodash</span></div>
+                      <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "8px", padding: "6px 9px", borderRadius: "6px", background: "rgb(0 0 0 / 40%)", font: "12px var(--home-mono),ui-monospace,monospace", color: "#e5e7eb", whiteSpace: "nowrap", overflow: "hidden" }}><span style={{ color: "#6b7280" }}>$</span>npm uninstall lodahs &amp;&amp; npm i lodash</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "10px", border: "1px solid rgb(255 255 255 / 8%)", fontSize: "13.5px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden" }}><TriangleAlert size={15} strokeWidth={2} style={{ flexShrink: 0, color: "#fbbf24" }} aria-hidden /><span style={{ fontFamily: "var(--home-mono),ui-monospace,monospace" }}>path-to-regexp</span><span style={{ color: "#9ca3af" }}>HIGH · bump express to 4.20.0</span></div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 12px", borderRadius: "10px", border: "1px solid rgb(255 255 255 / 8%)", fontSize: "13.5px", color: "#fff", whiteSpace: "nowrap", overflow: "hidden" }}><Scale size={15} strokeWidth={2} style={{ flexShrink: 0, color: "#fbbf24" }} aria-hidden /><span style={{ fontFamily: "var(--home-mono),ui-monospace,monospace" }}>ffmpeg-static</span><span style={{ color: "#9ca3af" }}>GPL-3.0 in an MIT binary</span></div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-          <p className="lp-eyebrow mt-12 text-center text-[13px] text-[var(--lp-muted)]">Five ways in. It only takes one.</p>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 18px", borderTop: "1px solid rgb(255 255 255 / 8%)", background: "rgb(255 255 255 / 2%)", fontSize: "13px", whiteSpace: "nowrap", overflow: "hidden" }}><CircleX size={15} strokeWidth={2} style={{ flexShrink: 0, color: "#f87171" }} aria-hidden /><span style={{ color: "#fff", fontWeight: "500" }}>depguard: Supply Chain Security</span><span style={{ color: "#6b7280" }}>Failing after 9s</span><span style={{ marginLeft: "auto", fontSize: "11px", padding: "1px 6px", borderRadius: "4px", border: "1px solid rgb(255 255 255 / 14%)", color: "#9ca3af" }}>Required</span></div>
+              </div></div>
 
-          {/* Answer */}
-          <div className="mt-24">
-            <div aria-hidden className="lp-beam" />
-            <div className="mx-auto grid size-[72px] place-items-center border border-[var(--lp-teal)]/50 bg-[var(--lp-teal)]/[0.07] shadow-[0_0_40px_-8px_rgb(45_212_191/0.5)]">
-              <Logo className="size-8" />
-            </div>
-            <div className="mt-10 text-center">
-              <Eyebrow>The answer</Eyebrow>
-              <h2 className="lp-display mt-5 text-[34px] md:text-[40px]">depguard watches every way in.</h2>
-              <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-relaxed text-[var(--lp-muted)]">
-                One inventory and one policy, applied wherever a dependency shows up, so it is checked before it merges, builds or spreads.
-              </p>
-            </div>
-            <div aria-hidden className="lp-guard-rail mx-auto mt-12 max-w-4xl" />
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-              {ANSWERS.map((a) => (
-                <div key={a.n} className="lp-answer-card flex flex-col items-center p-6 text-center">
-                  <p className="lp-mono text-sm">
-                    <span className="text-[var(--lp-teal)]">{a.n}</span> <span className="text-[var(--lp-muted)]">{a.name}</span>
-                  </p>
-                  <span className="mt-5 grid size-8 place-items-center border border-[var(--lp-teal)]/50">
-                    <Check className="size-4 text-[var(--lp-teal)]" />
-                  </span>
-                  <p className="mt-5 text-[17px] text-white">{a.head}</p>
-                  <p className="lp-mono mt-3 text-sm leading-relaxed text-[var(--lp-muted)]">{a.sub}</p>
+              <div data-r="up" data-d="520"><div data-hs="-18" style={{ marginTop: "56px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 11%)", background: "#07060c", boxShadow: "0 30px 60px -30px #000", overflow: "hidden", transformOrigin: "left center", transform: "rotateY(-18deg)", transition: "transform .1s linear" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "12px 14px", borderBottom: "1px solid rgb(255 255 255 / 7%)", fontSize: "12.5px", whiteSpace: "nowrap", overflow: "hidden" }}><GitPullRequest size={14} strokeWidth={2} style={{ flexShrink: 0, color: "#34d399" }} aria-hidden /><span style={{ color: "#fff", fontWeight: "500" }}>Fix PR #483</span><span style={{ color: "#6b7280" }}>by depguard</span></div>
+                <div style={{ padding: "14px" }}>
+                  <div style={{ fontSize: "13.5px", color: "#fff", fontWeight: "500" }}>Upgrade minimist to 1.2.6</div>
+                  <div style={{ fontSize: "12px", color: "#9ca3af", marginTop: "2px" }}>Fixes CVE-2021-44906 · critical</div>
+                  <div style={{ marginTop: "12px", borderRadius: "8px", border: "1px solid rgb(255 255 255 / 8%)", overflow: "hidden", font: "12px/1.8 var(--home-mono),ui-monospace,monospace", whiteSpace: "nowrap" }}>
+                    <div style={{ padding: "4px 10px", color: "#6b7280", borderBottom: "1px solid rgb(255 255 255 / 6%)" }}>package-lock.json</div>
+                    <div style={{ padding: "0 10px", background: "rgb(248 113 113 / 8%)", color: "#fca5a5" }}>{'− "minimist": "1.2.5"'}</div>
+                    <div style={{ padding: "0 10px", background: "rgb(52 211 153 / 8%)", color: "#6ee7b7" }}>{'+ "minimist": "1.2.6"'}</div>
+                  </div>
+                  <div style={{ marginTop: "12px", display: "flex", alignItems: "center", gap: "8px", fontSize: "12.5px", color: "#34d399", whiteSpace: "nowrap" }}><CircleCheck size={14} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden />All checks passed · ready to merge</div>
                 </div>
-              ))}
+              </div></div>
+            </div>
+            <div aria-hidden style={{ position: "absolute", left: "-40px", right: "-40px", bottom: "-2px", height: "120px", background: "linear-gradient(transparent,#000)", pointerEvents: "none" }}></div>
+          </div>
+          <div data-r="up" data-d="380" style={{ marginTop: "56px", display: "flex", flexDirection: "column", alignItems: "center", gap: "18px" }}>
+            <span style={{ font: "500 11px var(--home-mono),ui-monospace,monospace", letterSpacing: ".24em", textTransform: "uppercase", color: "#4b5563", whiteSpace: "nowrap" }}>Works where code comes in</span>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "14px 34px" }}><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><GitHubIcon width={16} height={16} style={{ flexShrink: 0, color: "#d1d5db" }} />GitHub</span><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><GitLabIcon width={16} height={16} style={{ flexShrink: 0, color: "#d1d5db" }} />GitLab</span><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><Workflow size={16} strokeWidth={2} style={{ flexShrink: 0, color: "#d1d5db" }} aria-hidden />CI/CD</span><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><Terminal size={16} strokeWidth={2} style={{ flexShrink: 0, color: "#d1d5db" }} aria-hidden />CLI</span><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><Container size={16} strokeWidth={2} style={{ flexShrink: 0, color: "#d1d5db" }} aria-hidden />Docker</span><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><Bot size={16} strokeWidth={2} style={{ flexShrink: 0, color: "#d1d5db" }} aria-hidden />AI agents</span><span style={{ display: "inline-flex", alignItems: "center", gap: "8px", color: "#9ca3af", fontSize: "14px", whiteSpace: "nowrap" }}><Laptop size={16} strokeWidth={2} style={{ flexShrink: 0, color: "#d1d5db" }} aria-hidden />Laptops</span></div>
+          </div>
+        </div>
+
+        <div className="home-sec" style={{ position: "relative", zIndex: "2", maxWidth: "1200px", margin: "0 auto", borderInline: "1px solid rgb(255 255 255 / 8%)", borderTop: "1px solid rgb(255 255 255 / 8%)" }}>
+          <div style={{ overflow: "hidden", padding: "24px 0", WebkitMaskImage: "linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)", maskImage: "linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)" }}>
+            <div style={{ display: "flex", width: "max-content", gap: "56px", paddingRight: "56px", animation: "lpMarq 30s linear infinite", font: "400 18px var(--home-mono),ui-monospace,monospace", color: "#9ca3af", whiteSpace: "nowrap" }}>
+              <span>npm</span><span style={{ color: "#374151" }}>/</span><span>PyPI</span><span style={{ color: "#374151" }}>/</span><span>Go</span><span style={{ color: "#374151" }}>/</span><span>Maven</span><span style={{ color: "#374151" }}>/</span><span>crates.io</span><span style={{ color: "#374151" }}>/</span><span>RubyGems</span><span style={{ color: "#374151" }}>/</span><span>NuGet</span><span style={{ color: "#374151" }}>/</span><span>Packagist</span><span style={{ color: "#374151" }}>/</span><span>GitHub Actions</span><span style={{ color: "#374151" }}>/</span><span>Docker images</span><span style={{ color: "#374151" }}>/</span>
+              <span>npm</span><span style={{ color: "#374151" }}>/</span><span>PyPI</span><span style={{ color: "#374151" }}>/</span><span>Go</span><span style={{ color: "#374151" }}>/</span><span>Maven</span><span style={{ color: "#374151" }}>/</span><span>crates.io</span><span style={{ color: "#374151" }}>/</span><span>RubyGems</span><span style={{ color: "#374151" }}>/</span><span>NuGet</span><span style={{ color: "#374151" }}>/</span><span>Packagist</span><span style={{ color: "#374151" }}>/</span><span>GitHub Actions</span><span style={{ color: "#374151" }}>/</span><span>Docker images</span><span style={{ color: "#374151" }}>/</span>
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", borderTop: "1px solid rgb(255 255 255 / 8%)" }}>
+            <div data-r="up" style={{ padding: "30px 32px", borderRight: "1px solid rgb(255 255 255 / 8%)", background: "linear-gradient(180deg,rgb(167 139 250 / 8%),transparent)" }}><div style={{ fontSize: "44px", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}><span data-count="8">8</span></div><div style={{ fontSize: "14px", color: "#9ca3af" }}>package ecosystems</div></div>
+            <div data-r="up" data-d="80" style={{ padding: "30px 32px", borderRight: "1px solid rgb(255 255 255 / 8%)", background: "linear-gradient(180deg,rgb(167 139 250 / 8%),transparent)" }}><div style={{ fontSize: "44px", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}><span data-count="6">6</span></div><div style={{ fontSize: "14px", color: "#9ca3af" }}>suspicious-package checks</div></div>
+            <div data-r="up" data-d="160" style={{ padding: "30px 32px", borderRight: "1px solid rgb(255 255 255 / 8%)", background: "linear-gradient(180deg,rgb(167 139 250 / 8%),transparent)" }}><div style={{ fontSize: "44px", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>0–<span data-count="100">100</span></div><div style={{ fontSize: "14px", color: "#9ca3af" }}>risk score on every attack path</div></div>
+            <div data-r="up" data-d="240" style={{ padding: "30px 32px", background: "linear-gradient(180deg,rgb(167 139 250 / 8%),transparent)" }}><div style={{ fontSize: "44px", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}><span data-count="1">1</span></div><div style={{ fontSize: "14px", color: "#9ca3af" }}>policy for PRs, CI and laptops</div></div>
+          </div>
+        </div>
+      
+      </section>
+
+      <section id="try" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2" }}>
+        <div className="home-sec home-secy home-2col" style={{ maxWidth: "1200px", margin: "0 auto", padding: "120px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(380px,1fr))", gap: "64px", alignItems: "center" }}>
+          <TryDemo intro={<>
+              <p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#a78bfa" }}>Try it now</p>
+              <h2 data-r="up" data-d="80" style={{ margin: "20px 0 0", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>Type a package.<br /><span style={{ color: "#a78bfa" }}>See what depguard sees.</span></h2>
+              <p data-r="up" data-d="160" style={{ margin: "20px 0 0", maxWidth: "460px", fontSize: "17px", lineHeight: "1.65", color: "#9ca3af" }}>The same checks that run on every install and pull request: known malware, vulnerable versions and lookalike names. Before a single install script runs.</p>
+          </>} />
+        </div>
+      </section>
+
+      <section id="signals" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2" }}>
+        <div className="home-sec home-secy" style={{ maxWidth: "1200px", margin: "0 auto", padding: "120px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)" }}>
+          <div className="home-2col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(380px,1fr))", gap: "32px", alignItems: "end" }}>
+            <div><p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#a78bfa" }}>What it catches</p><h2 data-r="up" data-d="80" style={{ margin: "20px 0 0", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>A CVE feed isn&apos;t enough.<br /><span style={{ color: "#6b7280" }}>Look at what packages do.</span></h2></div>
+            <p data-r="up" data-d="160" style={{ margin: "0", fontSize: "17px", lineHeight: "1.65", color: "#9ca3af" }}>depguard inspects package contents for install-time behaviour, checks licenses against your policy and traces every finding back to the dependency that introduced it.</p>
+          </div>
+          <div style={{ marginTop: "56px", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(250px,1fr))", gap: "16px" }}>
+            <div className="hh5" data-r="up" data-glow="1" style={{ position: "relative", padding: "26px", borderRadius: "16px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(360px circle at var(--gx,50%) var(--gy,0%),rgb(248 113 113 / 14%),transparent 45%),rgb(255 255 255 / 2.5%)", transition: "border-color .2s,transform .2s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ width: "44px", height: "44px", borderRadius: "12px", display: "grid", placeItems: "center", background: "rgb(248 113 113 / 12%)", color: "#f87171" }}><Skull size={20} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>npm</span></div>
+              <div style={{ marginTop: "22px", font: "500 12px var(--home-mono),ui-monospace,monospace", color: "#f87171", letterSpacing: ".08em" }}>MALWARE</div>
+              <div style={{ marginTop: "6px", fontSize: "19px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>Install script reads cloud credentials</div>
+              <p style={{ margin: "10px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>A postinstall hook opens ~/.aws/credentials and posts it to a remote host.</p>
+              <div style={{ marginTop: "20px", paddingTop: "14px", borderTop: "1px solid rgb(255 255 255 / 8%)", font: "13px var(--home-mono),ui-monospace,monospace", color: "#c4b5fd" }}>→ Block install</div>
+            </div>
+            <div className="hh6" data-r="up" data-d="80" data-glow="1" style={{ position: "relative", padding: "26px", borderRadius: "16px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(360px circle at var(--gx,50%) var(--gy,0%),rgb(251 191 36 / 12%),transparent 45%),rgb(255 255 255 / 2.5%)", transition: "border-color .2s,transform .2s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ width: "44px", height: "44px", borderRadius: "12px", display: "grid", placeItems: "center", background: "rgb(251 191 36 / 12%)", color: "#fbbf24" }}><SpellCheck size={20} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>PyPI</span></div>
+              <div style={{ marginTop: "22px", font: "500 12px var(--home-mono),ui-monospace,monospace", color: "#fbbf24", letterSpacing: ".08em" }}>TYPOSQUAT</div>
+              <div style={{ marginTop: "6px", fontSize: "19px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>One keystroke from a popular library</div>
+              <p style={{ margin: "10px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>Published last week by a new author, with a near-identical README.</p>
+              <div style={{ marginTop: "20px", paddingTop: "14px", borderTop: "1px solid rgb(255 255 255 / 8%)", font: "13px var(--home-mono),ui-monospace,monospace", color: "#c4b5fd" }}>→ Flag on PR</div>
+            </div>
+            <div className="hh7" data-r="up" data-d="160" data-glow="1" style={{ position: "relative", padding: "26px", borderRadius: "16px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(360px circle at var(--gx,50%) var(--gy,0%),rgb(249 115 22 / 12%),transparent 45%),rgb(255 255 255 / 2.5%)", transition: "border-color .2s,transform .2s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ width: "44px", height: "44px", borderRadius: "12px", display: "grid", placeItems: "center", background: "rgb(249 115 22 / 12%)", color: "#fb923c" }}><Bug size={20} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>npm</span></div>
+              <div style={{ marginTop: "22px", font: "500 12px var(--home-mono),ui-monospace,monospace", color: "#fb923c", letterSpacing: ".08em" }}>CVE</div>
+              <div style={{ marginTop: "6px", fontSize: "19px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>Known vulnerability, three levels deep</div>
+              <p style={{ margin: "10px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>Matched against OSV, with the direct dependency that pulls it in.</p>
+              <div style={{ marginTop: "20px", paddingTop: "14px", borderTop: "1px solid rgb(255 255 255 / 8%)", font: "13px var(--home-mono),ui-monospace,monospace", color: "#c4b5fd" }}>→ Bump express</div>
+            </div>
+            <div className="hh8" data-r="up" data-d="240" data-glow="1" style={{ position: "relative", padding: "26px", borderRadius: "16px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(360px circle at var(--gx,50%) var(--gy,0%),rgb(167 139 250 / 14%),transparent 45%),rgb(255 255 255 / 2.5%)", transition: "border-color .2s,transform .2s" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><span style={{ width: "44px", height: "44px", borderRadius: "12px", display: "grid", placeItems: "center", background: "rgb(167 139 250 / 12%)", color: "#a78bfa" }}><Scale size={20} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>Maven</span></div>
+              <div style={{ marginTop: "22px", font: "500 12px var(--home-mono),ui-monospace,monospace", color: "#a78bfa", letterSpacing: ".08em" }}>LICENSE</div>
+              <div style={{ marginTop: "6px", fontSize: "19px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>Copyleft in a proprietary service</div>
+              <p style={{ margin: "10px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>Violates your no-copyleft rule. Shown as a policy violation.</p>
+              <div style={{ marginTop: "20px", paddingTop: "14px", borderTop: "1px solid rgb(255 255 255 / 8%)", font: "13px var(--home-mono),ui-monospace,monospace", color: "#c4b5fd" }}>→ Policy violation</div>
+            </div>
+          </div>
+          <p data-r="up" style={{ margin: "36px 0 0", font: "14px var(--home-mono),ui-monospace,monospace", color: "#6b7280", display: "flex", flexWrap: "wrap", gap: "8px 18px" }}><span><span style={{ color: "#fff" }}>OSV</span> advisories</span><span>·</span><span><span style={{ color: "#fff" }}>deps.dev</span> metadata</span><span>·</span><span><span style={{ color: "#fff" }}>static</span> package heuristics</span><span>·</span><span><span style={{ color: "#fff" }}>SPDX</span> licenses</span></p>
+        </div>
+      </section>
+
+      <section id="paths" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2", overflow: "hidden" }}>
+        <div style={{ position: "absolute", left: "50%", top: "40%", width: "900px", height: "600px", transform: "translate(-50%,-50%)", background: "radial-gradient(closest-side,rgb(124 58 237 / 16%),transparent)", pointerEvents: "none" }}></div>
+        <div className="home-sec home-secy" style={{ position: "relative", maxWidth: "1200px", margin: "0 auto", padding: "120px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)" }}>
+          <div style={{ textAlign: "center", maxWidth: "720px", margin: "0 auto" }}>
+            <p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#a78bfa" }}>Attack paths</p>
+            <h2 data-r="up" data-d="80" style={{ margin: "20px 0 0", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>Don&apos;t fix 41 vulnerabilities.<br /><span style={{ color: "#a78bfa" }}>Fix the 2 dependencies behind them.</span></h2>
+            <p data-r="up" data-d="160" style={{ margin: "20px auto 0", fontSize: "17px", lineHeight: "1.65", color: "#9ca3af", maxWidth: "600px" }}>Every finding is traced back to the direct dependency you control, then scored 0–100 by severity, exploit likelihood and whether your code imports it.</p>
+          </div>
+          <div data-r="scale" data-d="120" style={{ marginTop: "56px", display: "flex", flexDirection: "column", gap: "14px", maxWidth: "980px", marginInline: "auto" }}>
+            <div className="home-pathrow" data-glow="1" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr) 170px", gap: "24px", alignItems: "center", padding: "20px 24px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(400px circle at var(--gx,50%) var(--gy,50%),rgb(248 113 113 / 10%),transparent 45%),rgb(255 255 255 / 2.5%)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0" }}>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", background: "rgb(255 255 255 / 6%)", color: "#9ca3af" }}>app</span>
+                <span style={{ position: "relative", width: "44px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#f87171)", animation: "lpFlow 1.4s linear infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", border: "1px solid rgb(255 255 255 / 16%)", color: "#fff" }}>request</span>
+                <span style={{ position: "relative", width: "44px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#f87171)", animation: "lpFlow 1.4s linear .5s infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "600 13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", background: "rgb(239 68 68 / 16%)", color: "#fca5a5", boxShadow: "0 0 24px -4px rgb(239 68 68 / 60%)" }}>event-stream-lite</span>
+              </div>
+              <div><div style={{ fontSize: "15px", color: "#fff" }}>Replace request to remove the malware</div><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280", marginTop: "2px" }}>OSV malicious-packages</div></div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}><span style={{ flex: "1", height: "6px", borderRadius: "3px", background: "rgb(255 255 255 / 8%)", overflow: "hidden" }}><span data-fill="100" style={{ display: "block", height: "100%", background: "#ef4444", borderRadius: "3px", width: "100%" }}></span></span><span data-count="100" style={{ fontSize: "20px", fontWeight: "600", color: "#fff", width: "40px", textAlign: "right" }}>100</span></div>
+            </div>
+            <div className="home-pathrow" data-glow="1" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr) 170px", gap: "24px", alignItems: "center", padding: "20px 24px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(400px circle at var(--gx,50%) var(--gy,50%),rgb(249 115 22 / 10%),transparent 45%),rgb(255 255 255 / 2.5%)" }}>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", background: "rgb(255 255 255 / 6%)", color: "#9ca3af" }}>app</span>
+                <span style={{ position: "relative", width: "44px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#fb923c)", animation: "lpFlow 1.4s linear .2s infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", border: "1px solid rgb(255 255 255 / 16%)", color: "#fff" }}>mkdirp</span>
+                <span style={{ position: "relative", width: "44px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#fb923c)", animation: "lpFlow 1.4s linear .7s infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "600 13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", background: "rgb(239 68 68 / 14%)", color: "#fca5a5" }}>minimist</span>
+                
+              </div>
+              <div><div style={{ fontSize: "15px", color: "#fff" }}>Upgrade mkdirp to ≥ 0.5.6</div><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280", marginTop: "2px" }}>CVE-2021-44906 · critical</div></div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}><span style={{ flex: "1", height: "6px", borderRadius: "3px", background: "rgb(255 255 255 / 8%)", overflow: "hidden" }}><span data-fill="57" style={{ display: "block", height: "100%", background: "#ef4444", borderRadius: "3px", width: "57%" }}></span></span><span data-count="57" style={{ fontSize: "20px", fontWeight: "600", color: "#fff", width: "40px", textAlign: "right" }}>57</span></div>
+            </div>
+            <div className="home-pathrow" data-glow="1" style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) minmax(0,1fr) 170px", gap: "24px", alignItems: "center", padding: "20px 24px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 10%)", background: "radial-gradient(400px circle at var(--gx,50%) var(--gy,50%),rgb(167 139 250 / 10%),transparent 45%),rgb(255 255 255 / 2.5%)" }}>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", background: "rgb(255 255 255 / 6%)", color: "#9ca3af" }}>app</span>
+                <span style={{ position: "relative", width: "30px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#fb923c)", animation: "lpFlow 1.4s linear .4s infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", border: "1px solid rgb(255 255 255 / 16%)", color: "#fff" }}>express</span>
+                <span style={{ position: "relative", width: "30px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#fb923c)", animation: "lpFlow 1.4s linear .8s infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", border: "1px solid rgb(255 255 255 / 16%)", color: "#fff" }}>body-parser</span>
+                <span style={{ position: "relative", width: "30px", height: "2px", background: "rgb(255 255 255 / 12%)", overflow: "hidden" }}><span style={{ position: "absolute", top: "0", width: "40%", height: "100%", background: "linear-gradient(90deg,transparent,#fb923c)", animation: "lpFlow 1.4s linear 1.2s infinite" }}></span></span>
+                <span style={{ whiteSpace: "nowrap", font: "600 13px var(--home-mono),ui-monospace,monospace", padding: "6px 10px", borderRadius: "8px", background: "rgb(249 115 22 / 14%)", color: "#fdba74" }}>qs</span>
+              </div>
+              <div><div style={{ fontSize: "15px", color: "#fff" }}>Upgrade express to ≥ 4.17.3</div><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280", marginTop: "2px" }}>GHSA-hrpp-h998-j3pp</div></div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}><span style={{ flex: "1", height: "6px", borderRadius: "3px", background: "rgb(255 255 255 / 8%)", overflow: "hidden" }}><span data-fill="27" style={{ display: "block", height: "100%", background: "#f97316", borderRadius: "3px", width: "27%" }}></span></span><span data-count="27" style={{ fontSize: "20px", fontWeight: "600", color: "#fff", width: "40px", textAlign: "right" }}>27</span></div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Layers */}
-      <section id="layers" className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame lp-pad py-24">
-          <SectionHead
-            eyebrow="Inside depguard"
-            a="Pick a layer."
-            b="See what depguard shows you."
-            bTone="teal"
-            body="Repositories, packages, attack paths, machines and policy, all in one console. Every view below mirrors a real screen in the product."
-          />
-          <div className="mt-14">
-            <Layers />
+      <section id="problem" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2" }}>
+        <div className="home-sec home-secy" style={{ maxWidth: "1200px", margin: "0 auto", padding: "120px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)" }}>
+          <div className="home-2col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(380px,1fr))", gap: "32px", alignItems: "end" }}>
+            <div><p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#f87171" }}>The problem</p><h2 data-r="up" data-d="80" style={{ margin: "20px 0 0", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>Nobody reviews what gets installed.<br /><span style={{ color: "#6b7280" }}>It just runs.</span></h2></div>
+            <p data-r="up" data-d="160" style={{ margin: "0", fontSize: "17px", lineHeight: "1.65", color: "#9ca3af" }}>Third-party code enters at every hand-off, from a developer&apos;s terminal to a shared build cache. Each arrival executes with real permissions.</p>
           </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how" className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame lp-pad py-24">
-          <Eyebrow>How it works</Eyebrow>
-          <h2 className="lp-display mt-5 max-w-2xl text-[34px] leading-[1.15] md:text-[40px]">
-            Connected to enforced
-            <br />
-            <span className="text-[var(--lp-dim)]">in an afternoon.</span>
-          </h2>
-          <ol className="mt-16 grid gap-px border border-[var(--lp-line)] bg-[var(--lp-line)] md:grid-cols-3">
-            {STEPS.map((s) => (
-              <li key={s.n} className="bg-black p-8">
-                <span className="lp-mono text-sm text-[var(--lp-teal)]">{s.n}</span>
-                <h3 className="lp-display mt-4 text-2xl">{s.title}</h3>
-                <p className="mt-3 text-[16px] leading-relaxed text-[var(--lp-muted)]">{s.body}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="border-b border-[var(--lp-line)]">
-        <div className="lp-frame relative overflow-hidden">
-          <svg aria-hidden viewBox="0 0 1200 640" className="pointer-events-none absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice">
-            <defs>
-              <linearGradient id="lp-band" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#8b5cf6" stopOpacity="0.55" />
-                <stop offset="1" stopColor="#6d28d9" stopOpacity="0.15" />
-              </linearGradient>
-            </defs>
-            <g fill="none" stroke="rgb(167 139 250 / 0.25)">
-              <path d="M180 120 L340 60 L340 600 L180 540 Z" />
-              <path d="M860 160 L940 130 L940 560 L860 590 Z" />
-            </g>
-            <path d="M340 160 L620 60 L840 60 L400 230 L400 600 L340 620 Z" fill="url(#lp-band)" />
-            <path d="M860 470 L940 440 L940 560 L560 700 L400 700 Z" fill="url(#lp-band)" />
-          </svg>
-          <div className="lp-pad relative py-36 text-center">
-            <h2 className="lp-display text-[44px] leading-[1.08] md:text-[56px]">
-              Know what you ship.
-              <br />
-              Before it ships.
-            </h2>
-            <p className="mx-auto mt-6 max-w-md text-[17px] leading-relaxed text-[var(--lp-fg)]/90">Connect a repository and get your full dependency risk picture on the first scan.</p>
-            <div className="mt-10 flex justify-center gap-4">
-              <Link href={SIGN_UP} className="lp-btn lp-btn-primary px-6 py-3.5 text-[16px]">
-                Start scanning
-              </Link>
-              <a href={DOCS} className="lp-btn lp-btn-ghost bg-black px-6 py-3.5 text-[16px]">
-                Read the docs
-              </a>
+          <div data-r="up" style={{ position: "relative", marginTop: "72px" }}>
+            <div className="home-sweep" style={{ position: "absolute", left: "10%", right: "10%", top: "35px", height: "2px", background: "rgb(255 255 255 / 9%)", overflow: "hidden" }}><div style={{ position: "absolute", top: "0", height: "100%", width: "22%", background: "linear-gradient(90deg,transparent,rgb(248 113 113 / 90%))", animation: "lpSweep 5s linear infinite" }}></div></div>
+            <div className="home-five" style={{ display: "grid", gridTemplateColumns: "repeat(5,minmax(0,1fr))", gap: "20px" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px" }}><span style={{ position: "relative", zIndex: "1", width: "72px", height: "72px", display: "grid", placeItems: "center", border: "1px solid rgb(255 255 255 / 12%)", background: "#0a0a0a", color: "#fff", animation: "lpHit 5s ease-out infinite" }}><Laptop size={22} strokeWidth={1.5} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "13px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>01</span><span style={{ fontSize: "17px", color: "#fff" }}>Developer machine</span><span style={{ font: "13px/1.7 var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>npm / pip installs<br />IDE extensions<br />MCP servers</span></div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px" }}><span style={{ position: "relative", zIndex: "1", width: "72px", height: "72px", display: "grid", placeItems: "center", border: "1px solid rgb(255 255 255 / 12%)", background: "#0a0a0a", color: "#fff", animation: "lpHit 5s ease-out .875s infinite" }}><Bot size={22} strokeWidth={1.5} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "13px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>02</span><span style={{ fontSize: "17px", color: "#fff" }}>AI coding agent</span><span style={{ font: "13px/1.7 var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>packages it adds<br />plugins<br />tools it runs</span></div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px" }}><span style={{ position: "relative", zIndex: "1", width: "72px", height: "72px", display: "grid", placeItems: "center", border: "1px solid rgb(255 255 255 / 12%)", background: "#0a0a0a", color: "#fff", animation: "lpHit 5s ease-out 1.75s infinite" }}><GitPullRequest size={22} strokeWidth={1.5} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "13px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>03</span><span style={{ fontSize: "17px", color: "#fff" }}>Pull request</span><span style={{ font: "13px/1.7 var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>new dependencies<br />version bumps<br />transitive deps</span></div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px" }}><span style={{ position: "relative", zIndex: "1", width: "72px", height: "72px", display: "grid", placeItems: "center", border: "1px solid rgb(255 255 255 / 12%)", background: "#0a0a0a", color: "#fff", animation: "lpHit 5s ease-out 2.625s infinite" }}><Workflow size={22} strokeWidth={1.5} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "13px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>04</span><span style={{ fontSize: "17px", color: "#fff" }}>CI/CD pipeline</span><span style={{ font: "13px/1.7 var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>build-time pulls<br />base images</span></div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px" }}><span style={{ position: "relative", zIndex: "1", width: "72px", height: "72px", display: "grid", placeItems: "center", border: "1px solid rgb(255 255 255 / 12%)", background: "#0a0a0a", color: "#fff", animation: "lpHit 5s ease-out 3.5s infinite" }}><Database size={22} strokeWidth={1.5} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ font: "13px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>05</span><span style={{ fontSize: "17px", color: "#fff" }}>Org-wide</span><span style={{ font: "13px/1.7 var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>every repo<br />shared caches</span></div>
+            </div>
+          </div>
+          <div style={{ marginTop: "96px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+            <div data-draw="y" style={{ width: "1px", height: "120px", background: "linear-gradient(to bottom,transparent,#a78bfa)", boxShadow: "0 0 18px 1px rgb(167 139 250 / 40%)", transformOrigin: "top" }}></div>
+            <div data-r="scale" style={{ width: "76px", height: "76px", display: "grid", placeItems: "center", border: "1px solid rgb(167 139 250 / 50%)", background: "rgb(167 139 250 / 8%)", boxShadow: "0 0 50px -8px rgb(167 139 250 / 60%)" }}><svg viewBox="0 0 32 32" width="34" height="34" fill="none"><path d="M16 2.5 27 6.6v8.2c0 6.9-4.6 12.2-11 14.7C9.6 27 5 21.7 5 14.8V6.6L16 2.5Z" fill="url(#lplg)"></path><path d="M11 11.5 16 19l5-7.5M16 19v-7.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round"></path><circle cx="11" cy="11.5" r="2" fill="#fff"></circle><circle cx="21" cy="11.5" r="2" fill="#fff"></circle><circle cx="16" cy="11.5" r="1.6" fill="#fff"></circle><circle cx="16" cy="20" r="2.4" fill="#fff"></circle></svg></div>
+            <h2 data-r="up" style={{ margin: "36px 0 0", fontSize: "clamp(32px,4vw,44px)", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>depguard watches every way in.</h2>
+            <p data-r="up" data-d="80" style={{ margin: "16px 0 0", maxWidth: "600px", fontSize: "17px", lineHeight: "1.65", color: "#9ca3af" }}>One inventory and one policy, applied wherever a dependency shows up, so it is checked before it merges, builds or spreads.</p>
+            <div style={{ marginTop: "44px", width: "100%", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: "14px" }}>
+              <div data-r="up" data-d="0" style={{ padding: "22px", border: "1px solid rgb(167 139 250 / 30%)", background: "linear-gradient(180deg,rgb(167 139 250 / 7%),transparent)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}><span style={{ width: "30px", height: "30px", display: "grid", placeItems: "center", border: "1px solid rgb(167 139 250 / 50%)", color: "#a78bfa" }}><Check size={16} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ fontSize: "16px", color: "#fff" }}>Seen on install</span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>endpoint agent</span></div>
+              <div data-r="up" data-d="80" style={{ padding: "22px", border: "1px solid rgb(167 139 250 / 30%)", background: "linear-gradient(180deg,rgb(167 139 250 / 7%),transparent)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}><span style={{ width: "30px", height: "30px", display: "grid", placeItems: "center", border: "1px solid rgb(167 139 250 / 50%)", color: "#a78bfa" }}><Check size={16} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ fontSize: "16px", color: "#fff" }}>Same inventory</span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>agent changes, same checks</span></div>
+              <div data-r="up" data-d="160" style={{ padding: "22px", border: "1px solid rgb(167 139 250 / 30%)", background: "linear-gradient(180deg,rgb(167 139 250 / 7%),transparent)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}><span style={{ width: "30px", height: "30px", display: "grid", placeItems: "center", border: "1px solid rgb(167 139 250 / 50%)", color: "#a78bfa" }}><Check size={16} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ fontSize: "16px", color: "#fff" }}>Checked on PR</span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>GitHub App check</span></div>
+              <div data-r="up" data-d="240" style={{ padding: "22px", border: "1px solid rgb(167 139 250 / 30%)", background: "linear-gradient(180deg,rgb(167 139 250 / 7%),transparent)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}><span style={{ width: "30px", height: "30px", display: "grid", placeItems: "center", border: "1px solid rgb(167 139 250 / 50%)", color: "#a78bfa" }}><Check size={16} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ fontSize: "16px", color: "#fff" }}>Gated in CI</span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>CLI fails the build</span></div>
+              <div data-r="up" data-d="320" style={{ padding: "22px", border: "1px solid rgb(167 139 250 / 30%)", background: "linear-gradient(180deg,rgb(167 139 250 / 7%),transparent)", display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}><span style={{ width: "30px", height: "30px", display: "grid", placeItems: "center", border: "1px solid rgb(167 139 250 / 50%)", color: "#a78bfa" }}><Check size={16} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></span><span style={{ fontSize: "16px", color: "#fff" }}>One policy</span><span style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#9ca3af" }}>every team</span></div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer>
-        <div className="lp-frame lp-pad grid gap-12 py-16 md:grid-cols-[1.4fr_repeat(4,1fr)]">
-          <div>
-            <Link href="/" className="flex items-center gap-2">
-              <Logo className="size-6" />
-              <span className="lp-display text-xl">depguard</span>
-            </Link>
-            <p className="mt-4 max-w-xs text-[15px] leading-relaxed text-[var(--lp-muted)]">Supply-chain security for repositories, pipelines and developer machines.</p>
-          </div>
-          {FOOTER.map((col) => (
-            <div key={col.h}>
-              <p className="lp-eyebrow text-[12px] text-[var(--lp-muted)]">{col.h}</p>
-              <ul className="mt-5 space-y-3 text-[15px]">
-                {col.links.map(([label, href]) => (
-                  <li key={label}>
-                    <a href={href} className="text-[var(--lp-fg)] hover:text-white">
-                      {label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
+      <section id="product" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2", overflow: "hidden" }}>
+        <div className="home-sec home-secy" style={{ maxWidth: "1200px", margin: "0 auto", padding: "120px 32px 0", borderInline: "1px solid rgb(255 255 255 / 8%)", textAlign: "center" }}>
+          <p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#a78bfa" }}>Inside depguard</p>
+          <h2 data-r="up" data-d="80" style={{ margin: "20px auto 0", maxWidth: "760px", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>Open the dashboard.<br /><span style={{ color: "#6b7280" }}>Know the next three things to do.</span></h2>
+          <div style={{ marginTop: "64px", perspective: "1600px" }}>
+            <div data-r="up" data-d="120">
+              <div data-tilt="3" style={{ maxWidth: "1000px", margin: "0 auto", borderRadius: "16px 16px 0 0", border: "1px solid rgb(255 255 255 / 12%)", borderBottom: "0", background: "#0f0d18", boxShadow: "0 -30px 120px -40px rgb(124 58 237 / 60%)", overflow: "hidden", textAlign: "left", transition: "transform .25s ease-out" }}>
+                <div style={{ display: "flex" }}>
+                  <div className="home-dside" style={{ width: "180px", flex: "none", borderRight: "1px solid rgb(255 255 255 / 8%)", padding: "16px 10px", display: "flex", flexDirection: "column", gap: "4px", fontSize: "13px", color: "#9ca3af" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "0 8px 12px", color: "#fff", fontWeight: "600" }}>depguard</div>
+                    <div style={{ padding: "7px 10px", borderRadius: "7px", background: "#a78bfa", color: "#1e1240", fontWeight: "500" }}>Dashboard</div><div style={{ padding: "7px 10px" }}>Fix First</div><div style={{ padding: "7px 10px", display: "flex", justifyContent: "space-between" }}>Pull Requests<span style={{ background: "#ef4444", color: "#fff", borderRadius: "8px", padding: "0 6px", fontSize: "10px", lineHeight: "16px" }}>3</span></div><div style={{ padding: "7px 10px" }}>Vulnerabilities</div><div style={{ padding: "7px 10px" }}>Package Analysis</div><div style={{ padding: "7px 10px" }}>Projects</div>
+                  </div>
+                  <div style={{ flex: "1", minWidth: "0", padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+                    <div style={{ fontSize: "18px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>Good morning, Priya</div>
+                    <div className="home-dsplit" style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", border: "1px solid rgb(255 255 255 / 9%)", borderRadius: "12px", overflow: "hidden" }}>
+                      <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: "10px", borderRight: "1px solid rgb(255 255 255 / 9%)" }}>
+                        <span style={{ alignSelf: "flex-start", fontSize: "11px", fontWeight: "600", padding: "2px 8px", borderRadius: "999px", background: "rgb(239 68 68 / 14%)", color: "#f87171", whiteSpace: "nowrap" }}>Action needed</span>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "#fff" }}><span style={{ width: "22px", height: "22px", borderRadius: "6px", background: "rgb(239 68 68 / 14%)", color: "#ef4444", display: "grid", placeItems: "center", font: "600 11px var(--home-mono),ui-monospace,monospace" }}>1</span>Remove event-stream-lite from storefront</div>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "#fff" }}><span style={{ width: "22px", height: "22px", borderRadius: "6px", background: "rgb(249 115 22 / 14%)", color: "#f97316", display: "grid", placeItems: "center", font: "600 11px var(--home-mono),ui-monospace,monospace" }}>2</span>Upgrade minimist 1.2.5 → 1.2.6</div>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", fontSize: "13px", color: "#fff" }}><span style={{ width: "22px", height: "22px", borderRadius: "6px", background: "rgb(234 179 8 / 14%)", color: "#eab308", display: "grid", placeItems: "center", font: "600 11px var(--home-mono),ui-monospace,monospace" }}>3</span>Review PR #482 “Add analytics SDK”</div>
+                      </div>
+                      <div style={{ padding: "14px 16px", background: "linear-gradient(160deg,rgb(167 139 250 / 14%),transparent 60%)" }}><div style={{ font: "500 10px var(--home-mono),ui-monospace,monospace", letterSpacing: ".1em", color: "#6b7280" }}>BIGGEST WIN</div><div style={{ fontSize: "40px", fontWeight: "600", color: "#fff", letterSpacing: "-.04em", lineHeight: "1.1" }}><span data-count="78">78</span>%</div><div style={{ fontSize: "12px", color: "#9ca3af" }}>of risk gone after 5 fixes</div><div style={{ marginTop: "10px", display: "flex", gap: "3px", height: "7px" }}><span style={{ flex: "1", background: "#a78bfa", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "#a78bfa", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "#a78bfa", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "#a78bfa", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "#a78bfa", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "rgb(255 255 255 / 12%)", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "rgb(255 255 255 / 12%)", borderRadius: "2px" }}></span><span style={{ flex: "1", background: "rgb(255 255 255 / 12%)", borderRadius: "2px" }}></span></div></div>
+                    </div>
+                    <div className="home-dtiles" style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: "10px" }}>
+                      <div style={{ padding: "10px 12px", border: "1px solid rgb(255 255 255 / 9%)", borderRadius: "10px" }}><div style={{ fontSize: "11px", color: "#9ca3af" }}>Malicious</div><div data-count="1" style={{ fontSize: "22px", fontWeight: "600", color: "#fff" }}>1</div></div>
+                      <div style={{ padding: "10px 12px", border: "1px solid rgb(255 255 255 / 9%)", borderRadius: "10px" }}><div style={{ fontSize: "11px", color: "#9ca3af" }}>Vulnerabilities</div><div data-count="47" style={{ fontSize: "22px", fontWeight: "600", color: "#fff" }}>47</div></div>
+                      <div style={{ padding: "10px 12px", border: "1px solid rgb(255 255 255 / 9%)", borderRadius: "10px" }}><div style={{ fontSize: "11px", color: "#9ca3af" }}>Overdue</div><div data-count="1" style={{ fontSize: "22px", fontWeight: "600", color: "#fff" }}>1</div></div>
+                      <div style={{ padding: "10px 12px", border: "1px solid rgb(255 255 255 / 9%)", borderRadius: "10px" }}><div style={{ fontSize: "11px", color: "#9ca3af" }}>Violations</div><div data-count="11" style={{ fontSize: "22px", fontWeight: "600", color: "#fff" }}>11</div></div>
+                      <div style={{ padding: "10px 12px", border: "1px solid rgb(255 255 255 / 9%)", borderRadius: "10px" }}><div style={{ fontSize: "11px", color: "#9ca3af" }}>Suspicious</div><div data-count="2" style={{ fontSize: "22px", fontWeight: "600", color: "#fff" }}>2</div></div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: "3px", height: "70px", borderBottom: "1px solid rgb(255 255 255 / 9%)" }}>
+                      <span data-bar="62" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "62%" }}></span><span data-bar="60" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "60%" }}></span><span data-bar="64" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "64%" }}></span><span data-bar="58" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "58%" }}></span><span data-bar="57" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "57%" }}></span><span data-bar="59" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "59%" }}></span><span data-bar="55" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "55%" }}></span><span data-bar="56" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "56%" }}></span><span data-bar="54" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "54%" }}></span><span data-bar="53" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "53%" }}></span><span data-bar="55" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "55%" }}></span><span data-bar="52" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "52%" }}></span><span data-bar="51" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "51%" }}></span><span data-bar="50" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "50%" }}></span><span data-bar="49" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "49%" }}></span><span data-bar="48" style={{ flex: "1", background: "linear-gradient(#ef4444 8%,#f97316 8% 35%,#eab308 35% 78%,#38bdf8 78%)", borderRadius: "2px 2px 0 0", height: "48%" }}></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          ))}
+          </div>
         </div>
-        <div className="border-t border-[var(--lp-line)]">
-          <p className="lp-frame lp-pad lp-mono py-6 text-sm text-[var(--lp-dim)]">© {new Date().getFullYear()} depguard</p>
+      </section>
+
+      <section id="incidents" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2" }}>
+        <div className="home-sec home-secy" style={{ maxWidth: "1200px", margin: "0 auto", padding: "120px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)" }}>
+          <div className="home-2col" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(380px,1fr))", gap: "32px", alignItems: "end" }}>
+            <div><p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#f87171" }}>Real attacks</p><h2 data-r="up" data-d="80" style={{ margin: "20px 0 0", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>Would depguard catch it?<br /><span style={{ color: "#6b7280" }}>Six attacks everyone remembers.</span></h2></div>
+            <p data-r="up" data-d="160" style={{ margin: "0", fontSize: "17px", lineHeight: "1.65", color: "#9ca3af" }}>What happened in the best-known supply-chain attacks, and which check answers each, including the one no scanner could see coming.</p>
+          </div>
+          <div style={{ position: "relative", marginTop: "64px" }}>
+            <div className="home-tline" data-draw="y" style={{ position: "absolute", left: "50%", top: "0", bottom: "0", width: "1px", background: "linear-gradient(#a78bfa,rgb(255 255 255 / 12%) 60%,transparent)", transformOrigin: "top" }}></div>
+            <div className="home-timeline" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: "72px", rowGap: "28px" }}>
+              <div className="hh9" data-r="left" style={{ gridColumn: "1", position: "relative", padding: "22px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(255 255 255 / 2.5%)", transition: "border-color .2s" }}><span className="home-tdot" style={{ position: "absolute", top: "26px", right: "-44px", width: "15px", height: "15px", borderRadius: "50%", border: "4px solid #000", background: "#f87171", boxShadow: "0 0 14px rgb(248 113 113 / 70%)" }}></span><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>Nov 2018 · npm</div><div style={{ marginTop: "6px", fontSize: "22px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>event-stream</div><p style={{ margin: "8px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>A new maintainer added flatmap-stream, which quietly stole bitcoin wallets from a downstream app.</p><p style={{ margin: "14px 0 0", paddingTop: "12px", borderTop: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "#c4b5fd" }}><b style={{ color: "#fff", fontWeight: "500" }}>depguard:</b> new transitive dependency flagged on the PR · malware feed blocks flatmap-stream</p></div>
+              <div className="hh10" data-r="right" style={{ gridColumn: "2", marginTop: "90px", position: "relative", padding: "22px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(255 255 255 / 2.5%)", transition: "border-color .2s" }}><span className="home-tdot" style={{ position: "absolute", top: "26px", left: "-44px", width: "15px", height: "15px", borderRadius: "50%", border: "4px solid #000", background: "#f87171", boxShadow: "0 0 14px rgb(248 113 113 / 70%)" }}></span><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>Oct 2021 · npm</div><div style={{ marginTop: "6px", fontSize: "22px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>ua-parser-js</div><p style={{ margin: "8px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>A hijacked account published 3 versions with a preinstall script that dropped a cryptominer and password stealer.</p><p style={{ margin: "14px 0 0", paddingTop: "12px", borderTop: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "#c4b5fd" }}><b style={{ color: "#fff", fontWeight: "500" }}>depguard:</b> install-script analysis + CLI guard stops the install before the script runs</p></div>
+              <div className="hh11" data-r="left" style={{ gridColumn: "1", marginTop: "-60px", position: "relative", padding: "22px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(255 255 255 / 2.5%)", transition: "border-color .2s" }}><span className="home-tdot" style={{ position: "absolute", top: "26px", right: "-44px", width: "15px", height: "15px", borderRadius: "50%", border: "4px solid #000", background: "#fcd34d", boxShadow: "0 0 14px rgb(252 211 77 / 60%)" }}></span><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>Jan 2022 · npm</div><div style={{ marginTop: "6px", fontSize: "22px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>colors &amp; faker</div><p style={{ margin: "8px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>The maintainer sabotaged their own packages: an infinite loop that broke thousands of apps.</p><p style={{ margin: "14px 0 0", paddingTop: "12px", borderTop: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "#c4b5fd" }}><b style={{ color: "#fff", fontWeight: "500" }}>depguard:</b> malware feed marks the sabotaged versions · PR check blocks the upgrade</p></div>
+              <div className="hh12" data-r="right" style={{ gridColumn: "2", marginTop: "30px", position: "relative", padding: "22px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(255 255 255 / 2.5%)", transition: "border-color .2s" }}><span className="home-tdot" style={{ position: "absolute", top: "26px", left: "-44px", width: "15px", height: "15px", borderRadius: "50%", border: "4px solid #000", background: "#f87171", boxShadow: "0 0 14px rgb(248 113 113 / 70%)" }}></span><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>May 2022 · PyPI</div><div style={{ marginTop: "6px", fontSize: "22px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>ctx</div><p style={{ margin: "8px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>An expired maintainer domain was taken over; new releases sent environment variables (AWS keys) to a remote host.</p><p style={{ margin: "14px 0 0", paddingTop: "12px", borderTop: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "#c4b5fd" }}><b style={{ color: "#fff", fontWeight: "500" }}>depguard:</b> unusual-behaviour check flags env-var exfiltration · release blocked by policy</p></div>
+              <div className="hh13" data-r="left" style={{ gridColumn: "1", marginTop: "-60px", position: "relative", padding: "22px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(255 255 255 / 2.5%)", transition: "border-color .2s" }}><span className="home-tdot" style={{ position: "absolute", top: "26px", right: "-44px", width: "15px", height: "15px", borderRadius: "50%", border: "4px solid #000", background: "#6b7280" }}></span><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>Mar 2024 · Linux</div><div style={{ marginTop: "6px", fontSize: "22px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>xz-utils</div><p style={{ margin: "8px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>A multi-year social-engineering campaign slipped a backdoor into release tarballs targeting sshd.</p><p style={{ margin: "14px 0 0", paddingTop: "12px", borderTop: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "#9ca3af" }}><b style={{ color: "#fff", fontWeight: "500" }}>depguard:</b> hard for any scanner before disclosure · after CVE-2024-3094, every affected repo is flagged on the next scan</p></div>
+              <div className="hh14" data-r="right" style={{ gridColumn: "2", marginTop: "30px", position: "relative", padding: "22px", borderRadius: "14px", border: "1px solid rgb(255 255 255 / 12%)", background: "rgb(255 255 255 / 2.5%)", transition: "border-color .2s" }}><span className="home-tdot" style={{ position: "absolute", top: "26px", left: "-44px", width: "15px", height: "15px", borderRadius: "50%", border: "4px solid #000", background: "#f87171", boxShadow: "0 0 14px rgb(248 113 113 / 70%)" }}></span><div style={{ font: "12px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>Sep 2025 · npm</div><div style={{ marginTop: "6px", fontSize: "22px", fontWeight: "600", color: "#fff", letterSpacing: "-.02em" }}>chalk, debug &amp; Shai-Hulud</div><p style={{ margin: "8px 0 0", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>Phished maintainer tokens pushed trojanized versions of hugely popular packages; a self-replicating worm followed.</p><p style={{ margin: "14px 0 0", paddingTop: "12px", borderTop: "1px solid rgb(255 255 255 / 8%)", fontSize: "14px", color: "#c4b5fd" }}><b style={{ color: "#fff", fontWeight: "500" }}>depguard:</b> malware feed + new-version policy: risky updates wait for review instead of auto-merging</p></div>
+            </div>
+          </div>
         </div>
+      </section>
+
+      <section id="how" style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2" }}>
+        <div className="home-sec home-secy" style={{ maxWidth: "1200px", margin: "0 auto", padding: "120px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)" }}>
+          <p data-r="up" style={{ margin: "0", font: "500 12.5px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", textTransform: "uppercase", color: "#a78bfa" }}>How it works</p>
+          <h2 data-r="up" data-d="80" style={{ margin: "20px 0 0", fontSize: "clamp(34px,4.4vw,48px)", lineHeight: "1.08", fontWeight: "600", letterSpacing: "-.04em", color: "#fff" }}>Connected to enforced<br /><span style={{ color: "#6b7280" }}>in an afternoon.</span></h2>
+          <div style={{ position: "relative", marginTop: "64px" }}>
+            <div style={{ position: "absolute", left: "0", right: "0", top: "0", height: "1px", background: "rgb(255 255 255 / 10%)" }}></div>
+            <div data-draw="x" style={{ position: "absolute", left: "0", right: "0", top: "0", height: "1px", background: "linear-gradient(90deg,#7c3aed,#c4b5fd,#f0abfc)", transformOrigin: "left", boxShadow: "0 0 12px rgb(167 139 250 / 60%)" }}></div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: "32px" }}>
+              <div data-r="up" data-d="0" style={{ paddingTop: "32px" }}><div style={{ font: "500 14px var(--home-mono),ui-monospace,monospace", color: "#a78bfa" }}>01</div><div style={{ marginTop: "14px", fontSize: "26px", fontWeight: "600", letterSpacing: "-.03em", color: "#fff" }}>Connect</div><p style={{ margin: "10px 0 0", fontSize: "16px", lineHeight: "1.65", color: "#9ca3af" }}>Install the GitHub App or run the CLI against a repository. Invite your team into a private workspace.</p></div>
+              <div data-r="up" data-d="250" style={{ paddingTop: "32px" }}><div style={{ font: "500 14px var(--home-mono),ui-monospace,monospace", color: "#a78bfa" }}>02</div><div style={{ marginTop: "14px", fontSize: "26px", fontWeight: "600", letterSpacing: "-.03em", color: "#fff" }}>Scan</div><p style={{ margin: "10px 0 0", fontSize: "16px", lineHeight: "1.65", color: "#9ca3af" }}>depguard resolves the dependency graph, matches advisories, inspects package contents and scores risk per project.</p></div>
+              <div data-r="up" data-d="500" style={{ paddingTop: "32px" }}><div style={{ font: "500 14px var(--home-mono),ui-monospace,monospace", color: "#a78bfa" }}>03</div><div style={{ marginTop: "14px", fontSize: "26px", fontWeight: "600", letterSpacing: "-.03em", color: "#fff" }}>Enforce</div><p style={{ margin: "10px 0 0", fontSize: "16px", lineHeight: "1.65", color: "#9ca3af" }}>Write policy once. New risky dependencies are flagged on the pull request, before they merge.</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ borderBottom: "1px solid rgb(255 255 255 / 8%)", position: "relative", zIndex: "2" }}>
+        <div className="home-sec" style={{ maxWidth: "1200px", margin: "0 auto", padding: "96px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)" }}>
+          <div data-r="scale" style={{ position: "relative", borderRadius: "24px", overflow: "hidden", padding: "1px" }}>
+            <div style={{ position: "absolute", left: "50%", top: "50%", width: "200%", aspectRatio: "1", transform: "translate(-50%,-50%)" }}><div style={{ width: "100%", height: "100%", background: "conic-gradient(from 0deg,transparent 0 70%,#a78bfa 85%,#f0abfc 92%,transparent 100%)", animation: "lpSpin 6s linear infinite" }}></div></div>
+            <div style={{ position: "relative", borderRadius: "23px", background: "radial-gradient(60% 80% at 50% 0%,rgb(124 58 237 / 30%),transparent 70%),#05040a", padding: "100px 32px", textAlign: "center" }}>
+              <h2 style={{ margin: "0", fontSize: "clamp(40px,5.6vw,68px)", lineHeight: "1.04", fontWeight: "600", letterSpacing: "-.045em", color: "#fff" }}>Know what you ship.<br /><span style={{ background: "linear-gradient(92deg,#c4b5fd,#a78bfa,#f0abfc,#c4b5fd)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent", animation: "lpShine 6s linear infinite" }}>Before it ships.</span></h2>
+              <p style={{ margin: "24px auto 0", maxWidth: "480px", fontSize: "18px", lineHeight: "1.6", color: "rgb(229 236 246 / 85%)" }}>Connect a repository and get your full dependency risk picture on the first scan.</p>
+              <div style={{ marginTop: "36px", display: "flex", justifyContent: "center", flexWrap: "wrap", gap: "14px" }}>
+                <Link className="hh15" href={SIGN_UP} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "15px 24px", whiteSpace: "nowrap", borderRadius: "10px", background: "#7c3aed", color: "#fff", fontWeight: "500", fontSize: "16px", boxShadow: "inset 0 -1px 0 rgb(0 0 0 / 20%),0 1px 0 #c4b5fd,0 14px 40px -10px #7c3aed", transition: "transform .15s" }}>Start scanning<ArrowRight size={16} strokeWidth={2} style={{ flexShrink: 0 }} aria-hidden /></Link>
+                <a className="hh16" href={DOCS} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "15px 22px", whiteSpace: "nowrap", borderRadius: "10px", border: "1px solid rgb(255 255 255 / 18%)", color: "#fff", fontWeight: "500", fontSize: "16px" }}>Read the docs</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer style={{ position: "relative", zIndex: "2" }}>
+        <div className="home-sec home-foot" style={{ maxWidth: "1200px", margin: "0 auto", padding: "64px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)", display: "grid", gridTemplateColumns: "1.4fr repeat(4,1fr)", gap: "40px" }}>
+          <div><div style={{ display: "flex", alignItems: "center", gap: "9px", color: "#fff", fontSize: "19px", fontWeight: "600", letterSpacing: "-.03em" }}>depguard</div><p style={{ margin: "14px 0 0", maxWidth: "260px", fontSize: "15px", lineHeight: "1.6", color: "#9ca3af" }}>Supply-chain security for repositories, pipelines and developer machines.</p></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "15px" }}><span style={{ font: "500 12px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", color: "#9ca3af", marginBottom: "6px" }}>PRODUCT</span><a href="#paths" style={{ color: "rgb(229 236 246)" }}>Attack paths</a><a href="#signals" style={{ color: "rgb(229 236 246)" }}>Malicious packages</a><a href="#product" style={{ color: "rgb(229 236 246)" }}>Dashboard</a><a href="#problem" style={{ color: "rgb(229 236 246)" }}>Endpoints</a></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "15px" }}><span style={{ font: "500 12px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", color: "#9ca3af", marginBottom: "6px" }}>PLATFORM</span><a href="#how" style={{ color: "rgb(229 236 246)" }}>How it works</a><a href="#try" style={{ color: "rgb(229 236 246)" }}>Try it</a><Link href={SIGN_IN} style={{ color: "rgb(229 236 246)" }}>Sign in</Link></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "15px" }}><span style={{ font: "500 12px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", color: "#9ca3af", marginBottom: "6px" }}>RESOURCES</span><a href={DOCS} style={{ color: "rgb(229 236 246)" }}>Documentation</a><a href={RISK} style={{ color: "rgb(229 236 246)" }}>Risk model</a><a href={REPO} style={{ color: "rgb(229 236 246)" }}>GitHub</a></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "15px" }}><span style={{ font: "500 12px var(--home-mono),ui-monospace,monospace", letterSpacing: ".3em", color: "#9ca3af", marginBottom: "6px" }}>LEGAL</span><Link href="/attributions" style={{ color: "rgb(229 236 246)" }}>Attributions</Link></div>
+        </div>
+        <div style={{ borderTop: "1px solid rgb(255 255 255 / 8%)" }}><div className="home-sec" style={{ maxWidth: "1200px", margin: "0 auto", padding: "22px 32px", borderInline: "1px solid rgb(255 255 255 / 8%)", font: "14px var(--home-mono),ui-monospace,monospace", color: "#6b7280" }}>© 2026 depguard</div></div>
       </footer>
     </div>
+    </>
   );
 }

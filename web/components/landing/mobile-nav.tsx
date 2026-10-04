@@ -39,14 +39,14 @@ export function MobileNav({ links, signIn, signUp }: { links: [string, string][]
           </div>
           <nav className="flex flex-col">
             {links.map(([label, href]) => (
-              <a key={label} href={href} onClick={() => setOpen(false)} className="border-b border-[var(--lp-line)] py-4 text-lg text-[var(--lp-fg)] hover:text-white">
+              <a key={label} href={href} onClick={() => setOpen(false)} className="border-b border-white/10 py-4 text-lg !text-[rgb(229_236_246)] hover:!text-white">
                 {label}
               </a>
             ))}
           </nav>
           <div className="mt-8 flex flex-col gap-3">
-            <Link href={signUp} className="lp-btn lp-btn-primary justify-center py-3 text-[16px]">Get started</Link>
-            <Link href={signIn} className="lp-btn lp-btn-ghost justify-center py-3 text-[16px]">Sign in</Link>
+            <Link href={signUp} className="rounded-lg bg-[#7c3aed] py-3 text-center text-[16px] font-medium !text-white">Get started</Link>
+            <Link href={signIn} className="rounded-lg border border-white/20 py-3 text-center text-[16px] !text-white">Sign in</Link>
           </div>
         </div>
       )}

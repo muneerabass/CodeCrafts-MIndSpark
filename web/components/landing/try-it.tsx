@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { ShieldAlert, ShieldCheck, ShieldX, TriangleAlert } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 // Instant, in-browser preview of depguard's checks. Small built-in lists only:
 // the real product checks the full OSV / malware feeds after sign-in.
@@ -44,10 +43,6 @@ const VULNS: Record<Eco, Record<string, { id: string; risk: 'Critical' | 'High' 
   },
 };
 
-const EXAMPLES: Record<Eco, string[]> = {
-  npm: ['lodash@4.17.15', 'ua-parser-js@0.7.29', 'expres', 'crossenv', 'lodash@4.17.21'],
-  PyPI: ['requets', 'pyyaml==5.3', 'ctx==0.2.6', 'reqeusts', 'requests==2.32.3'],
-};
 
 /** Optimal string alignment distance (Levenshtein + adjacent swaps). */
 export function distance(a: string, b: string): number {
@@ -99,84 +94,169 @@ export function check(eco: Eco, input: string): Verdict | null {
   return { tone: 'green', title: 'Nothing found in the instant check', lines: ['Sign in for the full scan: every OSV advisory, malware analysis, install scripts and licenses.'] };
 }
 
-const TONE = {
-  red: { box: 'border-red-500/40 bg-red-500/[0.07]', text: 'text-red-300', Icon: ShieldX },
-  orange: { box: 'border-orange-500/40 bg-orange-500/[0.07]', text: 'text-orange-300', Icon: ShieldAlert },
-  amber: { box: 'border-amber-400/40 bg-amber-400/[0.07]', text: 'text-amber-200', Icon: TriangleAlert },
-  green: { box: 'border-emerald-400/40 bg-emerald-400/[0.06]', text: 'text-emerald-300', Icon: ShieldCheck },
-};
 
-export function TryIt() {
-  const [eco, setEco] = useState<Eco>('npm');
-  const [q, setQ] = useState('lodash@4.17.15');
-  const v = check(eco, q);
-  const t = v ? TONE[v.tone] : null;
+type Line = { c: string; t: string };
+
+// Scripted demo (auto-plays until the visitor clicks a scenario or types).
+const SCN: { label: string; dot: string; tag: string; cmd: string; out: Line[] }[] = [
+  { label: 'Typosquat · one keystroke from a popular name', dot: '#f87171', tag: 'blocked', cmd: 'npm install lodahs', out: [{ c: '#6b7280', t: 'depguard ▸ checking lodahs …' }, { c: '#f87171', t: '✖ BLOCKED  typosquat of lodash (two letters swapped)' }, { c: '#9ca3af', t: '  lookalike of a package with millions of installs' }, { c: '#c4b5fd', t: '→ did you mean: npm install lodash' }] },
+  { label: 'Malware · steals environment variables', dot: '#f87171', tag: 'blocked', cmd: 'pip install ctx==0.2.6', out: [{ c: '#6b7280', t: 'depguard ▸ checking ctx@0.2.6 …' }, { c: '#f87171', t: '✖ BLOCKED  malicious: sends environment variables' }, { c: '#9ca3af', t: '  (AWS keys) to a remote host, hijacked in 2022' }, { c: '#c4b5fd', t: '→ nothing was installed. No script ran.' }] },
+  { label: 'Known CVE · with the exact fix command', dot: '#fbbf24', tag: 'warned', cmd: 'npm install minimist@1.2.5', out: [{ c: '#6b7280', t: 'depguard ▸ checking minimist@1.2.5 …' }, { c: '#fbbf24', t: '⚠ WARN  CVE-2021-44906 · CRITICAL · prototype pollution' }, { c: '#9ca3af', t: '  fixed in 1.2.6' }, { c: '#c4b5fd', t: '→ npm install minimist@1.2.6' }] },
+  { label: 'Clean · installs as usual', dot: '#34d399', tag: 'allowed', cmd: 'npm install express', out: [{ c: '#6b7280', t: 'depguard ▸ checking express …' }, { c: '#34d399', t: '✔ ALLOWED  no known issues · MIT' }, { c: '#9ca3af', t: '  added 64 packages in 2.1s' }] },
+];
+
+const TONE: Record<string, [string, string]> = { red: ['#f87171', '✖ BLOCKED'], orange: ['#fbbf24', '⚠ WARN'], amber: ['#fbbf24', '⚠ WARN'], green: ['#34d399', '✔ ALLOWED'] };
+
+/** Turns "npm i x@1", "pip install x==1" or "x@1" into the in-browser check's answer. */
+function answer(cmd: string): Line[] {
+  const words = cmd.trim().split(/\s+/);
+  const pip = /^(pip3?|uv|poetry)$/.test(words[0] ?? '');
+  const spec = words.filter((w) => !/^(npm|pnpm|yarn|pip3?|uv|poetry|install|i|add)$/.test(w) && !w.startsWith('-'))[0] ?? '';
+  const eco: Eco = pip ? 'PyPI' : 'npm';
+  const v = check(eco, spec);
+  if (!v) return [{ c: '#9ca3af', t: 'try: npm install lodahs · pip install ctx==0.2.6 · npm i minimist@1.2.5' }];
+  const [col, word] = TONE[v.tone];
+  return [
+    { c: '#6b7280', t: `depguard ▸ checking ${spec} (${eco}) …` },
+    { c: col, t: `${word}  ${v.title.replace(/^Blocked · /, '')}` },
+    ...v.lines.map((t) => ({ c: '#9ca3af', t: '  ' + t })),
+    ...(v.fix ? [{ c: '#c4b5fd', t: '→ ' + v.fix }] : []),
+  ];
+}
+
+const Prompt = ({ children }: { children: ReactNode }) => (
+  <div>
+    <span style={{ color: '#a78bfa' }}>$</span> {children}
+  </div>
+);
+const Caret = () => <span style={{ display: 'inline-block', width: 8, height: 16, verticalAlign: -3, background: '#a78bfa', marginLeft: 2, animation: 'lpBlink 1s steps(1) infinite' }} />;
+
+/** "Try it now": scenario list + typing terminal; the visitor can run their own package. */
+export function TryDemo({ intro }: { intro: ReactNode }) {
+  const [active, setActive] = useState(0);
+  const [typed, setTyped] = useState('');
+  const [out, setOut] = useState<Line[]>([]);
+  const [busy, setBusy] = useState(true);
+  const [input, setInput] = useState('');
+  const auto = useRef(true);
+  const run = useRef(0);
+
+  const play = async (cmd: string, lines: Line[], fast = false) => {
+    const id = ++run.current;
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, reduce ? 0 : ms));
+    setBusy(true);
+    setOut([]);
+    for (let c = 0; c <= cmd.length; c++) {
+      if (run.current !== id) return false;
+      setTyped(cmd.slice(0, c));
+      if (!fast) await sleep(45 + Math.random() * 40);
+    }
+    await sleep(fast ? 120 : 350);
+    for (let i = 0; i < lines.length; i++) {
+      if (run.current !== id) return false;
+      setOut(lines.slice(0, i + 1));
+      await sleep(fast ? 120 : 320);
+    }
+    setBusy(false);
+    return run.current === id;
+  };
+
+  useEffect(() => {
+    let i = 0;
+    let stop = false;
+    (async () => {
+      await new Promise((r) => setTimeout(r, 900));
+      while (!stop && auto.current) {
+        const s = SCN[i % SCN.length];
+        setActive(i % SCN.length);
+        if (!(await play(s.cmd, s.out))) return;
+        await new Promise((r) => setTimeout(r, 2600));
+        i++;
+      }
+    })();
+    const r = run;
+    return () => {
+      stop = true;
+      r.current++;
+    };
+  }, []);
+
+  const pick = (i: number) => {
+    auto.current = false;
+    setActive(i);
+    play(SCN[i].cmd, SCN[i].out, true);
+  };
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cmd = input.trim();
+    if (!cmd) return;
+    auto.current = false;
+    setActive(-1);
+    setInput('');
+    play(cmd.includes(' ') ? cmd : `npm install ${cmd}`, answer(cmd.includes(' ') ? cmd : `npm install ${cmd}`), true);
+  };
 
   return (
-    <div className="rounded-2xl border border-[var(--lp-line-2)] bg-[#07070b] p-5 shadow-2xl shadow-violet-950/30 md:p-7">
-      <div className="flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Registry" className="inline-flex rounded-lg border border-[var(--lp-line-2)] p-0.5">
-          {(['npm', 'PyPI'] as Eco[]).map((e) => (
+    <>
+      <div>
+        {intro}
+        <div data-r="up" data-d="240" style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {SCN.map((s, i) => (
             <button
-              key={e}
-              role="tab"
-              aria-selected={eco === e}
-              onClick={() => {
-                setEco(e);
-                setQ(EXAMPLES[e][0]);
+              key={s.cmd}
+              type="button"
+              onClick={() => pick(i)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit', transition: 'all .3s',
+                border: `1px solid ${active === i ? 'rgb(167 139 250 / 55%)' : 'rgb(255 255 255 / 10%)'}`,
+                background: active === i ? 'rgb(167 139 250 / 8%)' : 'transparent',
+                transform: active === i ? 'translateX(6px)' : 'none',
               }}
-              className={`lp-mono rounded-md px-3 py-1 text-[13px] ${eco === e ? 'bg-[var(--lp-teal-btn)] text-white' : 'text-[var(--lp-muted)] hover:text-white'}`}
             >
-              {e}
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.dot, flex: 'none' }} />
+              <span style={{ flex: 1, fontSize: 15 }}>{s.label}</span>
+              <span style={{ font: '12px var(--home-mono),ui-monospace,monospace', color: s.dot }}>{s.tag}</span>
             </button>
           ))}
         </div>
-        <span className="lp-mono text-[12px] text-[var(--lp-dim)]">runs in your browser · nothing is sent</span>
       </div>
-
-      <label className="mt-4 flex items-center gap-3 rounded-xl border border-[var(--lp-line-2)] bg-black px-4 py-3 focus-within:border-[var(--lp-teal)]">
-        <span className="lp-mono shrink-0 text-[15px] text-[var(--lp-dim)]">{eco === 'npm' ? '$ npm install' : '$ pip install'}</span>
-        <input
-          aria-label="Package to check"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoComplete="off"
-          placeholder={eco === 'npm' ? 'name@version' : 'name==version'}
-          className="lp-mono min-w-0 flex-1 bg-transparent text-[15px] text-white outline-none placeholder:text-[var(--lp-dim)]"
-        />
-      </label>
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        <span className="text-[12px] text-[var(--lp-dim)]">Try:</span>
-        {EXAMPLES[eco].map((x) => (
-          <button key={x} onClick={() => setQ(x)} className="lp-mono rounded-md border border-[var(--lp-line-2)] px-2 py-0.5 text-[12px] text-[var(--lp-muted)] hover:border-[var(--lp-teal)] hover:text-white">
-            {x}
-          </button>
-        ))}
-      </div>
-
-      <div aria-live="polite" className="mt-5 min-h-[132px]">
-        {v && t && (
-          <div key={v.title + q} className={`lp-verdict rounded-xl border p-4 ${t.box}`}>
-            <p className={`flex items-center gap-2 text-[16px] font-medium ${t.text}`}>
-              <t.Icon className="size-5 shrink-0" /> {v.title}
-            </p>
-            {v.lines.map((l) => (
-              <p key={l} className="mt-1.5 text-[14px] text-[var(--lp-muted)]">
-                {l}
-              </p>
-            ))}
-            {v.fix && (
-              <p className="lp-mono mt-3 rounded-md bg-black/60 px-3 py-2 text-[13px] text-white">
-                <span className="text-[var(--lp-dim)]">fix › </span>
-                {v.fix}
-              </p>
-            )}
+      <div data-r="right" data-d="120" style={{ position: 'relative', minWidth: 0 }}>
+        <div style={{ position: 'absolute', inset: -40, background: 'radial-gradient(50% 50% at 50% 50%,rgb(124 58 237 / 25%),transparent 70%)', pointerEvents: 'none' }} />
+        <div data-tilt="6" style={{ position: 'relative', borderRadius: 14, border: '1px solid rgb(255 255 255 / 12%)', background: '#07060c', boxShadow: '0 40px 80px -30px rgb(124 58 237 / 45%),0 0 0 1px rgb(255 255 255 / 3%) inset', overflow: 'hidden', transition: 'transform .25s ease-out' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderBottom: '1px solid rgb(255 255 255 / 8%)' }}>
+            {[0, 1, 2].map((k) => <span key={k} style={{ width: 11, height: 11, borderRadius: '50%', background: '#3f3f46' }} />)}
+            <span style={{ marginLeft: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', font: '12px var(--home-mono),ui-monospace,monospace', color: '#6b7280' }}>~/acme/storefront · install guard</span>
           </div>
-        )}
+          <div aria-live="polite" style={{ padding: '20px 20px 18px', minHeight: 300, font: '14px/1.75 var(--home-mono),ui-monospace,monospace', color: '#e5e7eb', overflowWrap: 'anywhere' }}>
+            <Prompt>depguard setup shell</Prompt>
+            <div style={{ color: '#6b7280' }}>guard on · every install is checked first</div>
+            <div style={{ height: 14 }} />
+            <Prompt>
+              {typed}
+              {busy && !out.length && <Caret />}
+            </Prompt>
+            {out.map((l, i) => (
+              <div key={i} style={{ color: l.c, whiteSpace: 'pre-wrap' }}>{l.t}</div>
+            ))}
+          </div>
+          <form onSubmit={submit} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 20px', borderTop: '1px solid rgb(255 255 255 / 8%)', background: 'rgb(255 255 255 / 2%)', font: '14px var(--home-mono),ui-monospace,monospace' }}>
+            <span style={{ color: '#a78bfa' }}>$</span>
+            <label htmlFor="try-cmd" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Package to check</label>
+            <input
+              id="try-cmd"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onFocus={() => (auto.current = false)}
+              placeholder="npm install reqeusts"
+              autoComplete="off"
+              spellCheck={false}
+              style={{ flex: 1, minWidth: 0, background: 'transparent', border: 0, outline: 'none', color: '#fff', font: 'inherit' }}
+            />
+            <button type="submit" style={{ padding: '5px 12px', borderRadius: 7, border: 0, background: '#7c3aed', color: '#fff', font: '500 13px var(--home-sans),system-ui,sans-serif', cursor: 'pointer' }}>Check</button>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

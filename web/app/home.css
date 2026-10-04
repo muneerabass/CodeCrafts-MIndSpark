@@ -1,0 +1,85 @@
+/* Landing page (app/page.tsx). Design: "depguard Landing". Everything is scoped under .home;
+   inline styles carry the design, this file adds keyframes, hover states and the phone layout. */
+html:has(.home), body:has(.home) { background: #000; }
+.home * { box-sizing: border-box; }
+.home a { color: #c4b5fd; text-decoration: none; }
+.home a:hover { color: #fff; }
+.home ::selection { background: rgb(167 139 250 / 30%); }
+.home :focus-visible { outline: 2px solid #a78bfa; outline-offset: 3px; border-radius: 6px; }
+.home h1, .home h2, .home p { margin: 0; }
+
+@keyframes lpMarq { to { transform: translateX(-50%); } }
+@keyframes lpShine { to { background-position: 200% center; } }
+@keyframes lpSpin { to { transform: rotate(360deg); } }
+@keyframes lpPing { 0% { transform: scale(1); opacity: .75; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes lpSweep { 0% { left: -22%; opacity: 1; } 70% { left: 100%; opacity: 1; } 71%, 100% { left: 100%; opacity: 0; } }
+@keyframes lpHit { 0% { border-color: rgb(248 113 113 / 85%); box-shadow: 0 0 28px -4px rgb(248 113 113 / 50%); } 18%, 100% { border-color: rgb(255 255 255 / 12%); box-shadow: none; } }
+@keyframes lpFlow { 0% { left: -30%; } 100% { left: 100%; } }
+@keyframes lpBlink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .home * { animation: none !important; transition: none !important; } }
+
+.home-copy { display: inline-flex; flex: none; padding: 2px; border: 0; background: none; color: #6b7280; cursor: pointer; }
+.home-copy:hover { color: #fff; }
+.home-copy[data-copied] { color: #34d399; }
+.home-cmd-text { scrollbar-width: none; }
+
+/* the staggered timeline needs cards at their own height */
+.home-timeline { align-items: start; }
+
+/* hover states from the design */
+.home .hh0:hover{transform:translateY(-1px)!important;background:#6d28d9!important}
+.home .hh1:hover{border-color:rgb(167 139 250 / 50%)!important;color:#fff!important}
+.home .hh2:hover{background:#ede9fe!important;color:#000!important;transform:translateY(-1px)!important}
+.home .hh3:hover{border-color:rgb(255 255 255 / 40%)!important;color:#fff!important}
+.home .hh4:hover{color:#fff!important}
+.home .hh5:hover{border-color:rgb(248 113 113 / 45%)!important;transform:translateY(-4px)!important}
+.home .hh6:hover{border-color:rgb(251 191 36 / 45%)!important;transform:translateY(-4px)!important}
+.home .hh7:hover{border-color:rgb(249 115 22 / 45%)!important;transform:translateY(-4px)!important}
+.home .hh8:hover{border-color:rgb(167 139 250 / 50%)!important;transform:translateY(-4px)!important}
+.home .hh9:hover{border-color:rgb(167 139 250 / 55%)!important}
+.home .hh10:hover{border-color:rgb(167 139 250 / 55%)!important}
+.home .hh11:hover{border-color:rgb(167 139 250 / 55%)!important}
+.home .hh12:hover{border-color:rgb(167 139 250 / 55%)!important}
+.home .hh13:hover{border-color:rgb(167 139 250 / 55%)!important}
+.home .hh14:hover{border-color:rgb(167 139 250 / 55%)!important}
+.home .hh15:hover{transform:translateY(-2px)!important}
+.home .hh16:hover{border-color:rgb(255 255 255 / 40%)!important}
+
+/* touch screens: no cursor glow */
+@media (hover: none) { #home-cursor { display: none; } }
+
+/* tablet */
+@media (max-width: 1020px) {
+  .home-herocards { width: 100% !important; max-width: 560px !important; }
+  .home-hgrid { grid-template-columns: minmax(0, 1fr) !important; }
+  .home-hgrid > div:not(:nth-child(2)) { display: none; }
+  .home-navlinks { display: none !important; }
+}
+@media (min-width: 1024px) { .home .lg\:hidden { display: none; } }
+
+@media (max-width: 860px) {
+  .home-five { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; row-gap: 36px !important; }
+  .home-sweep { display: none; }
+  .home-pathrow { grid-template-columns: minmax(0, 1fr) !important; gap: 14px !important; }
+  .home-pathrow > div:first-child { overflow-x: auto; padding-bottom: 4px; }
+  .home-timeline { grid-template-columns: minmax(0, 1fr) !important; row-gap: 16px !important; }
+  .home-timeline > div { grid-column: 1 !important; margin-top: 0 !important; }
+  .home-tline, .home-tdot { display: none; }
+  .home-dside { display: none !important; }
+  .home-dtiles { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  .home-foot { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .home-foot > div:first-child { grid-column: 1 / -1; }
+}
+
+/* phones */
+@media (max-width: 640px) {
+  .home-sec { padding-inline: 16px !important; }
+  .home-secy { padding-block: 72px !important; }
+  .home-2col { grid-template-columns: minmax(0, 1fr) !important; gap: 40px !important; }
+  .home-five > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .home-dsplit { grid-template-columns: minmax(0, 1fr) !important; }
+  .home-dsplit > div:first-child { border-right: 0 !important; border-bottom: 1px solid rgb(255 255 255 / 9%); }
+  .home-chip { white-space: normal !important; text-align: left; }
+  .home-hide-sm { display: none !important; }
+  .home-cmd { font-size: 12px !important; }
+}
