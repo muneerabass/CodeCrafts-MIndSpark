@@ -19,9 +19,10 @@ func TestScore(t *testing.T) {
 	}{
 		{"healthy", Input{Scorecard: f(8), LastRelease: at(2), Stars: i(20000), HasRepo: b(true), Deprecated: b(false), FirstPublished: at(60)}, 9.2, "good"},
 		{"abandoned", Input{Scorecard: f(2), LastRelease: at(70), Stars: i(30), HasRepo: b(true), Deprecated: b(true), FirstPublished: at(100)}, 2.9, "poor"},
-		{"new, no repo", Input{LastRelease: at(0), Stars: nil, HasRepo: b(false), Deprecated: b(false), FirstPublished: at(0)}, 6.7, "fair"},
+		{"new, no repo", Input{LastRelease: at(0), Stars: nil, HasRepo: b(false), Deprecated: b(false), FirstPublished: at(0)}, 5.9, "fair"},
 		{"unknowns dropped", Input{Scorecard: f(10), LastRelease: at(1)}, 10, "good"},
 		{"too little data", Input{Deprecated: b(false)}, -1, "unknown"},
+		{"obscure, no scorecard", Input{LastRelease: at(1), Stars: i(1), HasRepo: b(true), Deprecated: b(false), FirstPublished: at(60)}, 6.6, "fair"},
 		{"malicious", Input{Scorecard: f(9), Malicious: true}, 0, "malicious"},
 	}
 	for _, c := range cases {

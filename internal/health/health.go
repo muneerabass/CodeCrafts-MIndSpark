@@ -54,7 +54,7 @@ func Score(in Input) Result {
 	if in.Scorecard != nil {
 		fs[0].Value, fs[0].Detail = v(math.Max(0, math.Min(10, *in.Scorecard))/10), fmt.Sprintf("%.1f / 10", *in.Scorecard)
 	} else {
-		fs[0].Detail = "No Scorecard for the source repository"
+		fs[0].Detail = "No Scorecard yet (counted as neutral)"
 	}
 	if in.LastRelease != nil {
 		m := months(*in.LastRelease)
@@ -92,14 +92,22 @@ func Score(in Input) Result {
 		r.Score, r.Level = v(0), "malicious"
 		return r
 	}
-	var sum, w float64
+	var sum, w, known float64
 	for _, f := range fs {
-		if f.Value != nil {
+		switch {
+		case f.Value != nil:
 			sum += *f.Value * f.Weight
+			w += f.Weight
+			known += f.Weight
+		case f.Key == "scorecard":
+			// Most small packages have no Scorecard: count it as neutral so a
+			// handful of easy signals (has a repo, not deprecated) can't make an
+			// obscure package look excellent.
+			sum += 0.5 * f.Weight
 			w += f.Weight
 		}
 	}
-	if w < 25 { // too little data to judge
+	if known < 25 { // too little data to judge
 		return r
 	}
 	s := math.Round(sum/w*100) / 10
@@ -126,6 +134,8 @@ func ago(months float64) string {
 	switch {
 	case months < 1:
 		return "this month"
+	case months < 2:
+		return "1 month ago"
 	case months < 12:
 		return fmt.Sprintf("%d months ago", int(months))
 	case months < 24:
