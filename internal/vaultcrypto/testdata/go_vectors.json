@@ -1,0 +1,56 @@
+{
+  "env": "export STRIPE_KEY=\"sk_live_abc\\n123 \\\"q\\\"\"\n# c\nDB_URL=postgres://u:p@h/db # note\nSHORT=x\nPEM=\"-----BEGIN-----\nline2\n-----END-----\"\nSINGLE='a #b'\n",
+  "fingerprints": [
+    {
+      "name": "STRIPE_KEY",
+      "sha256": "c990d1cafad121411a40090fd35699d0a0bd78530cb1455ec865663797d66609"
+    },
+    {
+      "name": "DB_URL",
+      "sha256": "5ae823f668110cb577b8ba37a0beef791add00273c2c134c9443da6b85b78ea8"
+    },
+    {
+      "name": "PEM",
+      "sha256": "9e1169b2bb9941a0ddf9bebc570e2f52236b34bc4a4ee572ca08527c8a8e94e7"
+    }
+  ],
+  "item": {
+    "ciphertext": "ZGBmE6mYGOkhEJ/xxET6g4q1QApZtBVcAaPuoRNihvoB8Zs4nq5KiTczMFgpB3QTm8oj4palebZeS5KGU+Vir9vOM8Kkxtz5aIiXZbhWNEvYPLqJZFWxHieXIE1hQOSQ2A6sga1aI9ATf8kVsi4caftqDazm49itGQX9M35oNFRaalRw7FiWg5aFXMbE3aBx+Bb4dL5vai3mK4ma9GzLsD0=",
+    "iv": "WPpRJhp21aD7wJGp"
+  },
+  "parsed": [
+    {
+      "key": "STRIPE_KEY",
+      "value": "sk_live_abc\n123 \"q\""
+    },
+    {
+      "key": "DB_URL",
+      "value": "postgres://u:p@h/db"
+    },
+    {
+      "key": "SHORT",
+      "value": "x"
+    },
+    {
+      "key": "PEM",
+      "value": "-----BEGIN-----\nline2\n-----END-----"
+    },
+    {
+      "key": "SINGLE",
+      "value": "a #b"
+    }
+  ],
+  "passphrase": "go passphrase ✓",
+  "public_key": "BLJe/qMWAxw90FWZPY6inVWTy0Nr7u1NG0UNVlMcRIDw3A7UwwZTOSxO551/7ywhfC5kX6icXXqP+xxnEVHSV50=",
+  "wrapped_key": {
+    "ephemeral_public": "BNMEMlXHFQ8CRz9WZAJCGBgpmtP5KpMvgIadyAz5iVwlMItoIKHEsPcirIcfPtvHgzsI6T+GZay+Q2Ll1pNcn3Y=",
+    "iv": "3to0JtwraBhftNdh",
+    "ciphertext": "RdticYEHjtRYfSPzWhZtkUPAa1sKfTUgm6myPOQgvjAEwdGXz+BiRxmk+gFDymjx"
+  },
+  "wrapped_private": {
+    "salt": "MIWC1UxuzJ39NaKm1ESqGQ==",
+    "iterations": 600000,
+    "iv": "8AQIe24aq//n0Zr9",
+    "ciphertext": "dh1xCzOspFn7CEq2rPlTlvHnvIk9fwGeKqiifPpev/3jzsiLZBxqBkhIFIAw7zvKeS70hTh1zIyF2CZO6n3qUeP+xly3D7g/NU2jQXtAFCC4XdeyeHtOoF5cj2e1SI6ARgSC2X00HZKi/NKnDNc2wrWZiO26H7wi25lWwagSZ19vjY5uOOwt20la+CbQg0Yy8gOTuQxjFv3Lsg=="
+  }
+}

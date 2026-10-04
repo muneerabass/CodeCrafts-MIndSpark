@@ -1,6 +1,6 @@
 ---
 name: depguard
-description: Checks open source packages with depguard before they are installed, added or upgraded (npm, pnpm, yarn, bun, pip, uv, poetry, go get, cargo, gem, composer, maven, nuget), and answers "is this package safe?". Use whenever you are about to run an install command, add a dependency to a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, Gemfile, pom.xml), bump a version, or when the user asks about a package's vulnerabilities, malware, license or health.
+description: Checks open source packages with depguard before they are installed, added or upgraded (npm, pnpm, yarn, bun, pip, uv, poetry, go get, cargo, gem, composer, maven, nuget), answers "is this package safe?", and runs commands that need the project's secrets without exposing them. Use whenever you are about to run an install command, add a dependency to a manifest (package.json, requirements.txt, pyproject.toml, go.mod, Cargo.toml, Gemfile, pom.xml), bump a version, when the user asks about a package's vulnerabilities, malware, license or health, or when a command needs API keys, database URLs or .env files.
 ---
 
 # depguard: check dependencies before you add them
@@ -35,3 +35,15 @@ Exit code 1 or "blocked" in the output means the same as `block`.
 - Check transitive surprises too: after installing, if the lockfile gained packages you did not expect, run `depguard check` in the project.
 - When the user asks whether a package is safe, use `check_packages`, and for details `get_package_vulnerabilities`, `get_malware_verdict`, `get_license_info` and `get_package_scorecard`.
 - Keep reports short: which package, what was found, what you did instead.
+
+## Project secrets (API keys, .env files)
+
+The team keeps the project's private files in depguard's end-to-end encrypted vault. When a command needs them
+(start the app, run migrations, call an API, run integration tests):
+
+- Use the `run_with_secrets` tool of the local `depguard-secrets` MCP server with the command. Secrets arrive as
+  environment variables (files in `$DEPGUARD_SECRETS_DIR`), and the output comes back with every value replaced by
+  `«KEY_NAME»`. `list_secrets` shows which files and key names exist.
+- Without MCP, run `depguard secrets run -- <command>` in the terminal.
+- Never read, print, copy, encode or commit secret values, never ask the user to paste a key, and never create a `.env`
+  with real values. If the vault is locked, ask the user to run `depguard secrets unlock` in a terminal.

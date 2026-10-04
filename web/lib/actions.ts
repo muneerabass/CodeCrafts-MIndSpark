@@ -10,7 +10,7 @@ import { supabaseAdmin } from './supabase/admin';
 import { db, schema } from './db';
 import { deliverInvitation, upsertInvitation } from './invitations';
 import { authBypass, getCtx, requireOrg, requireRole } from './session';
-import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, NotificationSettings, NotificationsResponse, QueryResult, SavedQuery, Settings } from './types';
+import type { List, Repository, ApiKey, Exclusion, PackageAnalysis, Policy, PRSettings, PRSettingsResponse, ProjectSettings, CreateFixResult, FixSettings, SLA, NotificationSettings, NotificationsResponse, VaultState, VaultMemberSelf, VaultItemCipher, VaultWrappedKey, VaultWrappedPrivate, QueryResult, SavedQuery, Settings } from './types';
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -232,6 +232,52 @@ export const createJiraIssue = async (ref_kind: 'vuln' | 'package', ref: string)
   run(async () => {
     await requireRole('admin');
     return api<{ issue_key: string; url: string; status: string }>('/jira/issues', { method: 'POST', body: { ref_kind, ref } });
+  });
+
+// ---------- project vault (end-to-end encrypted: these only move ciphertext and wrapped keys) ----------
+const vaultPath = (projectId: string, rest = '') => `/projects/${encodeURIComponent(projectId)}/vault${rest}`;
+
+export const vaultSetupMember = async (public_key: string, wrapped_private: VaultWrappedPrivate) =>
+  run(async () => {
+    await requireOrg();
+    return api<{ member: VaultMemberSelf }>('/vault/me', { method: 'PUT', body: { public_key, wrapped_private } });
+  });
+
+export const vaultInit = async (projectId: string, wrapped: VaultWrappedKey) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<VaultState>(vaultPath(projectId, '/init'), { method: 'POST', body: { wrapped } });
+  });
+
+export const vaultGrant = async (projectId: string, userId: string, wrapped: VaultWrappedKey, key_version: number) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<VaultState>(vaultPath(projectId, `/grants/${encodeURIComponent(userId)}`), { method: 'PUT', body: { wrapped, key_version } });
+  });
+
+export const vaultRemoveMember = async (projectId: string, userId: string, rotation: { key_version: number; grants: { user_id: string; wrapped: VaultWrappedKey }[]; items: { id: string; iv: string; ciphertext: string }[] }) =>
+  run(async () => {
+    await requireRole('admin');
+    await api<VaultState>(vaultPath(projectId, `/grants/${encodeURIComponent(userId)}`), { method: 'DELETE' });
+    return api<VaultState>(vaultPath(projectId, '/rotate'), { method: 'POST', body: rotation });
+  });
+
+export const vaultPutItem = async (projectId: string, item: { name: string; kind: 'env' | 'file'; iv: string; ciphertext: string; size: number; key_version: number; fingerprints: { name: string; sha256: string }[] }) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<VaultState>(vaultPath(projectId, '/items'), { method: 'PUT', body: item });
+  });
+
+export const vaultGetItem = async (projectId: string, itemId: string) =>
+  run(async () => {
+    await requireOrg();
+    return api<VaultItemCipher>(vaultPath(projectId, `/items/${encodeURIComponent(itemId)}`));
+  });
+
+export const vaultDeleteItem = async (projectId: string, itemId: string) =>
+  run(async () => {
+    await requireRole('admin');
+    return api<VaultState>(vaultPath(projectId, `/items/${encodeURIComponent(itemId)}`), { method: 'DELETE' });
   });
 
 export const savePolicy = async (policy: Policy) =>

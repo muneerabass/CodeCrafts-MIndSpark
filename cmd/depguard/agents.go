@@ -26,7 +26,7 @@ type agentTarget struct {
 	remove  func(home string) error
 }
 
-type mcpConn struct{ url, auth string }
+type mcpConn struct{ url, auth, bin string } // bin: this depguard binary, for the local secrets server
 
 // fetchSkill downloads the current depguard skill from the server, falling
 // back to the copy built into this CLI when the server is unreachable.
@@ -55,12 +55,22 @@ func agentTargets(skillMD string) []agentTarget {
 		}
 	}
 	rmSkill := func(home, dir string) { _ = os.RemoveAll(filepath.Join(home, dir, "depguard")) }
+	// Each agent gets the hosted server (package checks) and the local
+	// depguard-secrets server (`depguard mcp`, end-to-end encrypted vault).
 	jsonServer := func(rel func(home string) string, path []string, entry func(mcpConn) map[string]any) (func(string, mcpConn) (string, error), func(string) error) {
+		local := append(append([]string{}, path[:len(path)-1]...), "depguard-secrets")
 		return func(home string, c mcpConn) (string, error) {
 				p := rel(home)
-				return "MCP server in " + tilde(home, p), mergeJSON(p, path, entry(c))
+				if err := mergeJSON(p, path, entry(c)); err != nil {
+					return "", err
+				}
+				e := map[string]any{"command": c.bin, "args": []string{"mcp"}}
+				if path[0] == "servers" { // VS Code
+					e["type"] = "stdio"
+				}
+				return "MCP servers in " + tilde(home, p), mergeJSON(p, local, e)
 			}, func(home string) error {
-				return mergeJSON(rel(home), path, nil)
+				return errors.Join(mergeJSON(rel(home), path, nil), mergeJSON(rel(home), local, nil))
 			}
 	}
 	vscodeDir := func(home string) string {
@@ -100,15 +110,20 @@ func agentTargets(skillMD string) []agentTarget {
 					return "skill installed; MCP needs the claude CLI: " + claudeAdd(c), nil
 				}
 				_ = exec.Command(bin, "mcp", "remove", "-s", "user", "depguard").Run()
+				_ = exec.Command(bin, "mcp", "remove", "-s", "user", "depguard-secrets").Run()
 				if out, err := exec.Command(bin, "mcp", "add", "-s", "user", "--transport", "http", "depguard", c.url, "--header", "Authorization: "+c.auth).CombinedOutput(); err != nil {
 					return "", fmt.Errorf("claude mcp add: %v: %s", err, strings.TrimSpace(string(out)))
 				}
-				return "MCP server + skill", nil
+				if out, err := exec.Command(bin, "mcp", "add", "-s", "user", "depguard-secrets", "--", c.bin, "mcp").CombinedOutput(); err != nil {
+					return "", fmt.Errorf("claude mcp add depguard-secrets: %v: %s", err, strings.TrimSpace(string(out)))
+				}
+				return "MCP servers + skill", nil
 			},
 			remove: func(h string) error {
 				rmSkill(h, ".claude/skills")
 				if bin, err := exec.LookPath("claude"); err == nil {
 					_ = exec.Command(bin, "mcp", "remove", "-s", "user", "depguard").Run()
+					_ = exec.Command(bin, "mcp", "remove", "-s", "user", "depguard-secrets").Run()
 				}
 				return nil
 			}},
@@ -122,7 +137,7 @@ func agentTargets(skillMD string) []agentTarget {
 					return "", err
 				}
 				p := filepath.Join(h, ".codex", "config.toml")
-				return "MCP server in " + tilde(h, p) + " + skill", setTOMLBlock(p, fmt.Sprintf("[mcp_servers.depguard]\nurl = %q\nhttp_headers = { \"Authorization\" = %q }\n", c.url, c.auth))
+				return "MCP servers in " + tilde(h, p) + " + skill", setTOMLBlock(p, fmt.Sprintf("[mcp_servers.depguard]\nurl = %q\nhttp_headers = { \"Authorization\" = %q }\n\n[mcp_servers.depguard-secrets]\ncommand = %q\nargs = [\"mcp\"]\n", c.url, c.auth, c.bin))
 			},
 			remove: func(h string) error {
 				rmSkill(h, ".codex/skills")
@@ -242,7 +257,14 @@ func runSetupAgents(args []string) error {
 	if c.key == "" {
 		return errors.New("no API key: run `depguard login` first (create a key in depguard → Settings → API Keys)")
 	}
-	conn := mcpConn{url: strings.TrimRight(c.base, "/") + "/mcp", auth: "Bearer " + c.key}
+	bin, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if r, err := filepath.EvalSymlinks(bin); err == nil {
+		bin = r
+	}
+	conn := mcpConn{url: strings.TrimRight(c.base, "/") + "/mcp", auth: "Bearer " + c.key, bin: bin}
 	if *printOnly {
 		fmt.Fprintf(out, "MCP server (streamable HTTP)\n  URL:    %s\n  Header: Authorization: Bearer <your API key>\n\nSkill: %s/agent/SKILL.md\n\nClaude Code:\n  %s\n",
 			conn.url, strings.TrimRight(c.base, "/"), claudeAdd(conn))

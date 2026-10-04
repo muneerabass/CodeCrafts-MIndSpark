@@ -444,7 +444,7 @@ export type FailedJob = {
 // ---- pull requests ----
 export type UrgencyLevel = 'critical' | 'high' | 'medium' | 'low' | 'clean' | 'pending';
 export type PRReason = { kind: string; text: string; score: number };
-export type PRReviewFinding = { source: 'rules' | 'ai'; file: string; line: number; severity: Severity; category: string; title: string; explanation?: string; suggestion?: string };
+export type PRReviewFinding = { source: 'rules' | 'ai'; file: string; line: number; severity: Severity; category: string; title: string; explanation?: string; suggestion?: string; fingerprint?: string };
 export type PullRequest = {
   id: string;
   repo_full_name: string;
@@ -473,6 +473,7 @@ export type PullRequest = {
 };
 export type PRFix = { kind: string; severity: Severity; blocking: boolean; title: string; command?: string; note?: string; kev?: boolean; direct?: boolean };
 export type PRDetail = Omit<PullRequest, 'review'> & {
+  vault_matches?: VaultMatch[];
   summary: { scan_id: string; no_changes: boolean; conclusion: string; checks: Record<string, string>; fixes: PRFix[] | null; packages: number; labels: string[] | null } | null;
   review: {
     head_sha: string;
@@ -579,3 +580,12 @@ export type AuditEntry = {
 };
 
 export type FreshPreset = { cooldown_hours: number; allow_security_fixes: boolean; block: boolean; install_scripts: boolean; provenance: boolean; publisher: boolean };
+export type VaultWrappedPrivate = { salt: string; iterations: number; iv: string; ciphertext: string };
+export type VaultWrappedKey = { ephemeral_public: string; iv: string; ciphertext: string };
+export type VaultMemberSelf = { user_id: string; public_key: string; wrapped_private: VaultWrappedPrivate; created_at: string };
+export type VaultLeak = { key: string; pr: number; repo: string; file: string; line: number; project_id: string | null };
+export type VaultItemMeta = { id: string; name: string; kind: 'env' | 'file'; version: number; key_version: number; size: number; keys: string[]; updated_by: string; updated_at: string; leaks: VaultLeak[] };
+export type VaultMember = { user_id: string; email: string; public_key: string; has_access: boolean; key_version: number | null; granted_by: string | null; granted_at: string | null };
+export type VaultState = { project_id: string; project: string; initialized: boolean; key_version: number; my_key: VaultWrappedKey | null; items: VaultItemMeta[]; members: VaultMember[] };
+export type VaultItemCipher = { id: string; name: string; kind: 'env' | 'file'; version: number; key_version: number; iv: string; ciphertext: string; size: number };
+export type VaultMatch = { fingerprint: string; project_id: string; project: string; item: string; key: string };

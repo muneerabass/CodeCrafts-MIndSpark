@@ -67,17 +67,20 @@ func (s *Server) fixQueue(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		sla = teamcfg.ParseSLA(raw)
+		// Exploit data (KEV, EPSS) is looked up once per advisory, not per package × project row.
 		rows, err := tx.Query(r.Context(), `
-SELECT c.ecosystem, c.name, c.version, cv.advisory_id, cv.risk, COALESCE(cv.fixed_in, ''), cv.first_seen,
-  EXISTS (SELECT 1 FROM cve_score cs WHERE cs.kev AND (cs.cve = cv.advisory_id OR cs.cve IN (SELECT alias FROM advisory_alias WHERE advisory_id = cv.advisory_id))),
-  (SELECT max(epss)::float8 FROM cve_score cs WHERE cs.cve = cv.advisory_id OR cs.cve IN (SELECT alias FROM advisory_alias WHERE advisory_id = cv.advisory_id)),
-  p.id, p.name, pvc.manifest_path, COALESCE(pvc.direct, false)
-FROM project_version_components pvc
-JOIN project_versions pv ON pv.id = pvc.project_version_id
-JOIN projects p ON p.id = pv.project_id
-JOIN components c ON c.id = pvc.component_id
-JOIN component_vulnerabilities cv ON cv.component_id = c.id AND cv.advisory_id NOT LIKE 'MAL-%'
-WHERE ($1 = '' OR p.id = $1)
+WITH cur AS (SELECT pvc.component_id, pvc.manifest_path, COALESCE(pvc.direct, false) AS direct, p.id AS pid, p.name AS pname
+  FROM project_version_components pvc JOIN project_versions pv ON pv.id = pvc.project_version_id JOIN projects p ON p.id = pv.project_id
+  WHERE ($1 = '' OR p.id = $1)),
+vul AS (SELECT cv.component_id, cv.advisory_id, cv.risk, COALESCE(cv.fixed_in, '') AS fixed, cv.first_seen FROM component_vulnerabilities cv
+  WHERE cv.advisory_id NOT LIKE 'MAL-%' AND cv.component_id IN (SELECT component_id FROM cur)),
+ids AS (SELECT DISTINCT advisory_id, advisory_id AS cve FROM vul
+  UNION SELECT DISTINCT v.advisory_id, aa.alias FROM vul v JOIN advisory_alias aa ON aa.advisory_id = v.advisory_id),
+score AS (SELECT ids.advisory_id, bool_or(cs.kev) AS kev, max(cs.epss)::float8 AS epss FROM ids JOIN cve_score cs ON cs.cve = ids.cve GROUP BY 1)
+SELECT c.ecosystem, c.name, c.version, v.advisory_id, v.risk, v.fixed, v.first_seen, COALESCE(s.kev, false), s.epss,
+  cur.pid, cur.pname, cur.manifest_path, cur.direct
+FROM cur JOIN vul v ON v.component_id = cur.component_id JOIN components c ON c.id = cur.component_id
+LEFT JOIN score s ON s.advisory_id = v.advisory_id
 ORDER BY c.ecosystem, c.name, c.version`, project)
 		if err != nil {
 			return err

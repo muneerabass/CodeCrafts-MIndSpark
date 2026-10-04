@@ -4,6 +4,8 @@
 package prreview
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path"
 	"regexp"
@@ -172,6 +174,10 @@ var rules = []rule{
 
 const maxFindingsPerRule = 5
 
+// fingerprinted rules match the whole secret value, so its SHA-256 can be
+// compared with vault fingerprints (vaultcrypto.Fingerprint).
+var fingerprinted = map[string]bool{"secret-aws-key": true, "secret-token": true}
+
 // Review runs the rules over the added lines of every file.
 func Review(files []File) (findings []render.ReviewFinding, reviewed int) {
 	perRule := map[string]int{}
@@ -197,12 +203,17 @@ func Review(files []File) (findings []render.ReviewFinding, reviewed int) {
 					continue
 				}
 				perRule[r.id]++
-				expl := r.explanation
+				expl, fp := r.explanation, ""
 				if r.category == "secrets" {
-					expl += " Found: " + Mask(r.re.FindString(l.Text)) + "."
+					m := r.re.FindString(l.Text)
+					expl += " Found: " + Mask(m) + "."
+					if fingerprinted[r.id] {
+						sum := sha256.Sum256([]byte(m))
+						fp = hex.EncodeToString(sum[:])
+					}
 				}
 				findings = append(findings, render.ReviewFinding{Source: "rules", File: f.Path, Line: l.Line, Severity: r.severity,
-					Category: r.category, Title: r.title, Explanation: expl, Suggestion: r.suggestion})
+					Category: r.category, Title: r.title, Explanation: expl, Suggestion: r.suggestion, Fingerprint: fp})
 			}
 		}
 	}

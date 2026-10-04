@@ -200,7 +200,7 @@ const pullRequests: T.PRDetail[] = [
       ai_summary: 'Adds Stripe webhooks and a refunds endpoint; the refunds query is built from request input.', labels: ['feature', 'backend', 'security'], updated_at: iso(0),
       findings: [
         { source: 'ai', file: 'api/refunds.ts', line: 42, severity: 'high', category: 'injection', title: 'SQL injection in /refunds', explanation: 'req.query.order is concatenated into the SQL string.', suggestion: 'Use a parameterized query ($1).' },
-        { source: 'rules', file: 'config/.env.production', line: 3, severity: 'critical', category: 'secrets', title: 'API token committed', explanation: 'A token for Stripe is in the diff. Found: `sk_l…` (32 characters).', suggestion: 'Revoke the token now (it stays in git history even if removed), and read it from an environment variable or secret manager.' },
+        { source: 'rules', file: 'config/.env.production', line: 3, severity: 'critical', category: 'secrets', title: 'API token committed', fingerprint: 'f'.repeat(64), explanation: 'A token for Stripe is in the diff. Found: `sk_l…` (32 characters).', suggestion: 'Revoke the token now (it stays in git history even if removed), and read it from an environment variable or secret manager.' },
         { source: 'rules', file: 'api/stripe.ts', line: 7, severity: 'high', category: 'crypto', title: 'TLS certificate verification disabled', explanation: 'Turning off certificate checks allows man-in-the-middle attacks.', suggestion: 'Keep verification on.' },
       ],
     },
@@ -262,6 +262,29 @@ const auditLog: T.AuditEntry[] = [
   { id: 'au-2', actor_id: 'u-ada', actor_email: 'ada@acme.dev', actor_role: 'owner', actor_kind: 'user', action: 'web:member.role', target_type: 'member', target_id: 'm-2', details: { role: 'admin' }, ip: '', created_at: iso(1) },
   { id: 'au-1', actor_id: 'u-ci', actor_email: '', actor_role: 'member', actor_kind: 'api_key', action: 'POST /v1/scans', target_type: '', target_id: '', details: { api_key_id: 'k-1' }, ip: '203.0.113.7', created_at: iso(2) },
 ];
+// Project vault (ciphertext and wrapped keys only, exactly like the real API).
+let vaultMe: T.VaultMemberSelf | null = null;
+const vaultMembers: { user_id: string; email: string; public_key: string }[] = [
+  { user_id: 'u_grace', email: 'grace@acme.dev', public_key: 'BOp+nHjmdXQTqE/ItJC7DaLrQkaUBdse21hUrH6M2mwBEb5JrS9gIAOEaLl0gZxAco5h6KJ34wZbzdzNf3RK6nY=' },
+];
+const vaultKeys: Record<string, Record<string, { key_version: number; wrapped: T.VaultWrappedKey; granted_by: string; created_at: string }>> = {};
+const vaultItems: Record<string, (T.VaultItemCipher & { keys: string[]; updated_by: string; updated_at: string; fingerprints: { name: string; sha256: string }[] })[]> = {};
+function vaultState(pid: string): T.VaultState {
+  const p = projects.find((x) => x.id === pid);
+  if (!p) throw new MockNotFound();
+  const keys = vaultKeys[pid] ?? {};
+  const version = Math.max(0, ...Object.values(keys).map((k) => k.key_version));
+  const members = [...(vaultMe ? [{ user_id: vaultMe.user_id, email: 'ada@acme.dev', public_key: vaultMe.public_key }] : []), ...vaultMembers];
+  return {
+    project_id: pid,
+    project: p.name,
+    initialized: version > 0,
+    key_version: version,
+    my_key: keys['u_mock']?.wrapped ?? null,
+    items: (vaultItems[pid] ?? []).map((i) => ({ id: i.id, name: i.name, kind: i.kind, version: i.version, key_version: i.key_version, size: i.size, keys: i.keys, updated_by: i.updated_by, updated_at: i.updated_at, leaks: i.fingerprints.length ? [{ key: i.fingerprints[0].name, pr: 482, repo: 'acme/payments-api', file: 'config/.env.production', line: 3, project_id: P2.id }] : [] })),
+    members: members.map((m) => ({ ...m, has_access: !!keys[m.user_id], key_version: keys[m.user_id]?.key_version ?? null, granted_by: keys[m.user_id]?.granted_by ?? null, granted_at: keys[m.user_id]?.created_at ?? null })),
+  };
+}
 let sla: T.SLA = { critical: 7, high: 30, medium: 90, low: 0 };
 let fixSettings: T.FixSettings = { auto: false, levels: ['critical'], kev: true, max_open: 5 };
 const fixes: T.FixPR[] = [
@@ -401,7 +424,7 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
     case 'GET /projects/:/pull-requests/:': {
       const pr = pullRequests.find((p) => p.project?.id === seg[1] && String(p.number) === seg[3]);
       if (!pr) throw new MockNotFound('pull request not found');
-      return pr;
+      return pr.number === 482 ? { ...pr, vault_matches: [{ fingerprint: 'f'.repeat(64), project_id: P2.id, project: P2.name, item: '.env.production', key: 'STRIPE_SECRET_KEY' }] } : pr;
     }
     case 'POST /projects/:/pull-requests/:/comment':
     case 'POST /projects/:/pull-requests/:/review':
@@ -563,6 +586,50 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       jiraLinks.push(link);
       return { issue_key: link.issue_key, url: link.url, status: 'created' };
     }
+    case 'GET /vault/me':
+      return { member: vaultMe };
+    case 'PUT /vault/me': {
+      const x = b as { public_key: string; wrapped_private: T.VaultWrappedPrivate };
+      vaultMe = { user_id: 'u_mock', public_key: x.public_key, wrapped_private: x.wrapped_private, created_at: new Date().toISOString() };
+      return { member: vaultMe };
+    }
+    case 'GET /projects/:/vault':
+      return vaultState(id);
+    case 'POST /projects/:/vault/init':
+      if (Object.keys(vaultKeys[id] ?? {}).length) throw new Error('this project\'s vault already exists');
+      vaultKeys[id] = { u_mock: { key_version: 1, wrapped: (b as { wrapped: T.VaultWrappedKey }).wrapped, granted_by: 'ada@acme.dev', created_at: new Date().toISOString() } };
+      return vaultState(id);
+    case 'PUT /projects/:/vault/grants/:': {
+      const x = b as { wrapped: T.VaultWrappedKey; key_version: number };
+      vaultKeys[id][seg[4]] = { key_version: x.key_version, wrapped: x.wrapped, granted_by: 'ada@acme.dev', created_at: new Date().toISOString() };
+      return vaultState(id);
+    }
+    case 'DELETE /projects/:/vault/grants/:':
+      delete vaultKeys[id][seg[4]];
+      return vaultState(id);
+    case 'POST /projects/:/vault/rotate': {
+      const x = b as { key_version: number; grants: { user_id: string; wrapped: T.VaultWrappedKey }[]; items: { id: string; iv: string; ciphertext: string }[] };
+      vaultKeys[id] = Object.fromEntries(x.grants.map((g) => [g.user_id, { key_version: x.key_version, wrapped: g.wrapped, granted_by: 'ada@acme.dev', created_at: new Date().toISOString() }]));
+      for (const it of x.items) Object.assign(vaultItems[id].find((i) => i.id === it.id)!, { iv: it.iv, ciphertext: it.ciphertext, key_version: x.key_version });
+      return vaultState(id);
+    }
+    case 'PUT /projects/:/vault/items': {
+      const x = b as { name: string; kind: 'env' | 'file'; iv: string; ciphertext: string; size: number; key_version: number; fingerprints: { name: string; sha256: string }[] };
+      const list = (vaultItems[id] ??= []);
+      const cur = list.find((i) => i.name === x.name);
+      const row = { id: cur?.id ?? `vi-${list.length + 1}`, name: x.name, kind: x.kind, version: (cur?.version ?? 0) + 1, key_version: x.key_version, iv: x.iv, ciphertext: x.ciphertext, size: x.size, keys: x.fingerprints.map((f) => f.name), updated_by: 'ada@acme.dev', updated_at: new Date().toISOString(), fingerprints: x.fingerprints };
+      if (cur) Object.assign(cur, row);
+      else list.push(row);
+      return vaultState(id);
+    }
+    case 'GET /projects/:/vault/items/:': {
+      const it = (vaultItems[id] ?? []).find((i) => i.id === seg[4]);
+      if (!it) throw new MockNotFound();
+      return { id: it.id, name: it.name, kind: it.kind, version: it.version, key_version: it.key_version, iv: it.iv, ciphertext: it.ciphertext, size: it.size };
+    }
+    case 'DELETE /projects/:/vault/items/:':
+      vaultItems[id] = (vaultItems[id] ?? []).filter((i) => i.id !== seg[4]);
+      return vaultState(id);
     case 'GET /settings/sla':
       return sla;
     case 'PUT /settings/sla':
@@ -712,10 +779,10 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
 
 // Path segments that are literal words (not ids) at a given position.
 function isStatic(root: string, i: number, s: string) {
-  const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review', 'fixes'];
+  const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review', 'fixes', 'vault', 'init', 'grants', 'rotate', 'items'];
   if (root === 'admin' && i === 1) return true;
   if ((root === 'pull-requests' && s === 'summary') || (root === 'components' && s === 'health') || root === 'settings') return true;
-  if (root === 'policy' || root === 'query' || root === 'jira') return true;
+  if (root === 'policy' || root === 'query' || root === 'jira' || root === 'vault') return true;
   return words.includes(s) && i !== 1;
 }
 

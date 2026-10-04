@@ -1,6 +1,8 @@
 package prreview
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 	"testing"
@@ -156,5 +158,14 @@ func TestSecretPatternsMasked(t *testing.T) {
 	}
 	if m := Mask("AKIAABCDEFGHIJKLMNOP"); m != "`AKIA…` (20 characters)" {
 		t.Error(m)
+	}
+}
+
+func TestSecretFingerprint(t *testing.T) {
+	tok := "ghp_" + strings.Repeat("A1b2", 9)
+	fs, _ := Review([]File{{Path: "ci.env", Status: "added", Patch: "@@ -0,0 +1 @@\n+GITHUB_TOKEN=" + tok}})
+	sum := sha256.Sum256([]byte(tok))
+	if len(fs) != 1 || fs[0].Fingerprint != hex.EncodeToString(sum[:]) || strings.Contains(fs[0].Explanation, tok) {
+		t.Fatalf("%+v", fs)
 	}
 }

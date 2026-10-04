@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Bug, ExternalLink, FileChartLine, GitBranch, Hexagon, Route, ShieldCheck } from 'lucide-react';
 import { api, apiOr404, listQuery, one, type SearchParams } from '@/lib/api';
 import { fmtDateTime } from '@/lib/format';
-import type { LicenseReport, List, PathGraph, ProjectDetail, PullRequest, ProjectSettings, VersionComponent, VersionScan, VersionSummary, Violation, VulnRow } from '@/lib/types';
+import type { LicenseReport, List, PathGraph, ProjectDetail, PullRequest, ProjectSettings, VaultMemberSelf, VaultState, VersionComponent, VersionScan, VersionSummary, Violation, VulnRow } from '@/lib/types';
 import { canWrite, requireOrg } from '@/lib/session';
 import { DIRECT_OPTIONS, usageLabel } from '@/lib/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { AttackPaths } from './attack-paths';
 import { LicenseDistribution, LicenseFindingsTable, ProjectLicenseForm } from './licenses';
 import { EmptyState, PageHeader } from '@/components/page';
 import { ExportMenu } from './export-menu';
+import { VaultPanel } from './vault';
 import { Chip } from '@/components/badges';
 import { GitHubIcon, SourceIcon } from '@/components/icons';
 import { PopoverFilter, ToggleFilter } from '@/components/data-table';
@@ -29,6 +30,7 @@ const TABS = [
   { key: 'pull-requests', label: 'Pull Requests' },
   { key: 'paths', label: 'Attack Paths' },
   { key: 'licenses', label: 'Licenses' },
+  { key: 'secrets', label: 'Secrets' },
 ] as const;
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -118,6 +120,10 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
 }
 
 async function TabBody({ tab, base, q, project }: { tab: string; base: string; q: Record<string, string>; project: ProjectDetail }) {
+  if (tab === 'secrets') {
+    const [ctx, vault, me] = await Promise.all([requireOrg(), api<VaultState>(`/projects/${encodeURIComponent(project.id)}/vault`), api<{ member: VaultMemberSelf | null }>('/vault/me')]);
+    return <VaultPanel projectId={project.id} initial={vault} initialMe={me.member} userId={ctx.user.id} canEdit={canWrite(ctx.role)} />;
+  }
   if (tab === 'pull-requests') {
     const prs = await api<List<PullRequest>>(`/projects/${encodeURIComponent(project.id)}/pull-requests`, { query: q });
     return (

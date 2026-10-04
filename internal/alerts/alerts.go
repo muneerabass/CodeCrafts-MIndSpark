@@ -183,10 +183,11 @@ func ScanAlert(ctx context.Context, tx pgx.Tx, ch Channels, scanID, publicURL st
 		return notify.Message{}, nil, err
 	}
 	rows, err := tx.Query(ctx, `
-SELECT c.id, c.name, c.version, cv.advisory_id, cv.risk, `+kevSQL+`
-FROM scans s JOIN project_version_components pvc ON pvc.project_version_id = s.project_version_id
-JOIN components c ON c.id = pvc.component_id JOIN component_vulnerabilities cv ON cv.component_id = c.id
-WHERE s.id = $1
+WITH vul AS (SELECT c.id, c.name, c.version, cv.advisory_id, cv.risk
+  FROM scans s JOIN project_version_components pvc ON pvc.project_version_id = s.project_version_id
+  JOIN components c ON c.id = pvc.component_id JOIN component_vulnerabilities cv ON cv.component_id = c.id WHERE s.id = $1),
+kev AS (SELECT v.advisory_id FROM (SELECT DISTINCT advisory_id FROM vul) v CROSS JOIN LATERAL (SELECT v.advisory_id AS advisory_id) cv WHERE `+kevSQL+`)
+SELECT vul.id, vul.name, vul.version, vul.advisory_id, vul.risk, kev.advisory_id IS NOT NULL FROM vul LEFT JOIN kev ON kev.advisory_id = vul.advisory_id
 UNION ALL
 SELECT c.id, c.name, c.version, 'analysis', 'MALWARE', false
 FROM scans s JOIN project_version_components pvc ON pvc.project_version_id = s.project_version_id

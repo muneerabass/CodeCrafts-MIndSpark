@@ -51,11 +51,14 @@ func TestSetupAgents(t *testing.T) {
 		cursor["mcpServers"]["depguard"]["headers"].(map[string]any)["Authorization"] != "Bearer dg_testkey" {
 		t.Fatalf("cursor: %s", read(".cursor/mcp.json"))
 	}
+	if cursor["mcpServers"]["depguard-secrets"]["args"].([]any)[0] != "mcp" {
+		t.Fatalf("local secrets server missing: %s", read(".cursor/mcp.json"))
+	}
 	if g := read(".gemini/settings.json"); !strings.Contains(g, `"theme": "dark"`) || !strings.Contains(g, `"httpUrl": "`+api.URL+`/mcp"`) {
 		t.Fatalf("gemini: %s", g)
 	}
 	codex := read(".codex/config.toml")
-	if strings.Count(codex, "[mcp_servers.depguard]") != 1 || !strings.HasPrefix(codex, "model = \"o4\"") || !strings.Contains(codex, `url = "`+api.URL+`/mcp"`) {
+	if strings.Count(codex, "[mcp_servers.depguard-secrets]") != 1 || strings.Count(codex, "[mcp_servers.depguard]") != 1 || !strings.HasPrefix(codex, "model = \"o4\"") || !strings.Contains(codex, `url = "`+api.URL+`/mcp"`) {
 		t.Fatalf("codex: %s", codex)
 	}
 	for _, s := range []string{".claude/skills/depguard/SKILL.md", ".codex/skills/depguard/SKILL.md"} {
@@ -76,7 +79,7 @@ func TestSetupAgents(t *testing.T) {
 	if err := runSetupAgents([]string{"--remove"}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(read(".cursor/mcp.json"), "depguard") || !strings.Contains(read(".cursor/mcp.json"), "other") ||
+	if strings.Contains(read(".cursor/mcp.json"), "depguard") || strings.Contains(read(".gemini/settings.json"), "depguard") || !strings.Contains(read(".cursor/mcp.json"), "other") ||
 		strings.Contains(read(".codex/config.toml"), "depguard") || !strings.Contains(read(".codex/config.toml"), "model") ||
 		read(".claude/skills/depguard/SKILL.md") != "" {
 		t.Fatalf("remove left: %s / %s", read(".cursor/mcp.json"), read(".codex/config.toml"))

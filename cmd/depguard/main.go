@@ -55,6 +55,10 @@ func main() {
 		code, err = runScan(os.Args[2:])
 	case "agent":
 		err = runAgent(os.Args[2:])
+	case "secrets":
+		code, err = runSecrets(os.Args[2:])
+	case "mcp":
+		err = runLocalMCP(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println(version)
 		return
@@ -95,8 +99,14 @@ func usage() {
   depguard scan             upload lockfiles for a full scan and report
   depguard agent            run the endpoint agent (inventory, pmg/gryph events)
 
+%s
+  depguard secrets unlock   unlock the project vault for this session (asks for your vault passphrase)
+  depguard secrets run -- npm start    run a command with the project's secrets (end-to-end encrypted)
+  depguard secrets list     show which secret files and keys exist (never the values)
+  depguard mcp              local MCP server for AI agents: run_with_secrets with masked output
+
 environment: DEPGUARD_API_URL, DEPGUARD_API_KEY, DEPGUARD_DISABLE=1 (skip checks), NO_COLOR
-`, brand(), bold("Setup"), bold("Guarded installs"), bold("CI and scans"))
+`, brand(), bold("Setup"), bold("Guarded installs"), bold("CI and scans"), bold("Project secrets"))
 }
 
 // client talks to the machine API.

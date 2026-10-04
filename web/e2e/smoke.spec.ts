@@ -476,6 +476,8 @@ test('secrets: PR check tile and policy switch', async ({ page }) => {
   await page.getByRole('link', { name: /Add Stripe webhooks|Add payments/ }).first().click();
   const checks = page.getByLabel('Checks');
   await expect(checks.getByText('Secrets')).toBeVisible();
+  await page.getByRole('tab', { name: /Code review/ }).click();
+  await expect(page.getByRole('link', { name: 'acme/payments-api › .env.production' })).toBeVisible(); // leaked key → vault entry
   await page.goto('/policy');
   await expect(page.getByRole('link', { name: /Secrets in PRs/ })).toContainText('Blocks keys & tokens');
   await page.getByLabel('Also fail on hard-coded passwords (otherwise a warning)').click();
@@ -506,4 +508,50 @@ test('audit log: entries, filter, CSV export', async ({ page }) => {
   await page.goto('/settings/audit-log?action=policy');
   await expect(page.getByText('Changed the policy')).toBeVisible();
   await expect(page.getByText('Uploaded a scan (CLI/CI)')).toHaveCount(0);
+});
+
+test('vault: passphrase, create, encrypt and view a .env, unlock again, approve a teammate, rotate on removal', async ({ page }) => {
+  test.setTimeout(120_000); // PBKDF2 with 600k iterations runs a few times
+  await page.goto('/projects/01JB7Q3M1K8Z4XW2N5R6T9V0AA?tab=secrets');
+  await expect(page.getByRole('heading', { name: 'Project secrets' })).toBeVisible();
+  await page.getByLabel('Passphrase (12+ characters)').fill('correct horse battery');
+  await page.getByLabel('Repeat it').fill('correct horse battery');
+  await page.getByRole('button', { name: 'Create my vault key' }).click();
+  await page.getByRole('button', { name: 'Create vault' }).click();
+  await expect(page.getByText('Vault created')).toBeVisible();
+
+  await page.getByLabel('File name').fill('.env.production');
+  await page.getByLabel('File contents').fill('STRIPE_SECRET_KEY=sk_live_0123456789abcdef\nDATABASE_URL="postgres://app:pw@db/app"\n');
+  await page.getByRole('button', { name: 'Encrypt and save' }).click();
+  await expect(page.getByText('.env.production saved, encrypted')).toBeVisible();
+  const items = page.getByLabel('Vault items');
+  await expect(items.getByText('2 keys: STRIPE_SECRET_KEY, DATABASE_URL', { exact: false })).toBeVisible();
+  await expect(items.getByText(/STRIPE_SECRET_KEY leaked in/)).toBeVisible();
+
+  await items.getByRole('button', { name: 'View' }).click();
+  const contents = page.getByLabel('Contents of .env.production');
+  await expect(contents.getByText('sk_live_0123456789abcdef')).toHaveCount(0); // masked
+  await contents.getByRole('button', { name: 'Show STRIPE_SECRET_KEY' }).click();
+  await expect(contents.getByText('sk_live_0123456789abcdef')).toBeVisible();
+
+  // A reload locks it; the passphrase unlocks it again and decrypts.
+  await page.reload();
+  await page.getByLabel('Vault passphrase').fill('wrong passphrase');
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await expect(page.getByText('Wrong vault passphrase')).toBeVisible();
+  await page.getByLabel('Vault passphrase').fill('correct horse battery');
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByLabel('Vault items').getByRole('button', { name: 'View' }).click();
+  await page.getByLabel('Contents of .env.production').getByRole('button', { name: 'Show DATABASE_URL' }).click();
+  await expect(page.getByText('postgres://app:pw@db/app')).toBeVisible();
+
+  // Approve Grace (her key wraps the vault key), then remove her: the key rotates.
+  const members = page.getByLabel('Vault members');
+  await members.getByRole('listitem').filter({ hasText: 'grace@acme.dev' }).getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByText('Access granted')).toBeVisible();
+  page.once('dialog', (d) => d.accept());
+  await members.getByRole('listitem').filter({ hasText: 'grace@acme.dev' }).getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByText('grace@acme.dev removed; vault key rotated')).toBeVisible();
+  await page.getByLabel('Vault items').getByRole('button', { name: 'View' }).click(); // still decrypts with the new key
+  await expect(page.getByLabel('Contents of .env.production').getByText('STRIPE_SECRET_KEY')).toBeVisible();
 });

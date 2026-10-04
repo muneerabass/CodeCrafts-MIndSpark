@@ -211,11 +211,14 @@ type FixCandidate struct {
 // FixCandidates lists current vulnerable packages of a version that have a
 // fixed version, one row per package and manifest, fix = highest fixed_in.
 func FixCandidates(ctx context.Context, tx pgx.Tx, versionID string) ([]FixCandidate, error) {
-	rows, err := tx.Query(ctx, `SELECT c.ecosystem, c.name, c.version, pvc.manifest_path, pvc.direct, cv.advisory_id, cv.risk, COALESCE(cv.fixed_in,''),
-		EXISTS (SELECT 1 FROM cve_score cs WHERE cs.kev AND (cs.cve = cv.advisory_id OR cs.cve IN (SELECT alias FROM advisory_alias WHERE advisory_id = cv.advisory_id)))
-		FROM project_version_components pvc JOIN components c ON c.id = pvc.component_id
-		JOIN component_vulnerabilities cv ON cv.component_id = c.id
-		WHERE pvc.project_version_id = $1 AND cv.advisory_id NOT LIKE 'MAL-%'`, versionID)
+	rows, err := tx.Query(ctx, `WITH vul AS (SELECT c.ecosystem, c.name, c.version, pvc.manifest_path, pvc.direct, cv.advisory_id, cv.risk, COALESCE(cv.fixed_in,'') AS fixed
+		  FROM project_version_components pvc JOIN components c ON c.id = pvc.component_id
+		  JOIN component_vulnerabilities cv ON cv.component_id = c.id
+		  WHERE pvc.project_version_id = $1 AND cv.advisory_id NOT LIKE 'MAL-%'),
+		kev AS (SELECT DISTINCT v.advisory_id FROM (SELECT DISTINCT advisory_id FROM vul) v
+		  WHERE EXISTS (SELECT 1 FROM cve_score cs WHERE cs.kev AND (cs.cve = v.advisory_id OR cs.cve IN (SELECT alias FROM advisory_alias WHERE advisory_id = v.advisory_id))))
+		SELECT vul.ecosystem, vul.name, vul.version, vul.manifest_path, vul.direct, vul.advisory_id, vul.risk, vul.fixed, kev.advisory_id IS NOT NULL
+		FROM vul LEFT JOIN kev ON kev.advisory_id = vul.advisory_id`, versionID)
 	if err != nil {
 		return nil, err
 	}

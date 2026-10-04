@@ -59,6 +59,9 @@ type ReviewFinding struct {
 	Title       string `json:"title"`
 	Explanation string `json:"explanation,omitempty"`
 	Suggestion  string `json:"suggestion,omitempty"`
+	// Fingerprint is the SHA-256 of a leaked secret (never the value), matched
+	// against vault fingerprints to say which stored secret to rotate.
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 // PRReview is the code review of the PR head (rules + AI).

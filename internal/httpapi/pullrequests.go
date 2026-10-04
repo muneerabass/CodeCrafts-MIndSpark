@@ -140,6 +140,12 @@ SELECT to_jsonb(t) || jsonb_build_object(
   'history', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'head_sha', s.head_sha, 'status', s.status, 'conclusion', s.conclusion,
       'vulns', s.vulns_count, 'violations', s.violations_count, 'malicious', s.malicious_count, 'created_at', s.created_at) ORDER BY s.created_at DESC)
     FROM scans s WHERE s.project_id = t.project_id AND s.pr_number = t.number AND s.trigger = 'pull_request'), '[]'::jsonb),
+  'vault_matches', COALESCE((SELECT jsonb_agg(DISTINCT jsonb_build_object('fingerprint', f->>'fingerprint', 'project_id', vi.project_id,
+      'project', vp.name, 'item', vi.name, 'key', fp->>'name'))
+    FROM pr_reviews rv CROSS JOIN jsonb_array_elements(rv.findings) f
+    JOIN vault_items vi ON vi.fingerprints @> jsonb_build_array(jsonb_build_object('sha256', f->>'fingerprint'))
+    CROSS JOIN jsonb_array_elements(vi.fingerprints) fp JOIN projects vp ON vp.id = vi.project_id
+    WHERE rv.pr_id = t.id AND rv.head_sha = t.head_sha AND f ? 'fingerprint' AND fp->>'sha256' = f->>'fingerprint'), '[]'::jsonb),
   'activity', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', a.id, 'kind', a.kind, 'body', a.body, 'status', a.status,
       'actor', a.actor_email, 'error', a.error, 'created_at', a.created_at) ORDER BY a.created_at DESC)
     FROM pr_activity a WHERE a.pr_id = t.id), '[]'::jsonb))

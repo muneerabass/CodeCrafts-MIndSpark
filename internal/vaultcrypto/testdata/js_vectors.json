@@ -1,0 +1,56 @@
+{
+  "passphrase": "correct horse battery staple",
+  "public_key": "BOp+nHjmdXQTqE/ItJC7DaLrQkaUBdse21hUrH6M2mwBEb5JrS9gIAOEaLl0gZxAco5h6KJ34wZbzdzNf3RK6nY=",
+  "wrapped_private": {
+    "salt": "Vbchrr5nex1XAg6KC+x87g==",
+    "iterations": 100000,
+    "iv": "1omdeNvoUm/msdw4",
+    "ciphertext": "ReGLyGkOWmNEAmbAc6+fhwGIKuKk7R5Lg8D9t6bTnnPxhEaafHn5+UH9nM85j7MiTyvXJkIyqnme0s1es9aBD53i5czdbfxbNaepqwXU71nd3eylhDLVP24zROYJ1WQKzzlsZaqnwlU4s0qs9glv67bQc8IhrTPYYQpfvq8/oDiMvEA8NUBrwYx22C5SsTQ3TLBxwQe7G6GAVQ=="
+  },
+  "wrapped_key": {
+    "ephemeral_public": "BCMq9IV7yISs96w6fN1NQj+SvpbTysHMozGPHsN3hea4oX4C1coJNmCj8yGscViGUlUnoAvMPRpFL+mMZo3F0ag=",
+    "iv": "cOqj21yqoGww+GDQ",
+    "ciphertext": "RLKDqdDzuM9TF4573RbThRTx/XvWl1CaUq2BJvxMXy3X2fl2dwS57XuWgxyou9rs"
+  },
+  "item": {
+    "iv": "ktVaC5WxRv9N+0rp",
+    "ciphertext": "SNTlzh9SkXwAvbmzVCEN6se4AdhTIRfXv1A/wS+qocqmiLtOA7tG4HHVwVXcyDiWbyaVLjUzTv/ToQjSgXD9L80Q40TlWlJgsIDALd50pLpMtX/0bzAbTf++4EN5hSyVGWEjtGJkkiC/iWm/DvrBYlQHks8jwhw1iW6xe2CiZz42bFTCizKJKxSHQlvTjPfetZaktLshu3WEymcrV18nJl8="
+  },
+  "env": "export STRIPE_KEY=\"sk_live_abc\\n123 \\\"q\\\"\"\n# c\nDB_URL=postgres://u:p@h/db # note\nSHORT=x\nPEM=\"-----BEGIN-----\nline2\n-----END-----\"\nSINGLE='a #b'\n",
+  "parsed": [
+    {
+      "key": "STRIPE_KEY",
+      "value": "sk_live_abc\n123 \"q\""
+    },
+    {
+      "key": "DB_URL",
+      "value": "postgres://u:p@h/db"
+    },
+    {
+      "key": "SHORT",
+      "value": "x"
+    },
+    {
+      "key": "PEM",
+      "value": "-----BEGIN-----\nline2\n-----END-----"
+    },
+    {
+      "key": "SINGLE",
+      "value": "a #b"
+    }
+  ],
+  "fingerprints": [
+    {
+      "name": "STRIPE_KEY",
+      "sha256": "c990d1cafad121411a40090fd35699d0a0bd78530cb1455ec865663797d66609"
+    },
+    {
+      "name": "DB_URL",
+      "sha256": "5ae823f668110cb577b8ba37a0beef791add00273c2c134c9443da6b85b78ea8"
+    },
+    {
+      "name": "PEM",
+      "sha256": "9e1169b2bb9941a0ddf9bebc570e2f52236b34bc4a4ee572ca08527c8a8e94e7"
+    }
+  ]
+}

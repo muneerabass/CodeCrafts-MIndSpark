@@ -294,6 +294,20 @@ export default async function PullRequestPage({ params }: { params: Promise<{ pr
                           </a>
                           {f.category && <span className="ml-2 text-xs text-muted-foreground">{f.category}</span>}
                           {f.explanation && <p className="text-muted-foreground">{f.explanation}</p>}
+                          {(pr.vault_matches ?? [])
+                            .filter((m) => f.fingerprint && m.fingerprint === f.fingerprint)
+                            .map((m) => (
+                              <p key={m.project_id + m.item + m.key} className="flex items-start gap-2 rounded-lg border border-red-500/40 bg-red-500/5 px-3 py-2 text-xs">
+                                <KeyRound className="mt-0.5 size-3.5 shrink-0 text-red-600" aria-hidden />
+                                <span>
+                                  This is <b>{m.key}</b> from the vault of{' '}
+                                  <Link className="font-medium text-primary hover:underline" href={`/projects/${m.project_id}?tab=secrets`}>
+                                    {m.project} › {m.item}
+                                  </Link>
+                                  . Rotate it at the provider now, then update the vault: removing it from the pull request does not undo the leak.
+                                </span>
+                              </p>
+                            ))}
                           {f.suggestion && (
                             <p className="rounded-lg border-l-2 border-primary bg-primary/5 px-3 py-2 text-xs">
                               <span className="font-semibold">How to fix: </span>

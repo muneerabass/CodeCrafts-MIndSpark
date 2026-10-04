@@ -334,6 +334,21 @@ The server's instructions tell every agent to call `check_packages` before insta
 (`https://api.16-4-42-122.sslip.io/agent/SKILL.md`) makes skill-aware agents do it reliably and falls back to
 `depguard --dry-run npm install x` when MCP is not connected. Per-client JSON is in **Setup → AI agents**.
 
+### Project secrets (end-to-end encrypted vault)
+
+Keep a project's `.env` files, keys and certificates in its **Secrets** tab. Files are encrypted in your browser
+(AES-256-GCM with a per-project key, wrapped for each member's P-256 key, which is sealed with their vault passphrase);
+depguard's servers only store ciphertext and can never read them.
+
+- First visit: create your vault passphrase. An admin creates the project vault and approves teammates; removing a
+  member rotates the vault key and re-encrypts every file.
+- Every read is in the audit log. When PR secret scanning finds a leaked key that matches a vault entry (by SHA-256
+  fingerprint), the PR and the vault both say which secret to rotate.
+- Terminal and CI-free local use: `depguard secrets unlock` (once per session), `depguard secrets run -- npm start`
+  (secrets as environment variables, files in `$DEPGUARD_SECRETS_DIR`), `depguard secrets list`, `depguard secrets lock`.
+- AI agents: `depguard setup agents` also adds the local `depguard-secrets` MCP server (`depguard mcp`). Its
+  `run_with_secrets` tool runs a command with the secrets and returns the output with every value masked.
+
 ---
 
 ## 8. Endpoint agent

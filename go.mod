@@ -32,6 +32,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sync v0.23.0
+	golang.org/x/term v0.46.0
 	golang.org/x/time v0.14.0
 	google.golang.org/grpc v1.83.2
 	riverqueue.com/riverui v0.20.0
@@ -404,7 +405,6 @@ require (
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
-	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.49.0 // indirect
 	golang.org/x/vuln v1.1.4 // indirect
