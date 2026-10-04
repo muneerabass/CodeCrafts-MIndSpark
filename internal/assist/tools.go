@@ -236,6 +236,17 @@ func Run(ctx context.Context, e Env, t Tool, args map[string]any) json.RawMessag
 	var anyv any
 	if json.Unmarshal(raw, &anyv) == nil {
 		raw, _ = json.Marshal(redact(anyv))
+		// Too big: keep the first (most important) list items as valid JSON.
+		if m, ok := anyv.(map[string]any); ok {
+			if items, ok := m["items"].([]any); ok {
+				for len(raw) > MaxResult && len(items) > 1 {
+					items = items[:len(items)/2]
+					m["items"], m["items_shown"] = items, len(items)
+					m["note"] = "Only the first items are shown; ask about a project, package or page for more."
+					raw, _ = json.Marshal(m)
+				}
+			}
+		}
 	}
 	if len(raw) > MaxResult {
 		b, _ := json.Marshal(map[string]any{"truncated": true, "note": "Result too large; narrow the question (filters, page, LIMIT).",

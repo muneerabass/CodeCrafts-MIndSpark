@@ -20,6 +20,21 @@ func TestRunRedactsSecrets(t *testing.T) {
 	if out != `{"findings":[{"title":"t"}],"name":".env"}` {
 		t.Fatalf("redacted: %s", out)
 	}
+	list := Tool{Name: "z", Run: func(context.Context, Env, map[string]any) (any, error) {
+		items := make([]map[string]string, 400)
+		for i := range items {
+			items[i] = map[string]string{"name": strings.Repeat("p", 200)}
+		}
+		return map[string]any{"items": items, "total": 400}, nil
+	}}
+	var shrunk struct {
+		Items      []any
+		ItemsShown int `json:"items_shown"`
+		Total      int
+	}
+	if out := Run(context.Background(), Env{}, list, nil); len(out) > MaxResult || json.Unmarshal(out, &shrunk) != nil || shrunk.ItemsShown == 0 || shrunk.Total != 400 {
+		t.Fatalf("list not shrunk to valid JSON: %d %s", len(out), out[:80])
+	}
 	big := Tool{Name: "y", Run: func(context.Context, Env, map[string]any) (any, error) { return strings.Repeat("a", MaxResult*2), nil }}
 	if out := Run(context.Background(), Env{}, big, nil); len(out) > MaxResult+200 || !strings.Contains(string(out), `"truncated":true`) {
 		t.Fatalf("not truncated: %d", len(out))
