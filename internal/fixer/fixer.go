@@ -139,7 +139,7 @@ func run(ctx context.Context, dir, bin string, args ...string) error {
 		// GOTOOLCHAIN=auto fetches the Go version a go.mod asks for (verified by the checksum
 		// database); module and toolchain downloads persist in the cache between fixes.
 		"GOPATH=" + filepath.Join(home, "go"), "GOMODCACHE=" + filepath.Join(cache, "gomod"), "GOCACHE=" + filepath.Join(cache, "gobuild"),
-		"GOTOOLCHAIN=auto", "GOFLAGS=-mod=mod -modcacherw",
+		"GOTOOLCHAIN=auto", "GOFLAGS=-mod=mod -modcacherw", "GOSUMDB=sum.golang.org", "GOPROXY=https://proxy.golang.org,direct", // distro Go builds may disable both
 		"CI=1",
 	}
 	out, err := cmd.CombinedOutput()
