@@ -110,3 +110,16 @@ func TestGuarddogVerdictCache(t *testing.T) {
 		t.Fatalf("t1 violations after repeat = %d", n)
 	}
 }
+
+func TestCABundleEnv(t *testing.T) {
+	t.Setenv("SSL_CERT_FILE", "/custom.pem")
+	if caBundleEnv() != nil {
+		t.Fatal("an explicit SSL_CERT_FILE must win")
+	}
+	t.Setenv("SSL_CERT_FILE", "")
+	for _, kv := range caBundleEnv() { // depends on the host; only check the shape
+		if !strings.HasPrefix(kv, "SSL_CERT_FILE=/") && !strings.HasPrefix(kv, "SSL_CERT_DIR=/") {
+			t.Fatal(kv)
+		}
+	}
+}

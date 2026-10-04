@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -251,6 +252,7 @@ func runGuarddog(ctx context.Context, bin, eco, name, version string, sandbox bo
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = os.TempDir()
+	cmd.Env = append(os.Environ(), caBundleEnv()...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -260,4 +262,22 @@ func runGuarddog(ctx context.Context, bin, eco, name, version string, sandbox bo
 		return nil, fmt.Errorf("guarddog: %w: %s", err, trunc(strings.TrimSpace(stderr.String()+" "+stdout.String()), 2000))
 	}
 	return stdout.Bytes(), nil
+}
+
+// caBundleEnv points OpenSSL at the real CA bundle. guarddog's Landlock sandbox
+// only allows the directory of the default bundle path; on distros where that
+// path is a symlink (Amazon Linux: /etc/pki/tls/cert.pem → /etc/pki/ca-trust/…)
+// the target is unreadable and every sandboxed scan fails in pygit2's OpenSSL init.
+func caBundleEnv() []string {
+	if os.Getenv("SSL_CERT_FILE") != "" {
+		return nil
+	}
+	for _, p := range []string{"/etc/pki/tls/cert.pem", "/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/ca-bundle.pem"} {
+		if real, err := filepath.EvalSymlinks(p); err == nil && real != p {
+			return []string{"SSL_CERT_FILE=" + real, "SSL_CERT_DIR=" + filepath.Dir(real)}
+		} else if err == nil {
+			return nil // not a symlink: the sandbox already allows its directory
+		}
+	}
+	return nil
 }
