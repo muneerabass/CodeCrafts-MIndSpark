@@ -62,3 +62,20 @@ func TestNPM(t *testing.T) {
 		t.Fatalf("changed=%v", changed)
 	}
 }
+
+// TestGoNewerToolchain needs network: a go.mod requiring a newer Go than the
+// installed one must still be fixable (GOTOOLCHAIN=auto). DEPGUARD_NET_TESTS=1.
+func TestGoNewerToolchain(t *testing.T) {
+	if os.Getenv("DEPGUARD_NET_TESTS") == "" {
+		t.Skip("set DEPGUARD_NET_TESTS=1")
+	}
+	dir := t.TempDir()
+	t.Setenv("DEPGUARD_FIX_CACHE", filepath.Join(t.TempDir(), "cache"))
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/x\n\ngo 1.27.0\n\nrequire golang.org/x/text v0.3.0\n"), 0o600)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n\nimport _ \"golang.org/x/text/language\"\n\nfunc main() {}\n"), 0o600)
+	changed, err := Apply(context.Background(), dir, "Go", "go.mod", "golang.org/x/text", "0.3.8", true)
+	b, _ := os.ReadFile(filepath.Join(dir, "go.mod"))
+	if err != nil || len(changed) == 0 || !strings.Contains(string(b), "golang.org/x/text v0.3.8") {
+		t.Fatalf("%v %v\n%s", changed, err, b)
+	}
+}

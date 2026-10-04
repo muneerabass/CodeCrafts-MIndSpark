@@ -131,11 +131,15 @@ func run(ctx context.Context, dir, bin string, args ...string) error {
 		return err
 	}
 	defer os.RemoveAll(home)
+	cache := cacheDir()
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
 	cmd.Env = []string{
-		"PATH=" + os.Getenv("PATH"), "HOME=" + home, "npm_config_cache=" + filepath.Join(home, ".npm"),
-		"GOPATH=" + filepath.Join(home, "go"), "GOCACHE=" + filepath.Join(home, "gocache"), "GOTOOLCHAIN=local", "GOFLAGS=-mod=mod",
+		"PATH=" + os.Getenv("PATH"), "HOME=" + home, "npm_config_cache=" + filepath.Join(cache, "npm"),
+		// GOTOOLCHAIN=auto fetches the Go version a go.mod asks for (verified by the checksum
+		// database); module and toolchain downloads persist in the cache between fixes.
+		"GOPATH=" + filepath.Join(home, "go"), "GOMODCACHE=" + filepath.Join(cache, "gomod"), "GOCACHE=" + filepath.Join(cache, "gobuild"),
+		"GOTOOLCHAIN=auto", "GOFLAGS=-mod=mod -modcacherw",
 		"CI=1",
 	}
 	out, err := cmd.CombinedOutput()
@@ -143,6 +147,17 @@ func run(ctx context.Context, dir, bin string, args ...string) error {
 		return fmt.Errorf("%s %s: %w: %s", bin, strings.Join(args, " "), err, tail(string(out), 600))
 	}
 	return nil
+}
+
+// cacheDir holds package-manager downloads shared by fixes (never credentials).
+func cacheDir() string {
+	if d := os.Getenv("DEPGUARD_FIX_CACHE"); d != "" {
+		return d
+	}
+	if d, err := os.UserCacheDir(); err == nil {
+		return filepath.Join(d, "depguard-fix")
+	}
+	return filepath.Join(os.TempDir(), "depguard-fix-cache")
 }
 
 func tail(s string, n int) string {
