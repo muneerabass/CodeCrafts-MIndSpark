@@ -1,6 +1,6 @@
 import { api, listQuery, type SearchParams } from '@/lib/api';
 import { DIRECT_OPTIONS, ECOSYSTEMS } from '@/lib/format';
-import type { ComponentRow, List } from '@/lib/types';
+import type { HealthResult, ComponentRow, List } from '@/lib/types';
 import { Bug, FileChartLine, GitCommitVertical, Hexagon } from 'lucide-react';
 import { PageHeader, PageIntro, StatTiles, type StatTile } from '@/components/page';
 import { FilterBar } from '@/components/data-table';
@@ -18,6 +18,7 @@ export default async function ComponentsPage({ searchParams }: { searchParams: S
     count({ has_violations: 'true' }),
     count({ direct: 'true' }),
   ]);
+  const health = data.items.length ? await api<Record<string, HealthResult>>('/components/health', { query: { ids: data.items.map((c) => c.id).join(',') } }) : {};
   const share = (n: number) => (total ? n / total : 0);
   const none = !sp.has_vulns && !sp.has_violations && !sp.direct;
   const tiles: StatTile[] = [
@@ -50,7 +51,7 @@ export default async function ComponentsPage({ searchParams }: { searchParams: S
           { type: 'toggle', key: 'has_violations', label: 'Has Policy Violations' },
         ]}
       />
-      <ComponentsTable data={data.items} total={data.total} />
+      <ComponentsTable data={data.items.map((c) => ({ ...c, health: health[c.id] }))} total={data.total} />
     </>
   );
 }

@@ -126,3 +126,21 @@ export function DueBadge({ due, overdue, open = true }: { due: string | null; ov
     </span>
   );
 }
+
+const healthTone: Record<string, string> = {
+  good: 'bg-emerald-500/15 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300',
+  fair: 'bg-amber-500/15 text-amber-800 ring-amber-500/25 dark:text-amber-300',
+  poor: 'bg-red-500/15 text-red-700 ring-red-500/25 dark:text-red-300',
+  malicious: 'bg-red-600 text-white ring-red-600',
+  unknown: 'bg-muted text-muted-foreground ring-border',
+};
+
+/** Package health 0-10 (OpenSSF Scorecard, releases, popularity, repo, deprecation, age). */
+export function HealthBadge({ h }: { h?: { score: number | null; level: string } }) {
+  const level = h?.level ?? 'unknown';
+  return (
+    <span title={`Package health: ${level}`} className={`inline-flex min-w-11 justify-center rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ring-1 ${healthTone[level] ?? healthTone.unknown}`}>
+      {level === 'malicious' ? 'Malware' : h?.score != null ? h.score.toFixed(1) : '–'}
+    </span>
+  );
+}

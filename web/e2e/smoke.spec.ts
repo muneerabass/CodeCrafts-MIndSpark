@@ -452,3 +452,16 @@ test('secrets: PR check tile and policy switch', async ({ page }) => {
   await page.getByLabel('Also fail on hard-coded passwords (otherwise a warning)').click();
   await expect(page.getByRole('link', { name: /Secrets in PRs/ })).toContainText('Blocks keys & passwords');
 });
+
+test('components: health column and package detail page', async ({ page }) => {
+  await page.goto('/components?name=request');
+  await expect(page.getByRole('columnheader', { name: 'Health' })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: '2.88.2' }).getByText('3.4')).toBeVisible();
+  await page.getByRole('link', { name: 'request', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'request', level: 1 })).toBeVisible();
+  const health = page.getByLabel('Package health');
+  await expect(health.getByText('poor', { exact: true })).toBeVisible();
+  await expect(health.getByText('Deprecated by its maintainers')).toBeVisible();
+  await expect(page.getByLabel('Scorecard checks').getByText('Signed Releases')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'acme/storefront' })).toBeVisible();
+});

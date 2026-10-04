@@ -2,7 +2,8 @@
 
 import { ExternalLink, FolderGit2, MoreHorizontal } from 'lucide-react';
 import { DataTable, type ColumnDef } from '@/components/data-table';
-import { DependencyBadge, ViolationCount, VulnCount } from '@/components/badges';
+import Link from 'next/link';
+import { DependencyBadge, HealthBadge, ViolationCount, VulnCount } from '@/components/badges';
 import { EcosystemTile } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -34,7 +35,9 @@ const cols: ColumnDef<ComponentRow, unknown>[] = [
         <div className="flex items-center gap-3">
           <EcosystemTile name={c.ecosystem} />
           <div className="min-w-0">
-            <div className="truncate font-semibold">{c.name}</div>
+            <Link href={`/components/${encodeURIComponent(c.id)}`} className="block truncate font-semibold hover:text-primary hover:underline">
+              {c.name}
+            </Link>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <span className="font-mono">{c.version}</span>
               <span aria-hidden>·</span>
@@ -46,6 +49,7 @@ const cols: ColumnDef<ComponentRow, unknown>[] = [
     },
   },
   { header: 'Status', cell: ({ row }) => <Status c={row.original} /> },
+  { header: 'Health', cell: ({ row }) => <HealthBadge h={row.original.health} /> },
   { header: 'Dependency', cell: ({ row }) => <DependencyBadge {...row.original} /> },
   {
     header: 'Projects',

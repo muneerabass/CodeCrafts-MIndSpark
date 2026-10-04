@@ -95,6 +95,8 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/v1/repositories", read(s.listRepositories))
 	mux.Handle("POST /api/v1/scans", write(s.createScan))
 	mux.Handle("GET /api/v1/components", read(s.listComponents))
+	mux.Handle("GET /api/v1/components/health", read(s.componentsHealth))
+	mux.Handle("GET /api/v1/components/{id}", read(s.getComponent))
 	mux.Handle("GET /api/v1/scans", read(s.listScans))
 	mux.Handle("GET /api/v1/scans/{id}", read(s.getScan))
 	mux.Handle("GET /api/v1/scans/{id}/paths", read(s.scanPaths))

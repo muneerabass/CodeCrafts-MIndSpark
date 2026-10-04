@@ -113,6 +113,34 @@ export type ComponentRow = DepInfo & {
   violations: number;
   vulns: number;
   updated_at: string;
+  health?: HealthResult;
+};
+
+export type HealthFactor = { key: string; label: string; weight: number; value: number | null; detail: string };
+export type HealthResult = { score: number | null; level: 'good' | 'fair' | 'poor' | 'unknown' | 'malicious'; factors: HealthFactor[] };
+export type ComponentDetail = {
+  id: string;
+  name: string;
+  version: string;
+  ecosystem: string;
+  purl: string;
+  licenses: string[];
+  vulns: { id: string; risk: Risk; fixed_in: string | null; summary: string | null }[];
+  projects: { id: string; name: string; version: string; version_id: string; manifest_path: string; direct: boolean | null }[];
+  analysis: { id: string; status: AnalysisStatus; verified: boolean } | null;
+  health: HealthResult;
+  meta: {
+    repo: string;
+    stars: number | null;
+    forks: number | null;
+    published_at: string | null;
+    latest_published: string | null;
+    first_published: string | null;
+    default_version: string | null;
+    deprecated: boolean | null;
+    deprecated_reason: string;
+  };
+  scorecard: { score: number | null; checks: Record<string, number> | null };
 };
 
 export type ScanRow = {

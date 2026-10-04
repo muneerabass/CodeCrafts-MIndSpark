@@ -360,6 +360,28 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
       return { scan_id: 'S01JB8A00000000000000NEW01' };
     case 'GET /components':
       return paginate(components.filter((c) => has(c.name, q.get('name')) && has(c.version, q.get('version')) && (!q.get('ecosystem') || c.ecosystem === q.get('ecosystem')) && inRange(c.updated_at, q) && (!flag(q, 'has_vulns') || c.vulns > 0) && (!flag(q, 'has_violations') || c.violations > 0) && directOk(c, q)), q);
+    case 'GET /components/health': {
+      const out: Record<string, T.HealthResult> = {};
+      for (const cid of (q.get('ids') ?? '').split(',')) {
+        const c = components.find((x) => x.id === cid);
+        if (c) out[cid] = mockHealth(c.name);
+      }
+      return out;
+    }
+    case 'GET /components/:': {
+      const c = components.find((x) => x.id === id);
+      if (!c) throw new MockNotFound();
+      const pis = pathItems.filter((p) => p.target.name === c.name);
+      return {
+        id: c.id, name: c.name, version: c.version, ecosystem: c.ecosystem, purl: `pkg:npm/${c.name}@${c.version}`, licenses: ['MIT'],
+        vulns: pis.flatMap((p) => p.advisories.map((a) => ({ id: a.id, risk: a.risk, fixed_in: a.fixed_in, summary: vulns.find((v) => v.id === a.id)?.summary ?? null }))),
+        projects: [{ id: P1.id, name: P1.name, version: 'main', version_id: 'v-main-1', manifest_path: 'package-lock.json', direct: c.direct }],
+        analysis: c.name === 'event-stream-lite' ? { id: 'pa-1', status: 'malicious', verified: true } : null,
+        health: mockHealth(c.name),
+        meta: { repo: `github.com/${c.name}/${c.name}`, stars: 12400, forks: 800, published_at: iso(400), latest_published: iso(60), first_published: iso(3000), default_version: c.version, deprecated: c.name === 'request', deprecated_reason: c.name === 'request' ? 'request has been deprecated' : '' },
+        scorecard: { score: 6.8, checks: { Maintained: 10, 'Code-Review': 7, Vulnerabilities: 6, 'Branch-Protection': 3, 'Signed-Releases': 0 } },
+      } satisfies T.ComponentDetail;
+    }
     case 'GET /scans':
       return paginate(scans.filter((s) => has(s.project.name, q.get('project')) && (!q.get('project_id') || s.project.id === q.get('project_id')) && has(s.version, q.get('version')) && (!q.get('trigger') || s.trigger === q.get('trigger')) && (!q.get('status') || s.status === q.get('status')) && inRange(s.created_at, q) && (!flag(q, 'has_vulns') || s.vulns > 0) && (!flag(q, 'has_violations') || s.violations > 0)), q);
     case 'GET /pull-requests':
@@ -683,7 +705,7 @@ export function mockApi(method: string, path: string, q: URLSearchParams, body: 
 function isStatic(root: string, i: number, s: string) {
   const words = ['versions', 'summary', 'components', 'vulnerabilities', 'violations', 'scans', 'verify', 'inventory', 'package-events', 'agent-events', 'schema', 'test', 'link', 'unlink', 'redeliver', 'tenants', 'installations', 'feeds', 'webhooks', 'jobs', 'failed', 'paths', 'licenses', 'settings', 'report', 'pull-requests', 'comment', 'review', 'rescan', 'ai-review', 'fixes'];
   if (root === 'admin' && i === 1) return true;
-  if ((root === 'pull-requests' && s === 'summary') || root === 'settings') return true;
+  if ((root === 'pull-requests' && s === 'summary') || (root === 'components' && s === 'health') || root === 'settings') return true;
   if (root === 'policy' || root === 'query' || root === 'jira') return true;
   return words.includes(s) && i !== 1;
 }
@@ -756,4 +778,22 @@ export function mockSbom(projectId: string, format: string) {
   if (format === 'spdx')
     return JSON.stringify({ spdxVersion: 'SPDX-2.3', dataLicense: 'CC0-1.0', SPDXID: 'SPDXRef-DOCUMENT', name: `${p.name}@main`, packages: components.slice(0, 5).map((c, i) => ({ name: c.name, SPDXID: `SPDXRef-Package-${i + 1}`, versionInfo: c.version, downloadLocation: 'NOASSERTION' })) }, null, 2);
   return JSON.stringify({ bomFormat: 'CycloneDX', specVersion: '1.6', metadata: { component: { type: 'application', name: p.name } }, components: components.slice(0, 5).map((c) => ({ type: 'library', name: c.name, version: c.version, purl: `pkg:npm/${c.name}@${c.version}` })) }, null, 2);
+}
+
+function mockHealth(name: string): T.HealthResult {
+  const f = (key: string, label: string, weight: number, value: number | null, detail: string) => ({ key, label, weight, value, detail });
+  if (name === 'event-stream-lite') return { score: 0, level: 'malicious', factors: [] };
+  const score = name === 'request' ? 3.4 : name.length % 3 === 0 ? 5.6 : 8.4;
+  return {
+    score,
+    level: score >= 7 ? 'good' : score >= 4 ? 'fair' : 'poor',
+    factors: [
+      f('scorecard', 'OpenSSF Scorecard', 40, 0.68, '6.8 / 10'),
+      f('recency', 'Recent releases', 20, name === 'request' ? 0 : 1, name === 'request' ? 'Last release 6 years ago' : 'Last release 2 months ago'),
+      f('popularity', 'Popularity', 15, 1, '12400 stars'),
+      f('repo', 'Source repository', 10, 1, 'Linked to its source code'),
+      f('deprecated', 'Not deprecated', 10, name === 'request' ? 0 : 1, name === 'request' ? 'Deprecated by its maintainers' : 'Not deprecated'),
+      f('age', 'Established', 5, 1, 'First published 8 years ago'),
+    ],
+  };
 }
