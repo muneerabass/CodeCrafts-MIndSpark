@@ -421,3 +421,22 @@ test('notifications: slack, email, events, digest, jira tickets', async ({ page 
   await page.goto('/fix-queue');
   await expect(page.getByRole('button', { name: 'Create Jira ticket' }).first()).toBeVisible();
 });
+
+test('project export: SBOM downloads and compliance report', async ({ page }) => {
+  await page.goto('/projects/01JB7Q3M1K8Z4XW2N5R6T9V0AA');
+  await page.getByRole('button', { name: 'Export' }).click();
+  const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('menuitem', { name: 'CycloneDX 1.6 (.json)' }).click()]);
+  expect(dl.suggestedFilename()).toMatch(/\.cdx\.json$/);
+  const bom = JSON.parse(await (await import('node:fs/promises')).readFile((await dl.path())!, 'utf8'));
+  expect(bom.bomFormat).toBe('CycloneDX');
+  const spdx = await page.request.get('/api/projects/01JB7Q3M1K8Z4XW2N5R6T9V0AA/sbom?format=spdx');
+  expect((await spdx.json()).spdxVersion).toBe('SPDX-2.3');
+  expect((await page.request.get('/api/projects/01JB7Q3M1K8Z4XW2N5R6T9V0AA/sbom?format=xml')).status()).toBe(400);
+
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'Compliance report (PDF)' }).click();
+  await expect(page.getByRole('heading', { name: 'acme/storefront', level: 1 })).toBeVisible();
+  await expect(page.getByText('Action required before this release meets policy.')).toBeVisible();
+  for (const h of ['Open vulnerabilities', 'Licenses', 'Policy violations', 'Software bill of materials']) await expect(page.getByRole('heading', { name: h })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save as PDF' })).toBeVisible();
+});

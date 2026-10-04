@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AttackPaths } from './attack-paths';
 import { LicenseDistribution, LicenseFindingsTable, ProjectLicenseForm } from './licenses';
 import { EmptyState, PageHeader } from '@/components/page';
+import { ExportMenu } from './export-menu';
 import { Chip } from '@/components/badges';
 import { GitHubIcon, SourceIcon } from '@/components/icons';
 import { PopoverFilter, ToggleFilter } from '@/components/data-table';
@@ -50,6 +51,7 @@ export default async function ProjectPage({ params, searchParams }: { params: Pr
           </a>
         </Button>
       )}
+      {version && <ExportMenu projectId={project.id} versionId={version.id} />}
       {version && <VersionSelect versions={project.versions} value={version.id} />}
     </>
   );

@@ -3,7 +3,10 @@ module github.com/depguard/depguard
 go 1.27.0
 
 require (
+	buf.build/gen/go/safedep/api/grpc/go v1.6.1-20260507085543-c19cfafa654b.1
+	buf.build/gen/go/safedep/api/protocolbuffers/go v1.36.11-20260721112344-78a866a85e69.1
 	github.com/BurntSushi/toml v1.6.0
+	github.com/CycloneDX/cyclonedx-go v0.10.0
 	github.com/github/go-spdx/v2 v2.4.0
 	github.com/gofri/go-github-ratelimit/v2 v2.0.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
@@ -23,10 +26,14 @@ require (
 	github.com/safedep/code v0.0.0-20260224174612-abe896956bc1
 	github.com/safedep/vet v1.19.1
 	github.com/safedep/xbom v0.0.3
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/spdx/tools-golang v0.5.7
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/sync v0.23.0
 	golang.org/x/time v0.14.0
+	google.golang.org/grpc v1.83.2
 	riverqueue.com/riverui v0.20.0
 )
 
@@ -34,8 +41,6 @@ require (
 	ariga.io/atlas v1.1.0 // indirect
 	bitbucket.org/creachadair/stringset v0.0.14 // indirect
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1 // indirect
-	buf.build/gen/go/safedep/api/grpc/go v1.6.1-20260507085543-c19cfafa654b.1 // indirect
-	buf.build/gen/go/safedep/api/protocolbuffers/go v1.36.11-20260721112344-78a866a85e69.1 // indirect
 	buf.build/go/protovalidate v1.1.3 // indirect
 	cel.dev/expr v0.25.2 // indirect
 	cloud.google.com/go v0.123.0 // indirect
@@ -59,7 +64,6 @@ require (
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/CloudyKit/fastprinter v0.0.0-20251202014920-1725d2651bd4 // indirect
 	github.com/CloudyKit/jet/v6 v6.3.1 // indirect
-	github.com/CycloneDX/cyclonedx-go v0.10.0 // indirect
 	github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.33.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 // indirect
@@ -324,7 +328,6 @@ require (
 	github.com/saferwall/pe v1.5.9 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/scylladb/go-set v1.0.3-0.20200225121959-cc7b2070d91e // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
@@ -336,7 +339,6 @@ require (
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82 // indirect
 	github.com/sorairolake/lzip-go v0.3.8 // indirect
 	github.com/spdx/gordf v0.0.0-20250128162952-000978ccd6fb // indirect
-	github.com/spdx/tools-golang v0.5.7 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
@@ -392,7 +394,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/arch v0.24.0 // indirect
@@ -412,7 +413,6 @@ require (
 	google.golang.org/genproto v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260831171406-18b4a7587f8a // indirect
-	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/ini.v1 v1.67.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

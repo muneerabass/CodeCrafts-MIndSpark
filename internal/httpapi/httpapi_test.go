@@ -103,9 +103,10 @@ func token(tid, role string, sa bool) string {
 }
 
 type resp struct {
-	code int
-	body map[string]any
-	raw  string
+	code   int
+	body   map[string]any
+	raw    string
+	header http.Header
 }
 
 func do(t *testing.T, method, path, bearer string, body any) resp {
@@ -133,7 +134,7 @@ func do(t *testing.T, method, path, bearer string, body any) resp {
 	}
 	defer res.Body.Close()
 	raw, _ := io.ReadAll(res.Body)
-	out := resp{code: res.StatusCode, raw: string(raw)}
+	out := resp{code: res.StatusCode, raw: string(raw), header: res.Header}
 	_ = json.Unmarshal(raw, &out.body)
 	return out
 }

@@ -747,3 +747,12 @@ export function mockReport(id: string, format: 'md' | 'json' | 'html'): string {
   const e = (x: string) => x.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   return `<!doctype html><html><head><meta charset="utf-8"><title>${e(title)}</title><style>body{font-family:system-ui;max-width:56rem;margin:2rem auto;padding:0 1rem}h2{color:#4f46e5}</style></head><body><h1>${e(title)}</h1>${sections.map(([h, l]) => `<h2>${e(h)}</h2>${l.length ? `<ul>${l.map((x) => `<li>${e(x)}</li>`).join('')}</ul>` : '<p><em>None.</em></p>'}`).join('')}</body></html>`;
 }
+
+/** A small CycloneDX/SPDX document for the SBOM download route. */
+export function mockSbom(projectId: string, format: string) {
+  const p = projects.find((x) => x.id === projectId);
+  if (!p) throw new MockNotFound();
+  if (format === 'spdx')
+    return JSON.stringify({ spdxVersion: 'SPDX-2.3', dataLicense: 'CC0-1.0', SPDXID: 'SPDXRef-DOCUMENT', name: `${p.name}@main`, packages: components.slice(0, 5).map((c, i) => ({ name: c.name, SPDXID: `SPDXRef-Package-${i + 1}`, versionInfo: c.version, downloadLocation: 'NOASSERTION' })) }, null, 2);
+  return JSON.stringify({ bomFormat: 'CycloneDX', specVersion: '1.6', metadata: { component: { type: 'application', name: p.name } }, components: components.slice(0, 5).map((c) => ({ type: 'library', name: c.name, version: c.version, purl: `pkg:npm/${c.name}@${c.version}` })) }, null, 2);
+}
