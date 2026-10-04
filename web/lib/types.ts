@@ -268,6 +268,7 @@ export type Policy = {
     maintenance: { enabled: boolean; min_scorecard: number };
     suspicious?: SuspiciousPreset;
     packages?: PackageRule[];
+    secrets?: { block: boolean; block_passwords: boolean };
   };
   custom: CustomRule[];
 };

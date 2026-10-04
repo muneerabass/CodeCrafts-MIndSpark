@@ -36,6 +36,25 @@ type Presets struct {
 	// Packages are package and version rules: banned packages, allowed
 	// version ranges (minimum/maximum) and trusted packages.
 	Packages []PackageRule `json:"packages,omitempty"`
+	// Secrets controls secrets committed in pull requests; nil = DefaultSecrets().
+	Secrets *SecretsPreset `json:"secrets,omitempty"`
+}
+
+// SecretsPreset decides when secrets found in a pull request diff fail the check.
+type SecretsPreset struct {
+	Block          bool `json:"block"`           // keys, tokens and private keys fail the check (in block mode)
+	BlockPasswords bool `json:"block_passwords"` // hard-coded passwords fail it too
+}
+
+// DefaultSecrets blocks keys, tokens and private keys; hard-coded passwords only warn.
+func DefaultSecrets() SecretsPreset { return SecretsPreset{Block: true} }
+
+// SecretsRules returns the secrets preset of a policy, defaults included.
+func (pc PolicyConfig) SecretsRules() SecretsPreset {
+	if pc.Presets == nil || pc.Presets.Secrets == nil {
+		return DefaultSecrets()
+	}
+	return *pc.Presets.Secrets
 }
 
 // PackageRule constrains one package (or a glob of packages). A package

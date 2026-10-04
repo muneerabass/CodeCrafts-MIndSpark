@@ -127,3 +127,34 @@ func (fs renderFindings) conv() []render.ReviewFinding {
 	}
 	return out
 }
+
+func TestSecretPatternsMasked(t *testing.T) {
+	cases := map[string]string{
+		"secret-token-gitlab":   `token: "glpat-` + strings.Repeat("a1", 12) + `"`,
+		"secret-token-npm":      "//registry.npmjs.org/:_authToken=npm_" + strings.Repeat("Ab3", 12),
+		"secret-token-sendgrid": `SENDGRID="SG.` + strings.Repeat("x", 22) + "." + strings.Repeat("y", 43) + `"`,
+		"secret-token-slack":    "url = https://hooks.slack.com/services/T0ABC/B0DEF/" + strings.Repeat("z", 24),
+		"secret-cloud-azure":    "DefaultEndpointsProtocol=https;AccountName=acme;AccountKey=" + strings.Repeat("Q", 86) + "==",
+		"secret-cloud-gcp":      `  "private_key_id": "` + strings.Repeat("ab", 20) + `",`,
+	}
+	for name, line := range cases {
+		patch := "@@ -0,0 +1 @@\n+" + line
+		fs, _ := Review([]File{{Path: "config/settings.env", Status: "added", Patch: patch}})
+		if len(fs) != 1 || fs[0].Category != "secrets" || fs[0].Severity != "critical" {
+			t.Errorf("%s: %+v", name, fs)
+			continue
+		}
+		secret := strings.Repeat("z", 24)
+		for _, part := range []string{secret, strings.Repeat("Q", 40), strings.Repeat("ab", 20), strings.Repeat("Ab3", 12), strings.Repeat("y", 43)} {
+			if strings.Contains(fs[0].Explanation, part) {
+				t.Errorf("%s: secret leaked into the finding: %s", name, fs[0].Explanation)
+			}
+		}
+		if !strings.Contains(fs[0].Explanation, "Found: `") || !strings.Contains(fs[0].Suggestion, "git history") {
+			t.Errorf("%s: %s / %s", name, fs[0].Explanation, fs[0].Suggestion)
+		}
+	}
+	if m := Mask("AKIAABCDEFGHIJKLMNOP"); m != "`AKIA…` (20 characters)" {
+		t.Error(m)
+	}
+}

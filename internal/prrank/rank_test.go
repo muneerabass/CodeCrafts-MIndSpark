@@ -49,3 +49,13 @@ func TestRank(t *testing.T) {
 		t.Errorf("reasons %+v", r.Reasons)
 	}
 }
+
+func TestSecretsRankCritical(t *testing.T) {
+	r := Rank(Input{Review: render.PRReview{Findings: []render.ReviewFinding{
+		{Source: "rules", File: "config.js", Line: 12, Severity: "critical", Category: "secrets", Title: "AWS access key committed"},
+		{Source: "ai", File: "api.js", Line: 3, Severity: "critical", Category: "injection", Title: "SQL injection"},
+	}}, Open: true, Now: time.Now(), OpenedAt: time.Now()})
+	if r.Level != Critical || r.Score < 95 || r.Reasons[0].Kind != "secret" || r.Reasons[0].Text != "AWS access key committed in config.js:12" {
+		t.Fatalf("%+v", r)
+	}
+}

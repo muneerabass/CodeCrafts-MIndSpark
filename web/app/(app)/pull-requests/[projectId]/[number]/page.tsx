@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Bot, Bug, CheckCircle2, ChevronRight, ExternalLink, FileCode2, GitCommitHorizontal, History, ListChecks, MessagesSquare, Scale, ShieldAlert, Skull, Wrench } from 'lucide-react';
+import { ArrowRight, Bot, Bug, KeyRound, CheckCircle2, ChevronRight, ExternalLink, FileCode2, GitCommitHorizontal, History, ListChecks, MessagesSquare, Scale, ShieldAlert, Skull, Wrench } from 'lucide-react';
 import { apiOr404 } from '@/lib/api';
 import { canWrite, requireOrg } from '@/lib/session';
 import { fmtDateTime } from '@/lib/format';
@@ -95,7 +95,13 @@ export default async function PullRequestPage({ params }: { params: Promise<{ pr
   const state = pr.draft && open ? 'draft' : pr.state;
   const t = tone[pr.urgency_level] ?? tone.pending;
   const codeState = findings.some((f) => f.severity === 'critical' || f.severity === 'high') ? 'fail' : findings.length ? 'warn' : 'pass';
-  const checks = [...CHECKS.map(([k, label, icon]) => ({ label, icon, st: pr.summary?.checks[k] ?? 'pass' })), { label: 'Code review', icon: Bot, st: codeState }];
+  const secrets = findings.filter((f) => f.category === 'secrets');
+  const secretState = secrets.some((f) => f.severity === 'critical') ? 'fail' : secrets.length ? 'warn' : 'pass';
+  const checks = [
+    ...CHECKS.map(([k, label, icon]) => ({ label, icon, st: pr.summary?.checks[k] ?? 'pass' })),
+    { label: 'Secrets', icon: KeyRound, st: secretState },
+    { label: 'Code review', icon: Bot, st: codeState },
+  ];
   const firstTab = fixes.length ? 'fixes' : findings.length ? 'code' : 'history';
 
   return (
@@ -173,7 +179,7 @@ export default async function PullRequestPage({ params }: { params: Promise<{ pr
         </section>
 
         {/* Checks */}
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-label="Checks">
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Checks">
           {checks.map((c) => {
             const ct = stateTone[c.st] ?? stateTone.pass;
             return (

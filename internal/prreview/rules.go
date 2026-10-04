@@ -4,6 +4,7 @@
 package prreview
 
 import (
+	"fmt"
 	"path"
 	"regexp"
 	"slices"
@@ -82,16 +83,20 @@ func anyText(p string) bool {
 var rules = []rule{
 	{id: "secret-aws-key", severity: "critical", category: "secrets", title: "AWS access key committed",
 		explanation: "An AWS access key id is in the diff; anyone with repository access can use it.",
-		suggestion:  "Remove it, rotate the key in AWS IAM, and load credentials from the environment or a secret manager.",
+		suggestion:  "Rotate the key in AWS IAM now (deleting it from the PR does not remove it from git history), then load credentials from the environment or a secret manager.",
 		re:          regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`), files: anyText},
 	{id: "secret-private-key", severity: "critical", category: "secrets", title: "Private key committed",
-		explanation: "A private key block is in the diff.", suggestion: "Remove it, revoke the key, and store keys outside the repository.",
+		explanation: "A private key block is in the diff.", suggestion: "Revoke the key now (it stays in git history even if removed), and store keys outside the repository.",
 		re: regexp.MustCompile(`-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----`), files: anyText},
 	{id: "secret-token", severity: "critical", category: "secrets", title: "API token committed",
-		explanation: "A token for GitHub, Slack, Stripe, Google, OpenAI or Anthropic is in the diff.",
-		suggestion:  "Remove it, revoke the token, and read it from an environment variable or secret manager.",
-		re:          regexp.MustCompile(`\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,}|xox[baprs]-[A-Za-z0-9-]{10,}|sk_live_[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_\-]{35}|sk-ant-[A-Za-z0-9_\-]{20,}|sk-(proj-)?[A-Za-z0-9]{32,}|dg_[A-Za-z0-9]{32})\b`),
+		explanation: "A token for GitHub, GitLab, npm, Slack, Stripe, SendGrid, Twilio, Google, OpenAI or Anthropic is in the diff.",
+		suggestion:  "Revoke the token now (it stays in git history even if removed), and read it from an environment variable or secret manager.",
+		re:          regexp.MustCompile(`\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,}|glpat-[A-Za-z0-9_\-]{20,}|npm_[A-Za-z0-9]{36}|xox[baprs]-[A-Za-z0-9-]{10,}|[sr]k_live_[A-Za-z0-9]{20,}|SG\.[A-Za-z0-9_\-]{22}\.[A-Za-z0-9_\-]{43}|SK[0-9a-f]{32}|AIza[0-9A-Za-z_\-]{35}|sk-ant-[A-Za-z0-9_\-]{20,}|sk-(proj-)?[A-Za-z0-9]{32,}|dg_[A-Za-z0-9]{32})\b|https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]{20,}`),
 		files:       anyText},
+	{id: "secret-cloud-credential", severity: "critical", category: "secrets", title: "Cloud credential committed",
+		explanation: "An Azure storage account key or a Google Cloud service account key is in the diff.",
+		suggestion:  "Rotate the credential now (it stays in git history even if removed), and use workload identity or a secret manager.",
+		re:          regexp.MustCompile(`AccountKey=[A-Za-z0-9+/]{80,}={0,2}|"private_key_id"\s*:\s*"[0-9a-f]{40}"`), files: anyText},
 	{id: "secret-hardcoded-password", severity: "high", category: "secrets", title: "Hard-coded password or secret",
 		explanation: "A password, secret or API key is assigned a literal value.",
 		suggestion:  "Read it from configuration or a secret manager instead of the source code.",
@@ -188,16 +193,33 @@ func Review(files []File) (findings []render.ReviewFinding, reviewed int) {
 				if perRule[r.id] >= maxFindingsPerRule {
 					break
 				}
-				if !r.re.MatchString(l.Text) || (r.skip != nil && r.skip.MatchString(l.Text)) || isCommentOnly(l.Text) {
+				if !r.re.MatchString(l.Text) || (r.skip != nil && r.skip.MatchString(l.Text)) || (r.category != "secrets" && isCommentOnly(l.Text)) {
 					continue
 				}
 				perRule[r.id]++
+				expl := r.explanation
+				if r.category == "secrets" {
+					expl += " Found: " + Mask(r.re.FindString(l.Text)) + "."
+				}
 				findings = append(findings, render.ReviewFinding{Source: "rules", File: f.Path, Line: l.Line, Severity: r.severity,
-					Category: r.category, Title: r.title, Explanation: r.explanation, Suggestion: r.suggestion})
+					Category: r.category, Title: r.title, Explanation: expl, Suggestion: r.suggestion})
 			}
 		}
 	}
 	return findings, reviewed
+}
+
+// Mask hides a secret, keeping a short prefix so it can be found and rotated:
+// "AKIA…(20 chars)". Values never reach the database or the PR comment.
+func Mask(v string) string {
+	if v == "" {
+		return "a secret value"
+	}
+	n := 4
+	if len(v) < 12 {
+		n = 2
+	}
+	return fmt.Sprintf("`%s…` (%d characters)", v[:n], len(v))
 }
 
 func isCommentOnly(s string) bool {

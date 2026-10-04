@@ -2,10 +2,10 @@ package sbom
 
 import (
 	"bytes"
-	"strings"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 

@@ -264,16 +264,23 @@ func (w *prWorker) run(ctx context.Context, s *prScan) error {
 	}
 
 	concl := conclusion(findings, s.settings)
-	// Leaked secrets found by the rules fail the check like a blocking policy violation.
-	secrets := 0
+	// Leaked secrets found by the rules fail the check like a blocking policy
+	// violation (policy presets.secrets); other critical code findings too.
+	sp := s.settings.Policy.SecretsRules()
+	secrets, warn := 0, 0 // blocking code findings, non-blocking secrets
 	for _, f := range rv.Findings {
-		if f.Severity == "critical" {
+		switch {
+		case f.Category == "secrets" && sp.Block && (f.Severity == "critical" || sp.BlockPasswords):
+			secrets++
+		case f.Category == "secrets":
+			warn++
+		case f.Severity == "critical":
 			secrets++
 		}
 	}
 	if secrets > 0 && s.settings.BlockMode {
 		concl = "failure"
-	} else if secrets > 0 && concl == "success" {
+	} else if secrets+warn > 0 && concl == "success" {
 		concl = "neutral"
 	}
 	rep := d.report(s.scanID, findings, ai, noChanges, rc.project)

@@ -200,6 +200,7 @@ const pullRequests: T.PRDetail[] = [
       ai_summary: 'Adds Stripe webhooks and a refunds endpoint; the refunds query is built from request input.', labels: ['feature', 'backend', 'security'], updated_at: iso(0),
       findings: [
         { source: 'ai', file: 'api/refunds.ts', line: 42, severity: 'high', category: 'injection', title: 'SQL injection in /refunds', explanation: 'req.query.order is concatenated into the SQL string.', suggestion: 'Use a parameterized query ($1).' },
+        { source: 'rules', file: 'config/.env.production', line: 3, severity: 'critical', category: 'secrets', title: 'API token committed', explanation: 'A token for Stripe is in the diff. Found: `sk_l…` (32 characters).', suggestion: 'Revoke the token now (it stays in git history even if removed), and read it from an environment variable or secret manager.' },
         { source: 'rules', file: 'api/stripe.ts', line: 7, severity: 'high', category: 'crypto', title: 'TLS certificate verification disabled', explanation: 'Turning off certificate checks allows man-in-the-middle attacks.', suggestion: 'Keep verification on.' },
       ],
     },

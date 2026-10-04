@@ -304,6 +304,7 @@ test('pull requests: inbox, detail, actions, settings', async ({ page }) => {
   await expect(page.getByText('npm uninstall event-stream-lite')).toBeVisible();
   await page.getByRole('tab', { name: /Code review/ }).click();
   await expect(page.getByText('SQL injection in /refunds', { exact: true })).toBeVisible();
+  await page.getByText('SQL injection in /refunds', { exact: true }).click(); // the committed token sorts first and is open
   await expect(page.getByRole('link', { name: 'api/refunds.ts:42' })).toHaveAttribute('href', /github\.com\/acme\/payments-api\/blob\/a1b2c3d4e5f60718\/api\/refunds\.ts#L42/);
   await expect(page.getByRole('link', { name: 'Open on GitHub' })).toHaveAttribute('href', 'https://github.com/acme/payments-api/pull/482');
 
@@ -439,4 +440,15 @@ test('project export: SBOM downloads and compliance report', async ({ page }) =>
   await expect(page.getByText('Action required before this release meets policy.')).toBeVisible();
   for (const h of ['Open vulnerabilities', 'Licenses', 'Policy violations', 'Software bill of materials']) await expect(page.getByRole('heading', { name: h })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save as PDF' })).toBeVisible();
+});
+
+test('secrets: PR check tile and policy switch', async ({ page }) => {
+  await page.goto('/pull-requests');
+  await page.getByRole('link', { name: /Add Stripe webhooks|Add payments/ }).first().click();
+  const checks = page.getByLabel('Checks');
+  await expect(checks.getByText('Secrets')).toBeVisible();
+  await page.goto('/policy');
+  await expect(page.getByRole('link', { name: /Secrets in PRs/ })).toContainText('Blocks keys & tokens');
+  await page.getByLabel('Also fail on hard-coded passwords (otherwise a warning)').click();
+  await expect(page.getByRole('link', { name: /Secrets in PRs/ })).toContainText('Blocks keys & passwords');
 });

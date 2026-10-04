@@ -73,6 +73,9 @@ func depScore(f render.FixItem) int {
 }
 
 func codeScore(f render.ReviewFinding) int {
+	if f.Category == "secrets" && f.Severity == "critical" {
+		return 95 // a live credential is exploitable as soon as the branch is pushed
+	}
 	switch f.Severity {
 	case "critical":
 		return 90
@@ -99,7 +102,11 @@ func Rank(in Input) Result {
 		if f.Source == "ai" {
 			src = "AI: "
 		}
-		rs = append(rs, Reason{Kind: "code", Text: fmt.Sprintf("%s%s in %s", src, f.Title, loc), Score: codeScore(f)})
+		kind := "code"
+		if f.Category == "secrets" {
+			kind = "secret"
+		}
+		rs = append(rs, Reason{Kind: kind, Text: fmt.Sprintf("%s%s in %s", src, f.Title, loc), Score: codeScore(f)})
 	}
 	slices.SortStableFunc(rs, func(a, b Reason) int { return b.Score - a.Score })
 	res := Result{Level: Clean}

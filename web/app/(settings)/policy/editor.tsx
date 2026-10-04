@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Bug, Code2, FlaskConical, Info, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
+import { Bug, Code2, FlaskConical, Info, KeyRound, Loader2, PackageCheck, Plus, RotateCcw, Scale, ScanSearch, Skull, Star, Trash2, Wrench, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -115,6 +115,8 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
   const sus = p.presets.suspicious ?? DEFAULT_SUSPICIOUS;
   const susOn = SUSPICIOUS_RULES.filter((r) => sus[r.key]).length;
   const pkgRules = p.presets.packages?.length ?? 0;
+  const sec = p.presets.secrets ?? { block: true, block_passwords: false };
+  const setSec = (v: Partial<typeof sec>) => setP({ ...p, presets: { ...p.presets, secrets: { ...sec, ...v } } });
   const glance: { id: string; icon: React.ComponentType<{ className?: string }>; label: string; value: string; on: boolean }[] = [
     { id: 'vulnerability', icon: Bug, label: 'Vulnerabilities', value: RISKS.find((r) => r.v === p.presets.vulnerability.min_risk)?.l ?? '', on: p.presets.vulnerability.min_risk !== 'OFF' },
     { id: 'malware', icon: Skull, label: 'Malware', value: p.presets.malware.enabled ? 'Blocking' : 'Off', on: p.presets.malware.enabled },
@@ -128,6 +130,7 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
     },
     { id: 'suspicious', icon: ScanSearch, label: 'Suspicious', value: `${susOn} of ${SUSPICIOUS_RULES.length} checks · ${sus.blocking.length} block`, on: susOn > 0 },
     { id: 'popularity', icon: Star, label: 'Popularity', value: p.presets.popularity.enabled ? `≥ ${p.presets.popularity.min_stars} stars` : 'Off', on: p.presets.popularity.enabled },
+    { id: 'secrets', icon: KeyRound, label: 'Secrets in PRs', value: sec.block ? (sec.block_passwords ? 'Blocks keys & passwords' : 'Blocks keys & tokens') : 'Warn only', on: true },
     { id: 'maintenance', icon: Wrench, label: 'Maintenance', value: p.presets.maintenance.enabled ? `Scorecard ≥ ${p.presets.maintenance.min_scorecard}` : 'Off', on: p.presets.maintenance.enabled },
     { id: 'custom', icon: Code2, label: 'Custom rules', value: p.custom.length ? `${p.custom.length} rule${p.custom.length === 1 ? '' : 's'}` : 'None', on: p.custom.length > 0 },
   ];
@@ -298,6 +301,17 @@ export function PolicyEditor({ initial: raw, canEdit }: { initial: Policy; canEd
               disabled={ro || !p.presets.maintenance.enabled}
             />
           </div>
+        </div>
+      </Preset>
+
+      <Preset id="secrets" icon={KeyRound} title="Secrets in pull requests" description="Every pull request diff is checked for API keys, tokens, private keys, cloud credentials and hard-coded passwords. Values are never stored, only a masked hint.">
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="p-sec-block">Fail the check when a key, token or private key is committed</Label>
+          <Switch id="p-sec-block" checked={sec.block} onCheckedChange={(v) => setSec({ block: v })} disabled={ro} />
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="p-sec-pw">Also fail on hard-coded passwords (otherwise a warning)</Label>
+          <Switch id="p-sec-pw" checked={sec.block_passwords} onCheckedChange={(v) => setSec({ block_passwords: v })} disabled={ro || !sec.block} />
         </div>
       </Preset>
 

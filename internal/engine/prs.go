@@ -197,8 +197,9 @@ func (d Deps) refreshPR(ctx context.Context, gh *github.Client, tenant, prID str
 		rank.Level = prrank.Pending
 	}
 	fixedNow := rank.Level == prrank.Clean && (pr.Level == prrank.Critical || pr.Level == prrank.High || pr.Level == prrank.Medium)
+	sp := st.Policy.SecretsRules()
 	blocking := concl == "failure" || slices.ContainsFunc(rv.Findings, func(f render.ReviewFinding) bool {
-		return f.Source == "rules" && f.Severity == "critical"
+		return f.Source == "rules" && f.Severity == "critical" && (f.Category != "secrets" || sp.Block)
 	})
 
 	// Labels: dependency labels, review labels and the urgency.
